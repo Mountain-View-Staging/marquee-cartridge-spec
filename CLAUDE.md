@@ -31,9 +31,12 @@ Live: <https://mountain-view-staging.github.io/marquee-cartridge-spec/>
 Before committing, scan for leaks:
 
 ```bash
-grep -rniE "DF[0-9]|TBF|amazonaws|mvsmarquee|r2\.dev|AB-[TDL]-[0-9]|MVSCollective" \
-  --include="*.md" --include="*.html" --include="*.js" .
+grep -rnE "\b(DF[0-9]{4}[A-Z]*|TBF[0-9]+|RG[0-9]+)\b|amazonaws|mvsmarquee|r2\.dev|\bAB-[TDL]-[0-9]{4}\b" \
+  --include="*.md" --include="*.html" --include="*.js" . | grep -v "^./CLAUDE.md:"
 ```
+
+Anchored deliberately: an unanchored `DF[0-9]` matches the hex colour `#e6edf3` in both
+players, and a check that cries wolf is a check people stop reading.
 
 The unsanitised version — the one with the real worked example — lives at
 `MarqueeStudio/Documentation/SPEC-Cartridge-Client.md`, which is a pointer file. Keep it
