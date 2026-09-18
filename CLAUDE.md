@@ -32,7 +32,7 @@ Before committing, scan for leaks:
 
 ```bash
 grep -rnE "\b(DF[0-9]{4}[A-Z]*|TBF[0-9]+|RG[0-9]+)\b|amazonaws|mvsmarquee|r2\.dev|\bAB-[TDL]-[0-9]{4}\b" \
-  --include="*.md" --include="*.html" --include="*.js" . | grep -v "^./CLAUDE.md:"
+  --include="*.md" --include="*.html" --include="*.js" . | grep -v "CLAUDE.md:"
 ```
 
 Anchored deliberately: an unanchored `DF[0-9]` matches the hex colour `#e6edf3` in both
