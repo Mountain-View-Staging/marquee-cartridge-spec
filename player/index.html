@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Marquee Player</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  body { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #e6edf3; }
+  #stage { position: fixed; inset: 0; display: grid; place-items: center; background: #000; }
+  #stage img, #stage video { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
+  #idle { color: #6e7681; text-align: center; padding: 24px; max-width: 34rem; }
+  #overlay {
+    position: fixed; left: 12px; bottom: 12px; max-width: min(30rem, calc(100vw - 24px));
+    background: rgba(13, 17, 23, .88); border: 1px solid #30363d; border-radius: 8px;
+    padding: 10px 12px; backdrop-filter: blur(6px);
+  }
+  #overlay[hidden] { display: none; }
+  #overlay table { border-collapse: collapse; width: 100%; }
+  #overlay td { padding: 1px 0; vertical-align: top; }
+  #overlay td:first-child { color: #8b949e; padding-right: 10px; white-space: nowrap; }
+  .hint { color: #6e7681; margin-top: 8px; font-size: 11.5px; }
+  .warn { color: #d29922; }
+  .alert { color: #f85149; }
+  .ok { color: #3fb950; }
+</style>
+</head>
+<body>
+
+<div id="stage"><div id="idle">loading cartridge…</div></div>
+
+<div id="overlay">
+  <table id="status"></table>
+  <div class="hint">O orientation · N next · S overlay · F fullscreen</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+<script type="module">
+import {
+  assertSqlite, one, rows, syntheticNow, provision, resolve, advance,
+  deliverableName, imageSeconds, trimWindow, isVideo, signatureOf,
+} from "./player.js";
+
+// The cartridge this player shows. Hard-coded, the way an installed player's
+// address effectively is: one screen, one show. Change these three values and
+// this file plays a different screen.
+const SOURCE = { base: "../example", projectCode: "SHOW26", screenCode: "DEMO1" };
+
+const stage = document.getElementById("stage");
+const overlay = document.getElementById("overlay");
+const statusTable = document.getElementById("status");
+
+const state = {
+  db: null, meta: null, days: [], timezone: "UTC",
+  slot: "landscape", locationId: null, provisioned: null,
+  cursorId: null, signature: null, holdTimer: null, projected: false,
+};
+
+async function openCartridge(SQL, url) {
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  assertSqlite(bytes, url);
+  return new SQL.Database(bytes);
+}
+
+// ── painting ─────────────────────────────────────────────────────────────────
+
+function paint(resolved) {
+  clearTimeout(state.holdTimer);
+  stage.replaceChildren();
+
+  if (!resolved.current) {
+    const idle = document.createElement("div");
+    idle.id = "idle";
+    idle.textContent = resolved.playlistId === null && resolved.scheduled
+      ? "scheduled blank — showing nothing, as authored"
+      : `nothing scheduled for the ${resolved.slot} slot`;
+    stage.append(idle);
+    return;
+  }
+
+  const { entry, item, file } = resolved.current;
+  const url = `${SOURCE.base}/${SOURCE.projectCode}/${deliverableName(state.db, file)}`;
+
+  if (isVideo(file.content_type)) {
+    const { start, end } = trimWindow(entry, resolved.slot);
+    const video = document.createElement("video");
+    video.src = start ? `${url}#t=${start}` : url;
+    video.autoplay = true;
+    video.muted = true;            // autoplay is blocked otherwise, everywhere
+    video.playsInline = true;
+    video.preload = "auto";
+    if (start) video.currentTime = start;
+    // Advance when the clip ends — or at the trim out-point, whichever is first.
+    video.addEventListener("ended", step, { once: true });
+    if (end) {
+      video.addEventListener("timeupdate", function watchOut() {
+        if (video.currentTime >= end) { video.removeEventListener("timeupdate", watchOut); step(); }
+      });
+    }
+    // A clip that never fires `ended` (a truncated file, a codec the device
+    // cannot finish) would park the rotation forever. The watchdog is why a
+    // single bad asset degrades one slot instead of the whole screen.
+    const watchdog = (Number(file.intrinsic_duration) || 300) + 10;
+    state.holdTimer = setTimeout(step, watchdog * 1000);
+    video.addEventListener("error", () => { console.warn("undecodable", url); step(); }, { once: true });
+    stage.append(video);
+    video.play().catch(() => {/* autoplay policy — the watchdog still advances */});
+  } else {
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = item.name;
+    img.addEventListener("error", () => { console.warn("unfetchable", url); step(); }, { once: true });
+    stage.append(img);
+    state.holdTimer = setTimeout(step, imageSeconds(item) * 1000);
+  }
+}
+
+function currentState() {
+  const clock = syntheticNow(Date.now(), state.days, state.timezone);
+  state.projected = clock.projected;
+  return resolve(state.db, { at: clock.at, slot: state.slot, cursorId: state.cursorId });
+}
+
+/** Advance one position in the CURRENT list, then repaint. */
+function step() {
+  const resolved = currentState();
+  const next = advance(resolved.rotation.list, state.cursorId);
+  state.cursorId = next?.entry.id ?? null;
+  const after = currentState();
+  state.signature = signatureOf(after);
+  paint(after);
+  report(after);
+}
+
+/**
+ * The clock tick. Almost no tick changes what should be on screen, and
+ * repainting anyway would restart the video every second — so repaint only
+ * when the resolved signature actually changes.
+ */
+function tick() {
+  if (!state.db) return;
+  const resolved = currentState();
+  const signature = signatureOf(resolved);
+  if (signature !== state.signature) {
+    state.signature = signature;
+    state.cursorId = resolved.current?.entry.id ?? null;
+    paint(resolved);
+  }
+  report(resolved);
+}
+
+// ── status overlay ───────────────────────────────────────────────────────────
+
+const fmt = (ms) => new Intl.DateTimeFormat("en-GB", {
+  timeZone: state.timezone, weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false,
+}).format(new Date(ms));
+
+function report(r) {
+  const takeover = r.rotation.source === "takeover";
+  const current = r.current;
+  const kind = current && isVideo(current.file.content_type) ? "video" : "image";
+  const hold = current
+    ? (kind === "video"
+        ? `${current.file.intrinsic_duration ?? "?"}s intrinsic`
+        : `${imageSeconds(current.item)}s (display_duration)`)
+    : "—";
+
+  const lines = [
+    ["screen", `${state.meta.screen_id} · ${state.meta.project_code}`],
+    ["time", `${fmt(r.at)}${state.projected ? ` <span class="warn">projected → Day 1</span>` : ""}`],
+    ["slot", `${r.slot}${state.provisioned?.orientation ? "" : ` <span class="alert">no screen_location</span>`}`],
+    ["playlist", r.playlist ? r.playlist.name : `<span class="warn">none — showing nothing</span>`],
+    ["rotation", takeover
+      ? `<span class="alert">takeover · ${r.rotation.list.length}, ${r.rotation.suppressed} suppressed</span>`
+      : `standard · ${r.rotation.list.length}`],
+    ["now playing", current ? `${current.item.name} <span class="ok">${kind}</span>` : "—"],
+    ["holds for", hold],
+    ["next change", r.nextBoundary ? fmt(r.nextBoundary) : "none today"],
+  ];
+  if (r.rotation.skipped.length) {
+    lines.push(["skipped", `<span class="warn">${r.rotation.skipped
+      .map(([id, why]) => `entry ${id}: ${why}`).join("<br>")}</span>`]);
+  }
+  statusTable.innerHTML = lines.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+}
+
+// ── boot ─────────────────────────────────────────────────────────────────────
+
+(async function boot() {
+  try {
+    const SQL = await initSqlJs({
+      locateFile: (f) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}`,
+    });
+
+    // §1 — a client with a screen code pulls BOTH artifacts.
+    await openCartridge(SQL, `${SOURCE.base}/${SOURCE.projectCode}/project.db`);
+    state.db = await openCartridge(SQL, `${SOURCE.base}/${SOURCE.projectCode}/${SOURCE.screenCode}.db`);
+
+    state.meta = one(state.db, "SELECT * FROM cartridge_meta");
+    state.days = rows(state.db, "SELECT * FROM project_days ORDER BY start_time");
+    state.timezone = state.meta?.timezone ?? "UTC";
+
+    // §6 — provisioning. A deployed player persists this id; a demo need not.
+    state.provisioned = provision(state.db, localStorage.getItem("marquee.locationId"));
+    if (state.provisioned.locationId) {
+      localStorage.setItem("marquee.locationId", state.provisioned.locationId);
+      state.slot = state.provisioned.orientation;
+    }
+
+    const first = currentState();
+    state.cursorId = first.current?.entry.id ?? null;
+    state.signature = signatureOf(first);
+    paint(first);
+    report(first);
+    setInterval(tick, 1000);
+
+    addEventListener("keydown", (e) => {
+      const key = e.key.toLowerCase();
+      if (key === "o") {
+        state.slot = state.slot === "portrait" ? "landscape" : "portrait";
+        state.cursorId = null;          // a different slot is a different list
+        state.signature = null;
+        tick();
+      } else if (key === "n") {
+        step();
+      } else if (key === "s") {
+        overlay.hidden = !overlay.hidden;
+      } else if (key === "f") {
+        document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+      }
+    });
+  } catch (err) {
+    stage.innerHTML = `<div id="idle">${err.message}<br><br>
+      Serve this over HTTP — <code>fetch</code> cannot read <code>file://</code>.<br>
+      <code>python3 -m http.server</code></div>`;
+    console.error(err);
+  }
+})();
+</script>
+</body>
+</html>

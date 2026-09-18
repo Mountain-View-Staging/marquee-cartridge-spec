@@ -25,6 +25,12 @@ get wrong — per-slot resolution, takeover suppression, day-scoped directives,
 orientation fallback, and hash-less media — and [`build-demo.py`](example/build-demo.py)
 rebuilds the whole show from scratch with no dependencies.
 
+[`player/`](player/) is a **reference player** rather than an explorer: images and
+video, one hard-coded cartridge, no chrome. Its resolution core
+([`player.js`](player/player.js)) touches no DOM and is pure, so it is the part
+to read when porting to another language.
+**[Live player →](https://mountain-view-staging.github.io/marquee-cartridge-spec/player/)**
+
 Planned next for this repository:
 
 - a conformance fixture set

@@ -22,6 +22,7 @@ import os
 import shutil
 import sqlite3
 import struct
+import subprocess
 import zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -36,6 +37,7 @@ TZ = "America/Los_Angeles"
 DAY1 = 1791270000000   # 2026-10-05 00:00:00 -07:00
 DAY2 = 1791356400000   # 2026-10-06 00:00:00 -07:00
 DAY_MS = 86_400_000
+VIDEO_SECONDS = 6
 GENERATED_AT = DAY1 - DAY_MS
 
 
@@ -63,6 +65,25 @@ def write_png(path, width, height, rgb, border=(255, 255, 255), border_px=24):
         f.write(chunk(b"IHDR", ihdr))
         f.write(chunk(b"IDAT", zlib.compress(bytes(rows), 9)))
         f.write(chunk(b"IEND", b""))
+    return os.path.getsize(path)
+
+
+def write_video(path, width, height, rgb):
+    """A short H.264 clip via ffmpeg. Optional: if ffmpeg is missing the demo
+    still builds, it just has no video item."""
+    colour = "0x%02X%02X%02X" % rgb
+    cmd = [
+        "ffmpeg", "-y", "-loglevel", "error",
+        "-f", "lavfi", "-i", f"color=c={colour}:s={width}x{height}:d={VIDEO_SECONDS}:r=30",
+        "-vf", f"drawbox=x='(mod(t,{VIDEO_SECONDS})/{VIDEO_SECONDS})*(iw-240)':"
+               "y=(ih-240)/2:w=240:h=240:color=white:t=fill",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-profile:v", "baseline",
+        "-level", "3.1", "-movflags", "+faststart", path,
+    ]
+    try:
+        subprocess.run(cmd, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return None
     return os.path.getsize(path)
 
 
@@ -266,11 +287,12 @@ CREATE TABLE directive (
 
 # id, name, colour, the file it gets in each orientation slot
 ITEMS = [
-    (101, "Welcome",        (0x1F, 0x6F, 0xEB), "both"),
-    (102, "Schedule",       (0x23, 0x8B, 0x45), "both"),
-    (103, "Sponsors",       (0x8A, 0x63, 0xD2), "landscape-only"),
-    (104, "Wayfinding",     (0xD2, 0x9A, 0x22), "portrait-only"),
-    (105, "SAFETY NOTICE",  (0xCF, 0x22, 0x2E), "both"),
+    (101, "Welcome",        (0x1F, 0x6F, 0xEB), "both",           "image"),
+    (102, "Schedule",       (0x23, 0x8B, 0x45), "both",           "image"),
+    (103, "Sponsors",       (0x8A, 0x63, 0xD2), "landscape-only", "image"),
+    (104, "Wayfinding",     (0xD2, 0x9A, 0x22), "portrait-only",  "image"),
+    (105, "SAFETY NOTICE",  (0xCF, 0x22, 0x2E), "both",           "image"),
+    (106, "Sizzle Reel",    (0x1F, 0x6F, 0xEB), "both",           "video"),
 ]
 
 
@@ -284,20 +306,30 @@ def build():
     next_file_id = 201
     item_slots = {}     # item_id -> (portrait_file_id, landscape_file_id)
 
-    for item_id, name, rgb, coverage in ITEMS:
+    for item_id, name, rgb, coverage, kind in ITEMS:
         portrait_id = landscape_id = None
-        if coverage in ("both", "portrait-only"):
-            fn = f"{item_id}-portrait.png"
-            size = write_png(os.path.join(OUT, fn), 1080, 1920, rgb)
-            files.append((next_file_id, fn, 1080, 1920, "portrait", size))
-            portrait_id = next_file_id
+        ext = "mp4" if kind == "video" else "png"
+        ctype = "video/mp4" if kind == "video" else "image/png"
+        duration = float(VIDEO_SECONDS) if kind == "video" else None
+        for orient, (w, h) in (("portrait", (1080, 1920)), ("landscape", (1920, 1080))):
+            if coverage == "portrait-only" and orient != "portrait":
+                continue
+            if coverage == "landscape-only" and orient != "landscape":
+                continue
+            fn = f"{item_id}-{orient}.{ext}"
+            path = os.path.join(OUT, fn)
+            size = write_video(path, w, h, rgb) if kind == "video" else write_png(path, w, h, rgb)
+            if size is None:
+                print(f"  ! ffmpeg unavailable — skipping {fn}")
+                continue
+            files.append((next_file_id, fn, w, h, orient, size, ctype, duration))
+            if orient == "portrait":
+                portrait_id = next_file_id
+            else:
+                landscape_id = next_file_id
             next_file_id += 1
-        if coverage in ("both", "landscape-only"):
-            fn = f"{item_id}-landscape.png"
-            size = write_png(os.path.join(OUT, fn), 1920, 1080, rgb)
-            files.append((next_file_id, fn, 1920, 1080, "landscape", size))
-            landscape_id = next_file_id
-            next_file_id += 1
+        if portrait_id is None and landscape_id is None:
+            continue   # nothing generated (no ffmpeg) — the item is simply absent
         item_slots[item_id] = (portrait_id, landscape_id)
 
     def seed_shared(db, include_all_media):
@@ -317,23 +349,23 @@ def build():
                 (n, day, start, start + DAY_MS - 1, GENERATED_AT, GENERATED_AT))
 
         wanted = {f[0] for f in files} if include_all_media else set()
-        for file_id, fn, w, h, orient, size in files:
+        for file_id, fn, w, h, orient, size, ctype, duration in files:
             if file_id not in wanted:
                 continue
             db.execute(
                 "INSERT INTO media_file (id, source_file_name, content_type, width, height,"
-                " orientation, aspect_ratio, file_size, created, updated)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (file_id, fn, "image/png", w, h, orient, round(w / h, 4), size,
+                " orientation, aspect_ratio, intrinsic_duration, file_size, created, updated)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (file_id, fn, ctype, w, h, orient, round(w / h, 4), duration, size,
                  GENERATED_AT, GENERATED_AT))
             # file_size present, content_hash deliberately NULL: this demo is
             # shaped like a legacy publisher's output, so a client that refuses
             # hash-less media fails here exactly as it would in the field.
             db.execute(
                 "INSERT INTO media_manifest VALUES (?,?,?,?,?)",
-                (file_id, fn, None, size, "image/png"))
-        for item_id, name, _rgb, _cov in ITEMS:
-            if not include_all_media:
+                (file_id, fn, None, size, ctype))
+        for item_id, name, _rgb, _cov, _kind in ITEMS:
+            if not include_all_media or item_id not in item_slots:
                 continue
             p, l = item_slots[item_id]
             db.execute(
@@ -391,7 +423,9 @@ def build():
     entries = [
         (1, 1, 101, 0), (2, 1, 102, 1), (3, 1, 103, 2), (4, 1, 105, 3),
         (5, 2, 101, 0), (6, 2, 104, 1), (7, 2, 105, 2), (8, 2, 103, 3),
+        (9, 1, 106, 4), (10, 2, 106, 4),
     ]
+    entries = [e for e in entries if e[2] in item_slots]
     for eid, playlist, item, position in entries:
         db.execute(
             "INSERT INTO playlist_entry (id, playlist_id, media_item_id, position,"
