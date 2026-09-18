@@ -14,11 +14,21 @@ today. It evolves additively — see [The compatibility contract](#9-the-compati
 which is the part that lets a cartridge published last year open in a client written
 next year.
 
-This document is the whole specification right now. Planned for this repository:
+### A working example
 
-- a checked-in sample cartridge to develop against
+**[Live reference client →](https://mountain-view-staging.github.io/marquee-cartridge-spec/example/)**
+
+[`example/`](example/) is a complete player in one HTML file, reading two real
+cartridges served from this repository. A static site is a complete Marquee
+origin, so the demo needs no backend. It exercises the rules that are easiest to
+get wrong — per-slot resolution, takeover suppression, day-scoped directives,
+orientation fallback, and hash-less media — and [`build-demo.py`](example/build-demo.py)
+rebuilds the whole show from scratch with no dependencies.
+
+Planned next for this repository:
+
 - a conformance fixture set
-- reference client implementations
+- reference client implementations in other languages
 
 Corrections and questions are welcome as issues — particularly from anyone
 implementing against this, since the gaps are easiest to see from outside.
