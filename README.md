@@ -607,12 +607,19 @@ The two producers do not agree on the set:
 
 | | accepts at import | so a cartridge may carry |
 |---|---|---|
-| Swift Studio | png, jpeg, heic, mp4, quicktime, x-m4v | those six |
+| Swift Studio | png, jpeg, **webp**, heic, mp4, quicktime, x-m4v | those seven |
 | Legacy web Studio | png, jpeg, **gif**, **webp**, svg→png, pdf→png, mp4 | png, jpeg, **`image/gif`**, **`image/webp`**, mp4 |
 
-The reference client classifies by an enum of six types and treats anything else as
-unplayable — so a legitimately published `image/gif` or `image/webp` asset is **skipped
-on every rotation**, leaving an empty slot with no operator-visible cause.
+The reference client classifies by a fixed enum and treats anything outside it as
+unplayable — so a legitimately published asset of an unlisted type is **skipped on every
+rotation**, leaving an empty slot with no operator-visible cause.
+
+**`image/webp` was in that hole until 2026-09-19** and is now supported. Worth keeping as
+the worked example, because the shape is what matters: Apple's ImageIO had decoded WebP
+since macOS 11 all along, so nothing about the *platform* was missing — an enum simply did
+not list it, and the cost was a silent skip rather than an error.
+
+**`image/gif` is still in that hole.** A GIF published by the web Studio is skipped today.
 
 For a new client:
 
