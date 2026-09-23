@@ -742,10 +742,12 @@ same flat keyspace and are addressed identically. Names are UUID-unique and immu
 re-optimize mints a *new* name — so **presence by name is a sufficient "already have it"
 check**. Cache on name, not on hash.
 
-Prune your cache against **what you chose to hold**: the manifest entries of the
-cartridges you currently hold, each replaced by the rendition you chose where you chose
-one. A client that chooses renditions and then prunes against the raw manifests deletes
-the files it chose.
+Prune your cache against **what you play, plus what you are still fetching**: the
+manifest entries of the cartridges you currently hold, each replaced by the rendition you
+play where you chose one, plus any rendition still downloading (§7.6). A client that
+chooses renditions and then prunes against the raw manifests deletes the files it chose;
+one that prunes against only what it fetches deletes the file it is still playing while
+an upgrade downloads.
 
 ### 7.2 ⚠️ Two homes, and when to try the second
 
@@ -850,12 +852,33 @@ What makes that order safe:
   hash-less rendition would be chosen and then refused.
 - **Media only.** Brand delivery — typefaces and a style manifest — is not decoded as
   media. Take it exactly as the manifest names it.
-- **Choose once per file and use that choice everywhere** — fetching, verifying, caching,
-  pruning (§7.1) and rendering. A client that downloads one rendition and resolves
-  another plays nothing.
+- **Render only what you hold, and prune from the same decision you render from** (§7.1).
+  A client that downloads one rendition and resolves another plays nothing.
 - **When nothing offered for a file decodes, keep the manifest's deliverable and report the
   file and the codecs it offered.** Never end up holding fewer files than the cartridge
   shipped: dropping the file turns an unplayable asset into a silent gap on the wall.
+
+#### Play what you hold
+
+The order above is what to **fetch** when a client holds nothing for a file. A client that
+already holds a verified rendition should not treat it as a command:
+
+- **Going down a tier needs no download.** A client holding a rendition at or above the
+  tier it now prefers keeps playing it and fetches nothing. Turning a WiFi preference on
+  with the master already on disk costs no bytes and loses no quality.
+- **Going up a tier replaces — once the new bytes are verified.** A client that prefers a
+  higher tier than it holds fetches the preferred rendition and keeps playing the one it
+  holds until then. If the download fails, the held rendition keeps playing and the fetch
+  is retried; nothing that was playable is lost.
+- **Tiers, highest first:** the master — `optimized` and `original`, one tier, because
+  the optimized rendition is a visually-lossless re-encode of its original — then
+  `wifiOptimized`, then `webOptimized`. When a client holds two in one tier it plays
+  `optimized`. A held rendition counts only if the client can decode it, it has a
+  `content_hash`, and the cartridge still offers it: a name the current cartridge no longer
+  lists has no hash to verify against.
+
+The tiers are not the fetch order. That order answers what to download, and lists
+`original` last only because it is the fallback when nothing better decodes.
 
 **A browser client should treat HEVC as undecodable unless it has probed the platform.**
 HEVC support in a browser depends on the operating system, the hardware and the build.
@@ -1043,7 +1066,10 @@ A client is conforming when all of these hold.
 - [ ] Plays a cartridge with no `media_file_variant` exactly as its manifest names.
 - [ ] Chooses on `codec`; never infers a video codec from `content_type`.
 - [ ] Verifies a chosen rendition against its **own** hash and size.
-- [ ] Fetches, caches, prunes and renders the **same** rendition it chose.
+- [ ] Renders and prunes from the **same** decision, and never renders a rendition it
+      does not hold.
+- [ ] Holding a rendition at or above the tier it prefers, fetches nothing; going up a
+      tier, keeps playing what it holds until the new bytes are verified.
 - [ ] Reports a file none of whose renditions it can decode — by file and offered codec —
       and keeps the manifest's deliverable rather than dropping it.
 
@@ -1107,5 +1133,6 @@ Resolving at `now = 1789460000000` (Day 1, after the changeover):
 | **directive** | a timestamped on/off state change for one playlist entry, in one of two types |
 | **takeover** | a directive type that, while ON for any entry, replaces the standard rotation |
 | **rendition** | one encoding of a media file — original, optimized, web, WiFi; a client chooses among those a cartridge offers (§7.6) |
+| **tier** | a rendition's quality class, for deciding whether what a client holds is good enough: master (`optimized`, `original`) › `wifiOptimized` › `webOptimized` (§7.6) |
 | **deliverable** | the media object actually fetched: `optimized_file_name ?? source_file_name` |
 | **wire format** | a record that reads a delivered artifact; additive changes only |
