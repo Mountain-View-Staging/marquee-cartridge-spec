@@ -142,10 +142,11 @@ read a column — probe the column (§9.2). A cartridge published today may carr
 
 ### 3.1 `project.db` — the project cartridge
 
-Exactly these, and **no `cartridge_meta`** (its absence is how you identify the file):
+These tables, and **no `cartridge_meta`** (its absence is how you identify the file):
 
 ```
 project   project_days   media_item   media_file   media_manifest   grdb_migrations
+media_file_variant     ← optional — the renditions offered, §4.8
 ```
 
 It carries the show's identity, timezone, days, and the wallpaper media closure.
@@ -160,10 +161,14 @@ playlist                playlist_entry         directive
 session                 session_set            session_set_entry
 media_item              media_file
 grdb_migrations
+media_file_variant      ← optional — the renditions offered, §4.8
 ```
 
 **Deliberately absent** (authoring-only — never expect them): `tag`, `tag_assignment`,
-`integration`, `media_file_variant`, `media_optimization`.
+`integration`, `media_optimization`.
+
+> `media_file_variant` was on that list until 2026-09. Cartridges from the Swift Studio now
+> carry it; cartridges from the legacy web publisher do not. Handle both (§4.8).
 
 A screen cartridge **also** carries `project` and `project_days`, so a client with a
 screen cartridge can resolve time without opening `project.db`. But the screen
@@ -193,6 +198,7 @@ erDiagram
     media_item }o--o| media_file : "landscape_file_id"
     media_item }o--o| media_item : "backing / overlay"
     media_file ||--|| media_manifest : "one row per file"
+    media_file ||--o{ media_file_variant : "renditions offered (optional)"
 ```
 
 The chain a renderer actually walks is narrower than the diagram — see §5.
@@ -444,6 +450,52 @@ a signage board of scheduled conference sessions rather than a media asset.
 
 ---
 
+### 4.8 `media_file_variant` — the renditions a client may choose from (optional)
+
+```sql
+CREATE TABLE media_file_variant (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  media_file_id INTEGER NOT NULL REFERENCES media_file(id) ON DELETE CASCADE,
+  kind          TEXT    NOT NULL,
+  file_name     TEXT    NOT NULL,
+  content_type  TEXT,
+  width         INTEGER,
+  height        INTEGER,
+  file_size     INTEGER,
+  content_hash  TEXT,        -- 'sha256:…' of THESE bytes, not the parent file's
+  codec         TEXT,
+  created       INTEGER NOT NULL,
+  updated       INTEGER NOT NULL
+);
+```
+
+**Present in cartridges from the Swift Studio; absent from cartridges the legacy web
+publisher produces.** When present it lists every rendition of every media file the
+cartridge carries, so a client can download the one it plays best rather than the one the
+publisher picked. §7.6 is the algorithm.
+
+| `kind` | what it is |
+|---|---|
+| `original` | the file as imported. Always offered: an editing client may want the pristine bytes, while a signage client normally prefers an optimized rendition. Offering is not recommending. |
+| `optimized` | the venue master — visually lossless, Apple-native (HEVC video, HEIC stills). |
+| `webOptimized` | browser-universal — H.264 video at up to 1080p, JPEG or PNG stills. |
+| `wifiOptimized` | a smaller Apple-native rung for a weak uplink: a lower quality claim, not a better encode. Video only, and not every video has one. |
+
+Only rows that carry a `content_hash` are offered. Ignore any `kind` you do not recognise
+(§9.4) — more will appear.
+
+`codec` names what a client must **decode**: `HEVC`, `H.264`, `ProRes` for video; `HEIC`,
+`JPEG`, `PNG`, `WebP` for stills. It is the column to choose on. **For video,
+`content_type` does not answer the question** — `video/mp4` holds HEVC or H.264, and the
+container does not say which.
+
+> ⚠️ **`media_manifest` does not change when this table is present.** It still names
+> exactly one deliverable per media file — the `optimized` rendition where one exists,
+> else the original — and `media_file`'s deliverable columns agree with it. A client that
+> ignores this table plays exactly what it always played. That is deliberate: clients
+> that predate the table download everything the manifest names, so the rendition list
+> could never have gone there without multiplying every deployed device's downloads.
+
 ## 5. The resolution algorithm
 
 This is the part to get right. Everything else is plumbing.
@@ -584,6 +636,9 @@ landscape → landscape_file_id ?? portrait_file_id
 Fall back to the other orientation; never render nothing when one slot is filled. An
 entry whose item resolves to no file at all is dropped in §5.3.
 
+Then, if the cartridge offers renditions, choose which one of that `media_file` to fetch
+and play — §7.6. A client that ignores renditions uses the file as the manifest names it.
+
 ### 5.7 Duration
 
 | content | reference client behaviour |
@@ -629,6 +684,8 @@ For a new client:
   enough that an operator sees it without reading a device log. A silently skipped asset
   is the single most expensive failure mode in this system — it looks identical to
   "everything is fine" from every angle except the wall.
+- **Where the cartridge offers renditions, decide on `codec`, not `content_type`** (§4.8).
+  It is the only column that separates an HEVC `video/mp4` from an H.264 one.
 
 ---
 
@@ -679,12 +736,16 @@ Handle it explicitly:
 <mediaBase>/<projectCode>/<deliverable_file_name>
 ```
 
-Flat, per project. `deliverable_file_name` comes from `media_manifest`. Names are
-UUID-unique and immutable — a re-optimize mints a *new* name — so **presence by name is a
-sufficient "already have it" check**. Cache on name, not on hash.
+Flat, per project. `deliverable_file_name` comes from `media_manifest` — or, where you chose
+a rendition (§7.6), use that rendition's `file_name` in its place. Renditions live in the
+same flat keyspace and are addressed identically. Names are UUID-unique and immutable — a
+re-optimize mints a *new* name — so **presence by name is a sufficient "already have it"
+check**. Cache on name, not on hash.
 
-Prune your cache against the union of the manifests of the cartridges you currently hold.
-A name that has left every manifest is never referenced again.
+Prune your cache against **what you chose to hold**: the manifest entries of the
+cartridges you currently hold, each replaced by the rendition you chose where you chose
+one. A client that chooses renditions and then prunes against the raw manifests deletes
+the files it chose.
 
 ### 7.2 ⚠️ Two homes, and when to try the second
 
@@ -719,6 +780,10 @@ The rule:
 Report the unverified count to the operator (the reference client says
 `… · 86 UNVERIFIED (no hash in the manifest — legacy cartridge)`). Admitting silently and
 rejecting wholesale are both wrong; admitting *audibly* is right.
+
+A rendition (§4.8) carries its **own** `content_hash` and `file_size`. Verify a chosen
+rendition against those, never against its parent file's — the right bytes under the
+parent's hash fail every download.
 
 Keep the two rejections distinguishable. A size mismatch is usually a truncated transfer
 — worth retrying. A hash mismatch means the bytes at that address are not the bytes the
@@ -759,6 +824,42 @@ why. Keep a hard ceiling for safety, but make the failure mode "scaled" rather t
 "absent", and say so at `notice` level when you scale.
 
 ---
+
+### 7.6 Choosing a rendition
+
+When the cartridge carries `media_file_variant` (§4.8), a client may download a rendition
+in place of the manifest's deliverable. The reference client's order — the first one it
+can decode wins:
+
+1. `wifiOptimized`, **if the device is set to prefer it.** A weak uplink is a fact about
+   where a device is installed, not about the show, so this is a device setting.
+2. **The venue master: `optimized` when the file has one, else `original`.** A file with
+   no `optimized` rendition is either one whose original was already the best deliverable,
+   or one not yet optimized. In both cases the manifest names the original, so this matches
+   a client that ignores the table. "Optimized, else web" — the obvious order — would drop
+   an Apple device to the 1080p web rendition on exactly those files.
+3. `webOptimized`.
+4. `original`, as a last resort.
+
+What makes that order safe:
+
+- **Decide on `codec`.** A rendition with no `codec` is not known to be decodable, except
+  a still, whose `content_type` names its encoding unambiguously. Never infer a video codec
+  from `video/mp4`.
+- **Only rows with a `content_hash` are candidates.** You verify before you use (§7.3); a
+  hash-less rendition would be chosen and then refused.
+- **Media only.** Brand delivery — typefaces and a style manifest — is not decoded as
+  media. Take it exactly as the manifest names it.
+- **Choose once per file and use that choice everywhere** — fetching, verifying, caching,
+  pruning (§7.1) and rendering. A client that downloads one rendition and resolves
+  another plays nothing.
+- **When nothing offered for a file decodes, keep the manifest's deliverable and report the
+  file and the codecs it offered.** Never end up holding fewer files than the cartridge
+  shipped: dropping the file turns an unplayable asset into a silent gap on the wall.
+
+**A browser client should treat HEVC as undecodable unless it has probed the platform.**
+HEVC support in a browser depends on the operating system, the hardware and the build.
+H.264, JPEG, PNG and WebP are the safe set.
 
 ## 8. Time
 
@@ -892,6 +993,14 @@ the difference is what turned a one-line decode bug into an unexplained black sc
 Unknown tables, unknown columns and unknown `resource_type` / `slot` / `type` values must
 be skipped, not treated as errors. Forward compatibility is a client obligation.
 
+### 9.5 A new table must be safe to ignore
+
+When a producer adds a table a client may use — `media_file_variant` is the instance — the
+tables a client already reads keep their meaning. A client that has never heard of the new
+table still plays the cartridge correctly, and a client that uses it still plays a
+cartridge without it. Tell the two apart as §9.3 requires: an absent table is not a table
+that failed to decode.
+
 ---
 
 ## 10. Conformance checklist
@@ -923,12 +1032,20 @@ A client is conforming when all of these hold.
 - [ ] Surfaces an empty `screen_location` to the operator and offers a manual orientation override that applies immediately.
 
 **Media**
-- [ ] Caches by `deliverable_file_name` and prunes to the manifest union.
+- [ ] Caches by file name and prunes to what it chose to hold (§7.1).
 - [ ] Falls back to `cloud_media_base_url` **on 404 only**.
 - [ ] Admits a hash-less file, counts it, and reports the count.
 - [ ] Rejects a size mismatch and a hash mismatch with **different** messages.
 - [ ] Downscales an oversized asset instead of skipping it, and says so.
 - [ ] Degrades the media count on a missing file without failing the bootstrap.
+
+**Renditions** (§4.8, §7.6)
+- [ ] Plays a cartridge with no `media_file_variant` exactly as its manifest names.
+- [ ] Chooses on `codec`; never infers a video codec from `content_type`.
+- [ ] Verifies a chosen rendition against its **own** hash and size.
+- [ ] Fetches, caches, prunes and renders the **same** rendition it chose.
+- [ ] Reports a file none of whose renditions it can decode — by file and offered codec —
+      and keeps the manifest's deliverable rather than dropping it.
 
 ---
 
@@ -989,5 +1106,6 @@ Resolving at `now = 1789460000000` (Day 1, after the changeover):
 | **slot** | `portrait` \| `landscape` \| `demo_station` — schedule entries are scoped per slot |
 | **directive** | a timestamped on/off state change for one playlist entry, in one of two types |
 | **takeover** | a directive type that, while ON for any entry, replaces the standard rotation |
+| **rendition** | one encoding of a media file — original, optimized, web, WiFi; a client chooses among those a cartridge offers (§7.6) |
 | **deliverable** | the media object actually fetched: `optimized_file_name ?? source_file_name` |
 | **wire format** | a record that reads a delivered artifact; additive changes only |
