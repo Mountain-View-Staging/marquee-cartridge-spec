@@ -35,13 +35,25 @@ were **skipped and the reason**. A silently dropped asset is an empty slot every
 rotation with nothing in any log, and it is the most expensive failure mode in
 this system — so this player never drops one quietly.
 
-## Two deliberate divergences from the iOS/macOS reference client
+## Timing: start and duration, as Studio resolves them
 
-Both are things the specification carries but marks as not honoured there. This
-player honours them, and the overlay says which number it used:
+Every entry resolves to a **start** and a **duration**
+([specification §5.7](../README.md#57-start-and-duration)). They are the numbers
+Studio's editor shows as a row's Start and running time.
 
-- **`media_item.display_duration`** — how long a still is held, instead of a flat 8 s.
-- **The per-orientation trim window** — `start_time_*` / `end_time_*` as video in/out points.
+- **start:** the entry's window start for this orientation, else 0.
+- **duration:**
+  - `end − start` when the window has an end — for a still too, where the end is the
+    dwell override;
+  - a video with no end plays to its end;
+  - a still with no end holds `media_item.display_duration`, else 8 s.
+
+The overlay's *holds for* line names the number it used: `window`, `display_duration`,
+`default`, or *to the end*.
+
+**The iOS/macOS client does not honour the window or `display_duration` yet.** It holds
+every still for 8 s and plays every clip in full, so on a show that sets these fields
+the two players' timing differs.
 
 ## On state management
 

@@ -229,27 +229,35 @@ export function deliverableName(db, file) {
 }
 
 /**
- * How long a still is held.
+ * §5.7 — WHERE an entry starts and HOW LONG it runs: the rule Studio's editor
+ * resolves every entry with, so the player shows what the operator saw there
+ * (each row's Start and running time).
  *
- * The specification records that the iOS/macOS reference client ignores
- * `display_duration` and holds every image for a flat 8 s. This player honours
- * it. That is a deliberate divergence — stated, not silent — and the reason the
- * status overlay reports which number it used.
+ *   start    — the entry's window start for this orientation, else 0
+ *   duration — `end − start` when the window has an end (a still too: the end
+ *              is its dwell override);
+ *              a video with no end → 0, meaning "to the end of the clip";
+ *              a still with no end → `media_item.display_duration`, else 8 s
+ *
+ * Both are seconds. `source` says which number was used, for the overlay.
+ * A window counts only when it is positive (end > start): Studio refuses any
+ * other, and a zero-length hold on a still would spin the rotation. A video
+ * then plays to its end, which is what Studio's zero duration means there.
+ * The iOS/macOS client does not honour the window or `display_duration` yet
+ * (it holds every still 8 s and plays every clip in full); this player follows
+ * the authoring tool, and the overlay says so.
  */
-export function imageSeconds(item) {
-  const authored = Number(item.display_duration);
-  return Number.isFinite(authored) && authored > 0 ? authored : DEFAULT_IMAGE_SECONDS;
-}
-
-/**
- * §5.7 — the per-orientation trim window, in seconds into the clip. Also not
- * honoured by the reference client; honoured here, same caveat.
- */
-export function trimWindow(entry, slot) {
-  const num = (v) => (Number.isFinite(Number(v)) && v !== null ? Number(v) : null);
-  return slot === "portrait"
-    ? { start: num(entry.start_time_portrait), end: num(entry.end_time_portrait) }
-    : { start: num(entry.start_time_landscape), end: num(entry.end_time_landscape) };
+export function playbackWindow(entry, item, file, slot) {
+  const num = (v) => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Number(v) : null);
+  const portrait = slot === "portrait";
+  const start = Math.max(0, num(portrait ? entry.start_time_portrait : entry.start_time_landscape) ?? 0);
+  const end = num(portrait ? entry.end_time_portrait : entry.end_time_landscape);
+  if (end !== null && end > start) return { start, duration: end - start, source: "window" };
+  if (isVideo(file.content_type)) return { start, duration: 0, source: "clip" };
+  const authored = num(item.display_duration);
+  return authored !== null && authored > 0
+    ? { start, duration: authored, source: "display_duration" }
+    : { start, duration: DEFAULT_IMAGE_SECONDS, source: "default" };
 }
 
 // ── the whole chain, in one call ─────────────────────────────────────────────

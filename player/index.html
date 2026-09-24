@@ -38,7 +38,7 @@
 <script type="module">
 import {
   assertSqlite, one, rows, syntheticNow, provision, resolve, advance,
-  deliverableName, imageSeconds, trimWindow, isVideo, signatureOf,
+  deliverableName, playbackWindow, isVideo, signatureOf,
 } from "./player.js";
 
 // The cartridge this player shows. Hard-coded, the way an installed player's
@@ -82,9 +82,11 @@ function paint(resolved) {
 
   const { entry, item, file } = resolved.current;
   const url = `${SOURCE.base}/${SOURCE.projectCode}/${deliverableName(state.db, file)}`;
+  // §5.7 — start and duration, exactly as the authoring tool resolves them.
+  const { start, duration } = playbackWindow(entry, item, file, resolved.slot);
 
   if (isVideo(file.content_type)) {
-    const { start, end } = trimWindow(entry, resolved.slot);
+    const end = duration > 0 ? start + duration : null;   // 0 = to the end of the clip
     const video = document.createElement("video");
     video.src = start ? `${url}#t=${start}` : url;
     video.autoplay = true;
@@ -102,7 +104,7 @@ function paint(resolved) {
     // A clip that never fires `ended` (a truncated file, a codec the device
     // cannot finish) would park the rotation forever. The watchdog is why a
     // single bad asset degrades one slot instead of the whole screen.
-    const watchdog = (Number(file.intrinsic_duration) || 300) + 10;
+    const watchdog = (duration > 0 ? duration : Number(file.intrinsic_duration) || 300) + 10;
     state.holdTimer = setTimeout(step, watchdog * 1000);
     video.addEventListener("error", () => { console.warn("undecodable", url); step(); }, { once: true });
     stage.append(video);
@@ -113,7 +115,7 @@ function paint(resolved) {
     img.alt = item.name;
     img.addEventListener("error", () => { console.warn("unfetchable", url); step(); }, { once: true });
     stage.append(img);
-    state.holdTimer = setTimeout(step, imageSeconds(item) * 1000);
+    state.holdTimer = setTimeout(step, duration * 1000);
   }
 }
 
@@ -161,11 +163,10 @@ function report(r) {
   const takeover = r.rotation.source === "takeover";
   const current = r.current;
   const kind = current && isVideo(current.file.content_type) ? "video" : "image";
-  const hold = current
-    ? (kind === "video"
-        ? `${current.file.intrinsic_duration ?? "?"}s intrinsic`
-        : `${imageSeconds(current.item)}s (display_duration)`)
-    : "—";
+  const timing = current && playbackWindow(current.entry, current.item, current.file, r.slot);
+  const hold = !current ? "—"
+    : timing.source === "clip" ? `to the end — ${current.file.intrinsic_duration ?? "?"}s intrinsic`
+    : `${timing.duration}s (${timing.source})${timing.start ? ` from ${timing.start}s` : ""}`;
 
   const lines = [
     ["screen", `${state.meta.screen_id} · ${state.meta.project_code}`],

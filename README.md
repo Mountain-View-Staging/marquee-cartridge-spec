@@ -639,21 +639,27 @@ entry whose item resolves to no file at all is dropped in §5.3.
 Then, if the cartridge offers renditions, choose which one of that `media_file` to fetch
 and play — §7.6. A client that ignores renditions uses the file as the manifest names it.
 
-### 5.7 Duration
+### 5.7 Start and duration
 
-| content | reference client behaviour |
+Each entry resolves to a **start** and a **duration**, in seconds, for the orientation
+being rendered. They are the numbers Studio's editor shows as a row's Start and running
+time, so a player that follows this rule shows what the operator saw there.
+
+| | rule |
 |---|---|
-| image | fixed **8 seconds** |
-| video | plays to completion; `intrinsic_duration` (+10 s grace) is a watchdog, 300 s when unknown |
+| **start** | the entry's `start_time_<orientation>`, else `0` |
+| **duration** | `end_time_<orientation> − start` when the window has an end — **for a still too**, where the end is its dwell override · a video with no end: **to the end of the clip** · a still with no end: `media_item.display_duration`, else **8 s** |
 
-> **⚠️ `media_item.display_duration` and the four `playlist_entry` trim columns
-> (`start_time_portrait`, `end_time_portrait`, `start_time_landscape`,
-> `end_time_landscape`) are carried in the cartridge but are not honoured by the
-> reference client today.** Their intent is: `display_duration` = seconds to hold a
-> still; the trim pair = in/out offsets in seconds into a video, per orientation.
->
-> If you honour them, you will diverge from the reference client's timing. That may be
-> the better client — but it is a difference, and it should be a deliberate one.
+- For a video, start is the in-point and start + duration the out-point.
+- A window counts only when `end > start`. Studio refuses any other, and a zero-length
+  hold on a still would spin the rotation.
+- Keep a watchdog so one clip that never ends cannot park the rotation: the duration
+  when there is one, else `intrinsic_duration`, else 300 s — plus a 10 s grace.
+
+> **⚠️ The iOS/macOS client does not honour the window or `display_duration` yet.** It
+> holds every still for 8 s and plays every clip in full. The reference web player
+> (`player/`) follows the rule above. Until the Apple client catches up, two screens
+> playing the same cartridge differ in timing wherever a show sets these fields.
 
 ### 5.8 ⚠️ Content types you must expect
 
