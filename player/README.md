@@ -56,6 +56,18 @@ in full.** The macOS client follows this rule from that build, and the iOS clien
 its next release. On a show that sets these fields, a screen on an older build times
 entries differently from this player.
 
+## Session boards
+
+This player draws none. An entry with `resource_type = 'session_set'` is dropped, as
+[§5.3](../README.md#53-expand-the-playlist) allows, and the overlay's *skipped* line
+names it.
+
+A client that draws its own board can still use this file's rotation:
+`resolve(db, { at, slot, cursorId, sessionBoards: true })` keeps board entries in the
+list as `{ entry, sessionSet }`. They follow the same directive timeline as media, so a
+board can be a takeover. What a board looks like is the client's decision
+([§4.7](../README.md#47-session-session_set-session_set_entry)).
+
 ## On state management
 
 There is none, and that is a choice rather than an omission.

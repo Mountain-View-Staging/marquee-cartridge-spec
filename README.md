@@ -437,9 +437,11 @@ not a delivery filter. Do **not** skip archived rows.
 Carried in screen cartridges when a playlist entry has `resource_type = 'session_set'` —
 a signage board of scheduled conference sessions rather than a media asset.
 
-> **⚠️ Not rendered by the reference client.** The data is delivered and the seam exists,
-> but no renderer consumes it yet. A conforming client may skip
-> `resource_type = 'session_set'` entries entirely. If you implement them, treat the
+> **⚠️ Apple client builds before 2026-09-21 do not render session boards.** The macOS
+> client draws them from that build, and the iOS client from its next release. The
+> reference web player (`player/`) draws none, but its `resolve()` can keep board entries
+> in the rotation for a client that does (`sessionBoards: true`). A conforming client may
+> skip `resource_type = 'session_set'` entries entirely. If you implement them, treat the
 > board layout as your own product decision; the cartridge carries content
 > (`session_set_entry.start_time`/`end_time`, `session.name`/`presenters`/`abstract`) and
 > branding pointers (`backing_item_id`, `logo_item_id`), not a layout.

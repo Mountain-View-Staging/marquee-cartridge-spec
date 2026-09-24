@@ -164,8 +164,14 @@ export const isImage = (contentType) => /^image\//.test(contentType ?? "");
  * not only acting on. The rule: **a non-empty takeover set IS the rotation.**
  * Standard is suppressed wholesale — not appended, not interleaved. That is how
  * an operator cuts to emergency or sponsor content without editing a playlist.
+ *
+ * `sessionBoards: true` keeps `resource_type = 'session_set'` entries in the
+ * list, as `{ entry, sessionSet }`, for a client that draws session boards
+ * (§4.7). They take part in the same directive timeline as media, so a board
+ * can be a takeover. Off by default: this player draws none, and §5.3 says a
+ * client that does not implement boards drops them.
  */
-export function resolveRotation(db, playlistId, at, slot, days) {
+export function resolveRotation(db, playlistId, at, slot, days, { sessionBoards = false } = {}) {
   if (!playlistId) return { list: [], source: "none", suppressed: 0, skipped: [] };
 
   const columns = columnsOf(db, "playlist_entry");
@@ -176,6 +182,14 @@ export function resolveRotation(db, playlistId, at, slot, days) {
   for (const entry of entries) {
     // v4-only column. Absent means the default, never an error.
     if (columns.has("disabled") && entry.disabled) { skipped.push([entry.id, "disabled"]); continue; }
+    if (sessionBoards && entry.resource_type === "session_set") {
+      const sessionSet = one(db, "SELECT * FROM session_set WHERE id = ?", [entry.session_set_id]);
+      if (!sessionSet) { skipped.push([entry.id, "session set missing"]); continue; }
+      const resolved = { entry, sessionSet };
+      if (governingDirective(db, entry.id, "takeover", at, days)?.on_screen) takeovers.push(resolved);
+      if (governingDirective(db, entry.id, "standard", at, days)?.on_screen) standard.push(resolved);
+      continue;
+    }
     if (entry.resource_type !== "media_item") { skipped.push([entry.id, entry.resource_type]); continue; }
 
     const item = one(db, "SELECT * FROM media_item WHERE id = ?", [entry.media_item_id]);
@@ -266,12 +280,12 @@ export function playbackWindow(entry, item, file, slot) {
  * Resolve everything for a moment in time. One pure function: same cartridge,
  * same inputs, same answer — which is what makes it testable without a screen.
  */
-export function resolve(db, { at, slot, cursorId = null }) {
+export function resolve(db, { at, slot, cursorId = null, sessionBoards = false }) {
   const config = one(db, "SELECT * FROM screen_config LIMIT 1");
   const days = rows(db, "SELECT * FROM project_days ORDER BY start_time");
   const scheduled = config ? scheduleEntryFor(db, config.id, slot, at) : null;
   const playlistId = scheduled?.playlist_id ?? null;
-  const rotation = resolveRotation(db, playlistId, at, slot, days);
+  const rotation = resolveRotation(db, playlistId, at, slot, days, { sessionBoards });
   const current = rotation.list.find((x) => x.entry.id === cursorId) ?? rotation.list[0] ?? null;
 
   return {

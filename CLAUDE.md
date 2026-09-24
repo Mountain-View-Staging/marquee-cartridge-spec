@@ -54,13 +54,16 @@ schema (`MarqueeSchema`), so a migration there means a revision here.
 ## Honesty about what the reference client does
 
 Several schema fields are carried in cartridges but **not honoured** by the iOS/macOS
-client: the v4 playback flags, `shuffle`, `audio_priority`, and session-set rendering.
-The spec marks each one.
+client: the v4 playback flags, `shuffle` and `audio_priority`. The spec marks each one.
 
-`display_duration` and the per-orientation trim columns were on that list until the Apple
-client's 2026-09-23 build (macOS then, iOS with its next release). §5.7 still warns
-that older builds hold every still 8 s and play every clip in full. Keep that warning
-until the old builds are gone from the field.
+Two items have left that list, each with a warning kept in the spec until the old
+builds are gone from the field:
+- `display_duration` and the per-orientation trim columns, from the Apple client's
+  2026-09-23 build (§5.7).
+- Session-set rendering, from its 2026-09-21 build (§4.7).
+In both cases macOS has it from that build and iOS from its next release.
+`player/` draws no boards, but `resolve(..., { sessionBoards: true })` keeps them in
+the rotation for a client that does.
 
 **Keep those marks accurate.** An implementer who honours a field the reference client
 ignores has diverged, and that has to be a decision they made knowingly rather than a
