@@ -656,10 +656,11 @@ time, so a player that follows this rule shows what the operator saw there.
 - Keep a watchdog so one clip that never ends cannot park the rotation: the duration
   when there is one, else `intrinsic_duration`, else 300 s — plus a 10 s grace.
 
-> **⚠️ The iOS/macOS client does not honour the window or `display_duration` yet.** It
-> holds every still for 8 s and plays every clip in full. The reference web player
-> (`player/`) follows the rule above. Until the Apple client catches up, two screens
-> playing the same cartridge differ in timing wherever a show sets these fields.
+> **⚠️ Apple client builds before 2026-09-23 hold every still for 8 s and play every
+> clip in full.** From that build the macOS client follows the rule above, and the iOS
+> client follows it from its next release. The reference web player (`player/`) follows
+> it too. Until a fleet is on those builds, two screens playing the same cartridge can
+> differ in timing wherever a show sets these fields.
 
 ### 5.8 ⚠️ Content types you must expect
 

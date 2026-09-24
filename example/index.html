@@ -427,7 +427,8 @@ function render(step) {
     $("btn-portrait").setAttribute("aria-pressed", String(state.orientation === "portrait"));
 
     render(false);
-    // Images hold for 8 s, matching the reference client (§5.7).
+    // Step the rotation every 8 s, the default still hold (§5.7). The explorer
+    // shows what resolves; it does not time entries. player/ does.
     setInterval(() => render(true), 8000);
   } catch (err) {
     $("stage").innerHTML = `<div class="empty">${err.message}<br><br>

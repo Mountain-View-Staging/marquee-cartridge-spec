@@ -51,9 +51,10 @@ Studio's editor shows as a row's Start and running time.
 The overlay's *holds for* line names the number it used: `window`, `display_duration`,
 `default`, or *to the end*.
 
-**The iOS/macOS client does not honour the window or `display_duration` yet.** It holds
-every still for 8 s and plays every clip in full, so on a show that sets these fields
-the two players' timing differs.
+**Apple client builds before 2026-09-23 hold every still for 8 s and play every clip
+in full.** The macOS client follows this rule from that build, and the iOS client from
+its next release. On a show that sets these fields, a screen on an older build times
+entries differently from this player.
 
 ## On state management
 

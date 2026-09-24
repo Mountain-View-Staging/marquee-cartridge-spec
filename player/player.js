@@ -243,9 +243,9 @@ export function deliverableName(db, file) {
  * A window counts only when it is positive (end > start): Studio refuses any
  * other, and a zero-length hold on a still would spin the rotation. A video
  * then plays to its end, which is what Studio's zero duration means there.
- * The iOS/macOS client does not honour the window or `display_duration` yet
- * (it holds every still 8 s and plays every clip in full); this player follows
- * the authoring tool, and the overlay says so.
+ * The Apple client follows the same rule from its 2026-09-23 build (macOS now,
+ * iOS from its next release); older builds hold every still 8 s and play every
+ * clip in full. The overlay names the number this player used.
  */
 export function playbackWindow(entry, item, file, slot) {
   const num = (v) => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Number(v) : null);

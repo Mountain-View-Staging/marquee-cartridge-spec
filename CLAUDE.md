@@ -54,13 +54,18 @@ schema (`MarqueeSchema`), so a migration there means a revision here.
 ## Honesty about what the reference client does
 
 Several schema fields are carried in cartridges but **not honoured** by the iOS/macOS
-client: `display_duration`, the per-orientation trim columns, the v4 playback flags,
-`shuffle`, `audio_priority`, and session-set rendering. The spec marks each one.
+client: the v4 playback flags, `shuffle`, `audio_priority`, and session-set rendering.
+The spec marks each one.
+
+`display_duration` and the per-orientation trim columns were on that list until the Apple
+client's 2026-09-23 build (macOS then, iOS with its next release). §5.7 still warns
+that older builds hold every still 8 s and play every clip in full. Keep that warning
+until the old builds are gone from the field.
 
 **Keep those marks accurate.** An implementer who honours a field the reference client
 ignores has diverged, and that has to be a decision they made knowingly rather than a
-surprise at a venue. `player/` honours `display_duration` and the trim window deliberately,
-and says so in its own README.
+surprise at a venue. `player/` implements §5.7's start and duration, the rule the
+authoring tool resolves entries with, and says so in its own README.
 
 ## The demo show
 
