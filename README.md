@@ -849,6 +849,12 @@ can decode wins:
 3. `webOptimized`.
 4. `original`, as a last resort.
 
+**A browser client puts `webOptimized` first.** The web rendition is made for browsers —
+H.264 at up to 1080p, JPEG or PNG: the lowest common denominator — so a browser takes it
+even where it could decode the master. A codec name says H.264; it does not say which
+profile, and an original can be a camera's High 4:2:2 at 60 fps. Only a file with no web
+rendition falls back to the order above.
+
 What makes that order safe:
 
 - **Decide on `codec`.** A rendition with no `codec` is not known to be decodable, except
@@ -882,6 +888,9 @@ already holds a verified rendition should not treat it as a command:
   `optimized`. A held rendition counts only if the client can decode it, it has a
   `content_hash`, and the cartridge still offers it: a name the current cartridge no longer
   lists has no hash to verify against.
+- **For a browser client, `webOptimized` ranks first**, above the master, so a browser
+  holding a master-tier original swaps to the web rendition once one is offered — playing
+  the original only until the web bytes are verified.
 
 The tiers are not the fetch order. That order answers what to download, and lists
 `original` last only because it is the fallback when nothing better decodes.
@@ -1076,6 +1085,7 @@ A client is conforming when all of these hold.
       does not hold.
 - [ ] Holding a rendition at or above the tier it prefers, fetches nothing; going up a
       tier, keeps playing what it holds until the new bytes are verified.
+- [ ] A browser client takes `webOptimized` first, and ranks it first.
 - [ ] Reports a file none of whose renditions it can decode — by file and offered codec —
       and keeps the manifest's deliverable rather than dropping it.
 
