@@ -1,0 +1,27 @@
+{
+  "id": "MCS-14",
+  "trace": [
+    {
+      "t": "2026-09-15T11:29:55-07:00",
+      "kind": "render",
+      "code": "rotation.start",
+      "entry": 1,
+      "set": "standard",
+      "file": 101
+    },
+    {
+      "t": "2026-09-15T11:30:00-07:00",
+      "kind": "cut",
+      "code": "takeover.activate",
+      "entry": 1
+    },
+    {
+      "t": "2026-09-15T11:30:00-07:00",
+      "kind": "render",
+      "code": "rotation.start",
+      "entry": 2,
+      "set": "takeover",
+      "file": 102
+    }
+  ]
+}

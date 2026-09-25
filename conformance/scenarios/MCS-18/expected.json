@@ -1,0 +1,35 @@
+{
+  "id": "MCS-18",
+  "trace": [
+    {
+      "t": "2026-09-15T08:00:00-07:00",
+      "kind": "render",
+      "code": "rotation.start",
+      "entry": 1,
+      "set": "standard",
+      "file": 101
+    },
+    {
+      "t": "2026-09-15T08:00:05-07:00",
+      "kind": "cut",
+      "code": "takeover.activate",
+      "entry": 1
+    },
+    {
+      "t": "2026-09-15T08:00:05-07:00",
+      "kind": "render",
+      "code": "rotation.start",
+      "entry": 3,
+      "set": "takeover",
+      "file": 103
+    },
+    {
+      "t": "2026-09-15T08:00:15-07:00",
+      "kind": "render",
+      "code": "rotation.wrap",
+      "entry": 3,
+      "set": "takeover",
+      "file": 103
+    }
+  ]
+}

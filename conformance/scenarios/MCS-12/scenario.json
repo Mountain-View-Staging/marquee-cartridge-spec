@@ -1,0 +1,24 @@
+{
+  "id": "MCS-12",
+  "title": "A schedule change to another playlist cuts immediately and resets cursors",
+  "rules": "Reference §6.2, §6.7",
+  "cartridge": "schedule-change",
+  "engine": {
+    "slot": "portrait",
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 51,
+    "start": "2026-09-15T08:00:00-07:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {}
+  },
+  "events": []
+}

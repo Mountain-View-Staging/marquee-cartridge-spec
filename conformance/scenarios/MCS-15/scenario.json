@@ -1,0 +1,24 @@
+{
+  "id": "MCS-15",
+  "title": "Orientation slots: an empty slot excludes; a slot's file plays as authored",
+  "rules": "Reference §9.4, INV-14",
+  "cartridge": "orientation",
+  "engine": {
+    "slot": "portrait",
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 26,
+    "start": "2026-09-15T08:00:00-07:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {}
+  },
+  "events": []
+}

@@ -1,0 +1,24 @@
+{
+  "id": "MCS-04",
+  "title": "A standard directive turning off mid-item lets it finish; the entry then drops out",
+  "rules": "Reference §6.3, §6.7",
+  "cartridge": "e3-off",
+  "engine": {
+    "slot": "portrait",
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 66,
+    "start": "2026-09-15T08:00:00-07:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {}
+  },
+  "events": []
+}

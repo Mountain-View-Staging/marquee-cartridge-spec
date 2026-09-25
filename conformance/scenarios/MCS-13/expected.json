@@ -1,0 +1,29 @@
+{
+  "id": "MCS-13",
+  "trace": [
+    {
+      "t": "2026-09-16T11:45:00-07:00",
+      "kind": "render",
+      "code": "rotation.start",
+      "entry": 1,
+      "set": "standard",
+      "file": 101
+    },
+    {
+      "t": "2026-09-16T11:45:10-07:00",
+      "kind": "render",
+      "code": "rotation.next",
+      "entry": 2,
+      "set": "standard",
+      "file": 102
+    },
+    {
+      "t": "2026-09-16T11:45:20-07:00",
+      "kind": "render",
+      "code": "rotation.wrap",
+      "entry": 1,
+      "set": "standard",
+      "file": 101
+    }
+  ]
+}

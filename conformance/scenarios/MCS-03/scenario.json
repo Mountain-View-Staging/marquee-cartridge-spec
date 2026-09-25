@@ -1,0 +1,24 @@
+{
+  "id": "MCS-03",
+  "title": "A takeover ending mid-item lets it finish; standard resumes after its cursor",
+  "rules": "Reference §6.5, §6.7",
+  "cartridge": "short-takeover",
+  "engine": {
+    "slot": "portrait",
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 70,
+    "start": "2026-09-15T11:29:36-07:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {}
+  },
+  "events": []
+}

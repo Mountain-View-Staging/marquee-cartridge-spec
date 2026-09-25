@@ -1,0 +1,24 @@
+{
+  "id": "MCS-02",
+  "title": "A takeover starting mid-item cuts immediately",
+  "rules": "Reference §6.6, §6.7",
+  "cartridge": "base",
+  "engine": {
+    "slot": "portrait",
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 40,
+    "start": "2026-09-15T11:29:36-07:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {}
+  },
+  "events": []
+}

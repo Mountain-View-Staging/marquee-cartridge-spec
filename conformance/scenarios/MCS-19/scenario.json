@@ -1,0 +1,24 @@
+{
+  "id": "MCS-19",
+  "title": "Same-playlist boundary is a no-op; a NULL playlist blanks",
+  "rules": "Reference §6.2",
+  "cartridge": "boundaries",
+  "engine": {
+    "slot": "portrait",
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 46,
+    "start": "2026-09-15T08:00:00-07:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {}
+  },
+  "events": []
+}

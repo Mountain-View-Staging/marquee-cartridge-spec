@@ -1,0 +1,36 @@
+{
+  "id": "MCS-09",
+  "trace": [
+    {
+      "t": "2026-09-15T23:59:55-07:00",
+      "kind": "render",
+      "code": "rotation.start",
+      "entry": 1,
+      "set": "standard",
+      "file": 101
+    },
+    {
+      "t": "2026-09-15T00:00:00-07:00",
+      "kind": "jump",
+      "code": "jump.backward"
+    },
+    {
+      "t": "2026-09-15T00:00:00-07:00",
+      "kind": "hold",
+      "code": "set.empty"
+    },
+    {
+      "t": "2026-09-15T08:00:05-07:00",
+      "kind": "jump",
+      "code": "jump.forward"
+    },
+    {
+      "t": "2026-09-15T08:00:05-07:00",
+      "kind": "render",
+      "code": "rotation.next",
+      "entry": 2,
+      "set": "standard",
+      "file": 102
+    }
+  ]
+}

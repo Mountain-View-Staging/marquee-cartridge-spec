@@ -1,0 +1,28 @@
+{
+  "id": "MCS-11",
+  "title": "Video: completion, a load failure, and the watchdog",
+  "rules": "Reference §6.6, §6.9",
+  "cartridge": "video",
+  "engine": {
+    "slot": "portrait",
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 51,
+    "start": "2026-09-15T08:00:00-07:00"
+  },
+  "host": {
+    "failEntries": [
+      2
+    ],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [
+      4
+    ],
+    "boardPages": {}
+  },
+  "events": []
+}
