@@ -51,24 +51,24 @@ lands only there is lost.
 When the format changes, this repo changes with it. The DDL is transcribed from the shared
 schema (`MarqueeSchema`), so a migration there means a revision here.
 
-## Honesty about what the reference client does
+## v25.0.1 — the format is greenfield
 
-Several schema fields are carried in cartridges but **not honoured** by the iOS/macOS
-client: the v4 playback flags, `shuffle` and `audio_priority`. The spec marks each one.
+The README specifies **v25.0.1**, a clean break from the pre-v25 format: `surface_*` names,
+`cartridge_meta` in both artifacts, required hashes and sizes, no Studio-player runtime
+modifiers, no orientation fallback, position cursors, one render marker on synthetic time.
+§14 lists every change. From v25.0.1 on, the compatibility contract (§10) governs: additive
+changes only.
 
-Two items have left that list, each with a warning kept in the spec until the old
-builds are gone from the field:
-- `display_duration` and the per-orientation trim columns, from the Apple client's
-  2026-09-23 build (§5.7).
-- Session-set rendering, from its 2026-09-21 build (§4.7).
-In both cases macOS has it from that build and iOS from its next release.
-`player/` draws no boards, but `resolve(..., { sessionBoards: true })` keeps them in
-the rotation for a client that does.
+The on-screen rules (§5, §8) restate Marquee's internal platform specification. The two
+change together, internal first. Keep the README complete on its own — it must never
+require the internal document to be read.
 
-**Keep those marks accurate.** An implementer who honours a field the reference client
-ignores has diverged, and that has to be a decision they made knowingly rather than a
-surprise at a venue. `player/` implements §5.7's start and duration, the rule the
-authoring tool resolves entries with, and says so in its own README.
+## Honesty about what the reference clients do
+
+`example/` and `player/` still implement the **pre-v25** rules, and the README says so in its
+Status section. Until they are rebuilt against v25.0.1, keep that note accurate. When they
+are, remove it — and if any rule is still unimplemented in a reference client, mark that
+rule in the README rather than letting the client silently disagree with it.
 
 ## The demo show
 
@@ -80,10 +80,11 @@ cd example && python3 build-demo.py
 
 No dependencies beyond `python3`; ffmpeg is optional and only for the video item (without
 it the demo builds image-only rather than failing). The content is chosen so the rules that
-are easiest to get wrong are *visible* — per-slot resolution, takeover suppression,
-day-scoped directives, orientation fallback, and hash-less media. If you change it, keep
-each of those demonstrable, and keep `content_hash` NULL: a client that refuses hash-less
-media must fail on this demo exactly as it would in the field.
+are easiest to get wrong are *visible*. **Pending the v25.0.1 rebuild,** it demonstrates the
+pre-v25 rules. The v25 demo must make these visible instead: per-slot resolution, takeover
+suppression and the immediate cut, day-scoped directives, an entry skipped for an empty
+orientation slot, a landscape file playing in a portrait slot, and position-cursor resume
+after a takeover. Media must carry hashes and sizes (v25 requires them).
 
 ## Verify before pushing
 
