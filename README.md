@@ -1,140 +1,104 @@
-# Marquee Cartridge Specification
+# Marquee Cartridge Specification — v25.0.1
 
-**The delivered-artifact contract for Marquee digital signage.** Marquee publishes a
-show as self-contained SQLite *cartridges*; a player fetches them, resolves a schedule
-from them, and renders. This repository specifies those artifacts precisely enough to
-write a player on any platform.
-
-The reference client is iOS/macOS. Nothing in the format requires it.
+**The delivered-artifact contract for Marquee digital signage.** Marquee Studio publishes a
+Show as self-contained SQLite *cartridges*. A Surface fetches them, resolves what belongs on
+screen from them, and renders. This document specifies those artifacts, and the rules for
+interpreting them, precisely enough to build a Surface on any platform.
 
 ### Status
 
-**Stable and in production.** The format described here is what ships to live venues
-today. It evolves additively — see [The compatibility contract](#9-the-compatibility-contract),
-which is the part that lets a cartridge published last year open in a client written
-next year.
+**v25.0.1 — draft, greenfield.** This version replaces the pre-v25 format in full. It is not
+backward compatible with cartridges from the legacy web Studio, which is a separate, retired
+product that continues to serve its existing shows unchanged. A v25.0.1 Surface reads v25.0.1
+cartridges only.
 
-### A working example
+From v25.0.1 onward the format evolves **additively** under the compatibility contract (§10),
+so a cartridge published this year opens in a Surface written next year.
 
-**[Live reference client →](https://mountain-view-staging.github.io/marquee-cartridge-spec/example/)**
+> **Repository note.** `example/` and `player/` implement the pre-v25 rules and will be
+> updated to v25.0.1. Until then, treat this document as authoritative wherever they differ.
 
-[`example/`](example/) is a complete player in one HTML file, reading two real
-cartridges served from this repository. A static site is a complete Marquee
-origin, so the demo needs no backend. It exercises the rules that are easiest to
-get wrong — per-slot resolution, takeover suppression, day-scoped directives,
-orientation fallback, and hash-less media — and [`build-demo.py`](example/build-demo.py)
-rebuilds the whole show from scratch with no dependencies.
+### Relationship to the internal platform specification
 
-[`player/`](player/) is a **reference player** rather than an explorer: images and
-video, one hard-coded cartridge, no chrome. Its resolution core
-([`player.js`](player/player.js)) touches no DOM and is pure, so it is the part
-to read when porting to another language.
-**[Live player →](https://mountain-view-staging.github.io/marquee-cartridge-spec/player/)**
-
-Planned next for this repository:
-
-- a conformance fixture set
-- reference client implementations in other languages
-
-Corrections and questions are welcome as issues — particularly from anyone
-implementing against this, since the gaps are easiest to see from outside.
+The on-screen behavior in §5 and §8 restates the rules of Marquee's internal platform
+specification for external implementers. The two change together, and this document is complete
+on its own: nothing here requires access to the Reference.
 
 ---
 
 # Client Implementer's Guide
 
-**Audience:** developers building a Marquee playback client on a platform other than
-iOS/macOS — Android, web, Linux/embedded, set-top, signage SoC.
+**Audience:** developers building a Marquee Surface — Apple, web, Android, Linux/embedded,
+set-top, signage SoC.
 
-**Scope:** the *delivered artifacts* only — the two SQLite files a device fetches and
-the rules for interpreting them. This is **not** the Marquee authoring schema. An
-authoring database has tables and columns a cartridge never carries, and a client must
-never assume it can read one.
+**Scope:** the *delivered artifacts* — the two SQLite files a Surface fetches and the media
+they name — and the rules for turning them into what is on screen. This is **not** the Marquee
+authoring schema. An authoring database has tables and columns a cartridge never carries, and
+a Surface must never assume it can read one.
 
-> **Status of this document.** Written 2026-09-18 against: the shared schema definition (migrations `v1-baseline` …
-> `v4-entry-playback-states`), both publishers, and the reference client. Where the reference client does **not**
-> yet implement something the schema describes, this document says so rather than
-> implying the field is live. Those places are marked **⚠️ not honoured by the
-> reference client**.
+## Terms
+
+| Term | Meaning |
+|---|---|
+| **Show** | The authored event. Also called the project; the two words name one thing. |
+| **Studio** | The authoring application family (macOS, iPad, Web). The only producer of cartridges. |
+| **Surface** | Any device that conforms to this specification and renders a delivered cartridge. |
+| **Cartridge** | A delivered, self-contained, immutable SQLite artifact. |
 
 ---
 
 ## 1. The shape of the system
 
-A **show** (identified by a `projectCode`, also called the *show code*, e.g. `SHOW26`)
-publishes a flat keyspace of files:
+A **Show**, identified by its `projectCode` (the *show code*, e.g. `SHOW26`), publishes a flat
+keyspace:
 
 ```
-<base>/<projectCode>/project.db          ← the project cartridge  (always present)
-<base>/<projectCode>/<SCREENCODE>.db     ← one screen cartridge per screen
-<base>/<projectCode>/<deliverable>       ← media bytes, flat, UUID-named
+<base>/<projectCode>/project.db           ← the project cartridge (always present)
+<base>/<projectCode>/<SURFACECODE>.db     ← one surface cartridge per surface config
+<base>/<projectCode>/<file_name>          ← media bytes, flat, UUID-named
 ```
 
-A device is configured with a **three-level address**:
+A Surface is configured with a **three-level address**:
 
-| level | example | meaning |
+| Level | Example | Meaning |
 |---|---|---|
-| `projectCode` | `SHOW26` | which show — finds the keyspace |
-| `screenCode` | `LOBBY3` | which cartridge — names the `.db` |
-| `locationId` | `LOBBY3` | which *installation* — chosen at provisioning, see §6 |
+| `projectCode` | `SHOW26` | Which Show — finds the keyspace |
+| `surfaceCode` | `LOBBY3` | Which cartridge — names the `.db` |
+| `locationId` | `LOBBY3-A` | Which physical installation — chosen at provisioning (§6) |
 
-A client that has no screen targeted at it uses `project.db` alone and shows
-wallpaper/date-time. A client with a screen code pulls **both** files: `project.db` is
-always the project descriptor, and the screen cartridge carries the schedule.
+A Surface with no surface code uses `project.db` alone and shows the Show's wallpaper and
+date/time. A Surface with a surface code pulls **both** files: `project.db` is the project
+descriptor, and the surface cartridge carries the schedule and everything it plays.
 
-### 1.1 Two producers exist
-
-Cartridges in the field come from two publishers, and they do not populate the same
-fields. **Your client must tolerate both.**
-
-| | Swift Studio (macOS/iPad) | Legacy web Studio |
-|---|---|---|
-| `screen_location` | populated | **empty before 2026-09-18** (§6) |
-| `media_manifest.content_hash` | SHA-256 present | **always NULL, by design** (§7.3) |
-| `media_manifest.file_size` | present | present on newer rows only |
-| `cartridge_meta.published_revision` | real monotonic counter | `0` before 2026-09-18 |
-| `cartridge_meta.cloud_media_base_url` | `NULL` | an S3 base — **load-bearing**, see §7.2 |
-| `playlist_entry` v4 columns | present | absent on cartridges published before 2026-09 |
-
-None of these differences are errors. They are the reason §9 (the compatibility
-contract) exists.
+The surface code `PROJECT` is reserved.
 
 ---
 
 ## 2. Byte-level facts
 
-- Both artifacts are **plain single-file SQLite 3 databases**. No WAL, no `-shm`/`-wal`
-  sidecars.
-- Open **read-write** if you intend to add your own runtime tables (the reference client
-  does, for file-availability bookkeeping). Adding tables is safe; the producer never
-  reads the file back.
-- **Do not run migrations against a cartridge.** It is a delivered artifact, not a
-  database you own. A client on a newer schema that migrates in place will re-create
-  tables the publisher deliberately dropped, or fail on a migration referencing one.
-- **Open with foreign keys ON.** The publisher guarantees a clean
-  `PRAGMA foreign_key_check` on every cartridge it writes. If yours fails, the file is
-  damaged — do not commit it over the copy you already have.
-- Row `id`s are **preserved from the authoring database**, not renumbered. They are
-  stable across republishes, so they are safe to use as cache keys.
-- Timestamps are **Unix milliseconds, integer**, unless a column says otherwise.
-  Durations and trim offsets are **seconds, REAL**.
+- Both artifacts are **plain single-file SQLite 3 databases**. No WAL, no `-shm`/`-wal` sidecars.
+- Open **read-write** if you add your own runtime tables (for example, file-availability
+  bookkeeping). Adding tables is safe; Studio never reads a cartridge back.
+- **Never migrate a cartridge.** It is a delivered artifact, not a database you own.
+- **Open with foreign keys ON.** Studio guarantees a clean `PRAGMA foreign_key_check` on every
+  cartridge. If yours fails, the file is damaged: do not commit it over the copy you hold.
+- Row `id`s are **preserved from the authoring database**. They are stable across republishes
+  and safe to use as cache keys. IDs are only meaningful within one Show.
+- Timestamps are **Unix milliseconds, INTEGER**. Durations and trim offsets are **seconds, REAL**.
 - Booleans are `INTEGER` `0`/`1`.
 
-### 2.1 `grdb_migrations`
+### 2.1 Identifying an artifact
 
-Both artifacts carry a `grdb_migrations` table: one `identifier TEXT` column, one row per
-applied migration, in order.
+Both artifacts carry exactly one `cartridge_meta` row (§4.1):
 
-```
-v1-baseline
-v2-media-variants
-v3-media-optimization
-v4-entry-playback-states
-```
+- `cartridge_kind` is `'project'` or `'surface'`.
+- `format_version` is the specification version the cartridge was written against, e.g.
+  `'25.0.1'`. A Surface accepts any cartridge whose `format_version` has the same **first
+  component** as its own (`25`), and applies §10 to anything newer within it. A different first
+  component is a different format: refuse it and say so.
 
-Use it to **detect** the producer's schema generation. Do not use it to decide whether to
-read a column — probe the column (§9.2). A cartridge published today may carry only
-`v1-baseline` and `v2-media-variants` and still be perfectly valid.
+Authoring migration history (`grdb_migrations`) is **not** carried. It describes the author's
+database, not the wire format.
 
 ---
 
@@ -142,52 +106,44 @@ read a column — probe the column (§9.2). A cartridge published today may carr
 
 ### 3.1 `project.db` — the project cartridge
 
-These tables, and **no `cartridge_meta`** (its absence is how you identify the file):
-
 ```
-project   project_days   media_item   media_file   media_manifest   grdb_migrations
-media_file_variant     ← optional — the renditions offered, §4.8
+cartridge_meta      project        project_days
+media_item          media_file     media_file_variant     media_manifest
 ```
 
-It carries the show's identity, timezone, days, and the wallpaper media closure.
+It carries the Show's identity, timezone, days, wallpapers, and the media those need.
 
-### 3.2 `<SCREENCODE>.db` — the screen cartridge
+### 3.2 `<SURFACECODE>.db` — the surface cartridge
 
 ```
-cartridge_meta          media_manifest
-project                 project_days
-screen_config           screen_location        screen_schedule_entry
-playlist                playlist_entry         directive
-session                 session_set            session_set_entry
-media_item              media_file
-grdb_migrations
-media_file_variant      ← optional — the renditions offered, §4.8
+cartridge_meta      project        project_days
+surface_config      surface_location       surface_schedule_entry
+playlist            playlist_entry         directive
+session             session_set            session_set_entry
+media_item          media_file             media_file_variant     media_manifest
 ```
 
-**Deliberately absent** (authoring-only — never expect them): `tag`, `tag_assignment`,
-`integration`, `media_optimization`.
+A surface cartridge also carries `project` and `project_days`, so a Surface can resolve time
+without opening `project.db`. Its `project` row has `show_wallpaper_item_id` and
+`desktop_wallpaper_item_id` **forced to NULL**: wallpapers live only in `project.db`, and a
+pointer to media the surface cartridge does not carry would fail `foreign_key_check`.
+Conversely, `project.db` carries `brand_style` but has `brand_style_item_id` and
+`backing_item_id` **forced to NULL**: the style book and the backing ride in each surface
+cartridge (§9, §5.10).
 
-> `media_file_variant` was on that list until 2026-09. Cartridges from the Swift Studio now
-> carry it; cartridges from the legacy web publisher do not. Handle both (§4.8).
-
-A screen cartridge **also** carries `project` and `project_days`, so a client with a
-screen cartridge can resolve time without opening `project.db`. But the screen
-cartridge's `project` row has `show_wallpaper_item_id` and `desktop_wallpaper_item_id`
-**forced to NULL** — wallpapers live only in `project.db`, because the screen cartridge
-does not contain those media rows and a dangling pointer would fail
-`foreign_key_check`.
+**Never present in either artifact** (authoring-only): `tag`, `tag_assignment`, `integration`,
+`media_optimization`, `grdb_migrations`.
 
 ### 3.3 Entity relationships
 
 ```mermaid
 erDiagram
     project ||--o{ project_days : "show days"
-    screen_config ||--o{ screen_location : "installations"
-    screen_config ||--o{ screen_schedule_entry : "schedule"
-    screen_schedule_entry }o--o| playlist : "playlist_id"
-    screen_schedule_entry }o--o| media_item : "demo branding"
+    surface_config ||--|{ surface_location : "installations"
+    surface_config ||--o{ surface_schedule_entry : "schedule"
+    surface_schedule_entry }o--o| playlist : "playlist_id"
+    surface_schedule_entry }o--o| media_item : "demo branding"
     playlist ||--o{ playlist_entry : "ordered items"
-    playlist }o--o| media_item : "backing / overlay"
     playlist_entry ||--o{ directive : "on/off over time"
     playlist_entry }o--o| media_item : "resource_type=media_item"
     playlist_entry }o--o| session_set : "resource_type=session_set"
@@ -196,544 +152,593 @@ erDiagram
     session_set }o--o| media_item : "backing / logo"
     media_item }o--o| media_file : "portrait_file_id"
     media_item }o--o| media_file : "landscape_file_id"
-    media_item }o--o| media_item : "backing / overlay"
-    media_file ||--|| media_manifest : "one row per file"
-    media_file ||--o{ media_file_variant : "renditions offered (optional)"
+    project }o--o| media_item : "default backing / style book"
+    session_set }o--o| media_item : "style book"
+    media_file ||--|| media_manifest : "one deliverable per file"
+    media_file ||--|{ media_file_variant : "renditions offered"
 ```
-
-The chain a renderer actually walks is narrower than the diagram — see §5.
 
 ---
 
 ## 4. Table reference
 
-DDL below is verbatim from the reference schema. Comments are the schema's own.
+DDL below is the v25.0.1 wire format. Comments are normative.
 
-### 4.1 `cartridge_meta` — screen cartridges only, exactly one row
+### 4.1 `cartridge_meta` — both artifacts, exactly one row
 
 ```sql
 CREATE TABLE cartridge_meta (
-  screen_id TEXT, project_code TEXT, published_revision INTEGER NOT NULL,
-  show_wallpaper_item_id INTEGER, desktop_wallpaper_item_id INTEGER,
-  cloud_media_base_url TEXT, timezone TEXT,
-  generated_at INTEGER NOT NULL
+  cartridge_kind     TEXT    NOT NULL,   -- 'project' | 'surface'
+  format_version     TEXT    NOT NULL,   -- e.g. '25.0.1'
+  project_code       TEXT    NOT NULL,   -- the show code; roots the media keyspace
+  surface_id         TEXT,               -- the surface code; NULL in project.db
+  published_revision INTEGER NOT NULL,   -- monotonic per artifact
+  timezone           TEXT    NOT NULL,   -- IANA venue timezone
+  generated_at       INTEGER NOT NULL    -- Unix ms the artifact was produced
 );
 ```
 
-| column | notes |
+| Column | Notes |
 |---|---|
-| `screen_id` | the screen code. **The discriminator** — non-NULL = screen cartridge. |
-| `project_code` | the show code. Use for the media keyspace. |
-| `published_revision` | monotonic per screen. **May be `0`** from the legacy producer. See §8.3. |
-| `show_wallpaper_item_id`, `desktop_wallpaper_item_id` | always NULL here; read them from `project.db`'s `project` row. |
-| `cloud_media_base_url` | a **second media home**, already project-scoped. See §7.2. |
-| `timezone` | IANA identifier, e.g. `America/Los_Angeles`. The venue's timezone; evaluate all schedule rules in it. |
-| `generated_at` | Unix ms the cartridge was produced. |
+| `cartridge_kind` | How to identify the file. `surface_id` is non-NULL exactly when this is `'surface'`. |
+| `published_revision` | Monotonic per artifact: per surface config for a surface cartridge, per Show for `project.db`. Increments on every publish. |
+| `timezone` | The **venue** timezone. The single authority for every time decision (§8). |
 
 ### 4.2 `media_manifest` — both artifacts, one row per media file
 
 ```sql
 CREATE TABLE media_manifest (
-  media_file_id INTEGER NOT NULL, deliverable_file_name TEXT NOT NULL,
-  content_hash TEXT, file_size INTEGER, content_type TEXT NOT NULL
+  media_file_id         INTEGER NOT NULL UNIQUE REFERENCES media_file(id),
+  deliverable_file_name TEXT    NOT NULL,   -- flat object key, §7.1
+  content_hash          TEXT    NOT NULL,   -- 'sha256:…' of these bytes
+  file_size             INTEGER NOT NULL,   -- bytes
+  content_type          TEXT    NOT NULL
 );
 ```
 
-The complete list of bytes this cartridge needs. `deliverable_file_name` is the flat
-object key — see §7.
+The complete list of bytes this artifact needs, with **one default deliverable per media
+file**: the `optimized` rendition where one exists, else the original. The manifest is the only
+place a deliverable name appears; `media_file` does not repeat it. A Surface that chooses a
+different rendition does so from `media_file_variant` (§7.6).
 
-> `content_hash` is **nullable by design** and `file_size` may also be absent. Read §7.3
-> before writing any verification code.
-
-### 4.3 `project` and `project_days`
+### 4.3 `project`, `project_days`
 
 ```sql
 CREATE TABLE project (
-  id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+  id                        INTEGER PRIMARY KEY,
   cloud_uid                 TEXT    NOT NULL,
   name                      TEXT    NOT NULL,
+  project_code              TEXT    NOT NULL,
+  timezone                  TEXT    NOT NULL,
+  show_wallpaper_item_id    INTEGER REFERENCES media_item(id),
+  desktop_wallpaper_item_id INTEGER REFERENCES media_item(id),
+  backing_item_id           INTEGER REFERENCES media_item(id),   -- default backing, §5.10
+  brand_style               TEXT,     -- style address 'company/style/version', §9
+  brand_style_item_id       INTEGER REFERENCES media_item(id),   -- the style book file, §9
   created                   INTEGER NOT NULL,
-  updated                   INTEGER NOT NULL,
-  retain_originals          INTEGER NOT NULL DEFAULT 1,
-  timezone                  TEXT,
-  project_code              TEXT,
-  show_wallpaper_item_id    INTEGER REFERENCES media_item(id) ON DELETE RESTRICT,
-  desktop_wallpaper_item_id INTEGER REFERENCES media_item(id) ON DELETE RESTRICT,
-  edit_code_required        INTEGER NOT NULL DEFAULT 0
+  updated                   INTEGER NOT NULL
 );
 
 CREATE TABLE project_days (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  day        TEXT    NOT NULL UNIQUE,   -- 'YYYY-MM-DD'
-  start_time INTEGER NOT NULL,          -- unix ms, venue-local day start
-  end_time   INTEGER NOT NULL,          -- unix ms, venue-local day end
+  id         INTEGER PRIMARY KEY,
+  day        TEXT    NOT NULL UNIQUE,   -- 'YYYY-MM-DD', venue-local
+  start_time INTEGER NOT NULL,          -- Unix ms, venue-local 00:00:00.000
+  end_time   INTEGER NOT NULL,          -- Unix ms, venue-local 23:59:59.999
   created    INTEGER NOT NULL,
   updated    INTEGER NOT NULL
 );
 ```
 
-`retain_originals` and `edit_code_required` are authoring concerns; ignore them.
+**`project_days` is not decoration.** It defines the event window, scopes directive evaluation
+(§5.4), and anchors synthetic time (§8.2). Days are whole venue-local calendar days and may be
+**non-contiguous** — a Show can skip a day. Order by `start_time`. Studio guarantees at least
+one day.
 
-**`project_days` is not decoration.** It defines the show's day windows, which scope
-directive evaluation (§5.4) and drive preview-time projection (§8.2). Days are
-**non-contiguous** — a show can skip a day. Order by `start_time`.
-
-### 4.4 `screen_config`, `screen_location`, `screen_schedule_entry`
+### 4.4 `surface_config`, `surface_location`, `surface_schedule_entry`
 
 ```sql
-CREATE TABLE screen_config (
-  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE surface_config (
+  id                 INTEGER PRIMARY KEY,
   name               TEXT    NOT NULL,
-  revision           INTEGER NOT NULL DEFAULT 0,   -- monotonic; bumped on any schedule change
-  archived           INTEGER NOT NULL DEFAULT 0,
+  surface_id         TEXT    NOT NULL,   -- the surface code
+  published_revision INTEGER NOT NULL,
+  published_at       INTEGER NOT NULL,
   created            INTEGER NOT NULL,
-  updated            INTEGER NOT NULL,
-  screen_id          TEXT,
-  published_revision INTEGER,
-  published_at       INTEGER
+  updated            INTEGER NOT NULL
 );
 
-CREATE TABLE screen_location (
-  id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-  config_id            INTEGER NOT NULL REFERENCES screen_config(id) ON DELETE CASCADE,
-  location_id          TEXT    NOT NULL UNIQUE,   -- globally unique real-world id
-  orientation          TEXT    NOT NULL,          -- 'portrait' | 'landscape' (the mount)
-  label                TEXT,
-  last_checked_at      INTEGER,                   -- unix ms; "is it online?"
-  last_pulled_revision INTEGER,                   -- vs config.revision; "needs update?"
-  created              INTEGER NOT NULL,
-  updated              INTEGER NOT NULL
+CREATE TABLE surface_location (
+  id          INTEGER PRIMARY KEY,
+  config_id   INTEGER NOT NULL REFERENCES surface_config(id),
+  location_id TEXT    NOT NULL UNIQUE,   -- globally unique real-world id
+  orientation TEXT    NOT NULL,          -- 'portrait' | 'landscape' (the mount)
+  label       TEXT,
+  created     INTEGER NOT NULL,
+  updated     INTEGER NOT NULL
 );
 
-CREATE TABLE screen_schedule_entry (
-  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-  config_id          INTEGER NOT NULL REFERENCES screen_config(id) ON DELETE CASCADE,
-  slot               TEXT    NOT NULL,            -- 'portrait' | 'landscape' | 'demo_station'
-  timestamp          INTEGER NOT NULL,            -- most-recent <= now wins, per slot
-  playlist_id        INTEGER REFERENCES playlist(id)   ON DELETE RESTRICT,
-  background_item_id INTEGER REFERENCES media_item(id) ON DELETE RESTRICT,
-  overlay_item_id    INTEGER REFERENCES media_item(id) ON DELETE RESTRICT,
+CREATE TABLE surface_schedule_entry (
+  id                 INTEGER PRIMARY KEY,
+  config_id          INTEGER NOT NULL REFERENCES surface_config(id),
+  slot               TEXT    NOT NULL,   -- 'portrait' | 'landscape' | 'demo_station'
+  timestamp          INTEGER NOT NULL,   -- most-recent <= now wins, per slot
+  playlist_id        INTEGER REFERENCES playlist(id),
+  background_item_id INTEGER REFERENCES media_item(id),   -- demo branding (behind)
+  overlay_item_id    INTEGER REFERENCES media_item(id),   -- demo branding (front)
   created            INTEGER NOT NULL,
   updated            INTEGER NOT NULL,
-  CHECK ( ... )                                   -- see §5.5
+  CHECK (
+    ( slot IN ('portrait','landscape')
+        AND background_item_id IS NULL AND overlay_item_id IS NULL )
+    OR
+    ( slot = 'demo_station'
+        AND ( background_item_id IS NOT NULL OR overlay_item_id IS NULL ) )
+  )
 );
 ```
 
-A screen cartridge carries **exactly one** `screen_config` row — its own.
-`last_checked_at` / `last_pulled_revision` are server-side bookkeeping columns; a client
-does not write them into the cartridge.
+A surface cartridge carries **exactly one** `surface_config` row — its own — and **at least
+one** `surface_location` row. Every location shares the config's cartridge.
 
 ### 4.5 `playlist`, `playlist_entry`, `directive`
 
 ```sql
 CREATE TABLE playlist (
-  id                INTEGER PRIMARY KEY AUTOINCREMENT,
-  name              TEXT    NOT NULL,
-  shuffle           INTEGER NOT NULL DEFAULT 0,
-  is_seamless_video INTEGER NOT NULL DEFAULT 0,
-  backing_item_id   INTEGER REFERENCES media_item(id) ON DELETE RESTRICT,
-  overlay_item_id   INTEGER REFERENCES media_item(id) ON DELETE RESTRICT,
-  archived          INTEGER NOT NULL DEFAULT 0,
-  created           INTEGER NOT NULL,
-  updated           INTEGER NOT NULL
+  id              INTEGER PRIMARY KEY,
+  name            TEXT    NOT NULL,
+  created         INTEGER NOT NULL,
+  updated         INTEGER NOT NULL
 );
 
 CREATE TABLE playlist_entry (
-  id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-  playlist_id          INTEGER NOT NULL REFERENCES playlist(id) ON DELETE CASCADE,
-  media_item_id        INTEGER REFERENCES media_item(id)  ON DELETE RESTRICT,
-  session_set_id       INTEGER REFERENCES session_set(id) ON DELETE RESTRICT,
-  position             INTEGER NOT NULL,
-  created              INTEGER NOT NULL,
-  updated              INTEGER NOT NULL,
-  resource_type        TEXT    NOT NULL DEFAULT 'media_item',
+  id                   INTEGER PRIMARY KEY,
+  playlist_id          INTEGER NOT NULL REFERENCES playlist(id),
+  position             INTEGER NOT NULL,                  -- authored order
+  resource_type        TEXT    NOT NULL,                  -- 'media_item' | 'session_set'
+  media_item_id        INTEGER REFERENCES media_item(id),
+  session_set_id       INTEGER REFERENCES session_set(id),
   start_time_portrait  REAL,
   end_time_portrait    REAL,
   start_time_landscape REAL,
   end_time_landscape   REAL,
-  -- added by v4-entry-playback-states; ABSENT in older cartridges
-  loop_clip            INTEGER NOT NULL DEFAULT 0,
-  pause_on_entry       INTEGER NOT NULL DEFAULT 0,
-  pause_on_completion  INTEGER NOT NULL DEFAULT 0,
-  disabled             INTEGER NOT NULL DEFAULT 0,
+  created              INTEGER NOT NULL,
+  updated              INTEGER NOT NULL,
   CHECK (resource_type <> 'media_item'  OR media_item_id  IS NOT NULL),
   CHECK (resource_type <> 'session_set' OR session_set_id IS NOT NULL)
 );
 
 CREATE TABLE directive (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  entry_id   INTEGER NOT NULL REFERENCES playlist_entry(id) ON DELETE CASCADE,
-  type       TEXT    NOT NULL,   -- 'standard' | 'takeover'
-  timestamp  INTEGER NOT NULL,
-  on_screen  INTEGER NOT NULL,
-  timezone   TEXT,
-  created    INTEGER NOT NULL,
-  updated    INTEGER NOT NULL
+  id        INTEGER PRIMARY KEY,
+  entry_id  INTEGER NOT NULL REFERENCES playlist_entry(id),
+  type      TEXT    NOT NULL,   -- 'standard' | 'takeover'
+  timestamp INTEGER NOT NULL,
+  on_screen INTEGER NOT NULL,
+  timezone  TEXT,               -- authoring context only; never evaluated
+  created   INTEGER NOT NULL,
+  updated   INTEGER NOT NULL
 );
 ```
 
-> **⚠️ The four v4 columns are the single most common way to break a client.** They were
-> added with `NOT NULL DEFAULT 0`, which means *every cartridge published before them
-> lacks those columns entirely*. A decoder that requires them throws on the whole table
-> and the client sees an empty playlist — a black screen with nothing in any log naming
-> the cause. This shipped to a live venue. Decode them as optional-with-default. See §9.
->
-> They are **authoring/preview hints** and are **⚠️ not honoured by the reference
-> client**. Ignore them unless you are deliberately implementing preview parity.
-
-`shuffle`, `is_seamless_video` and `archived` on `playlist` are **⚠️ not honoured by the
-reference client**.
+**Studio-player runtime modifiers are not in the wire format.** Studio's operator-controlled
+player has live-mode controls (looping, pause on entry or completion, disabling an entry,
+shuffle, seamless video). They govern a human operator's playback, not scheduled rules, so
+Studio strips them at publish. A Surface decides what is on screen from the schedule and
+directives only.
 
 ### 4.6 `media_item`, `media_file`
 
 ```sql
 CREATE TABLE media_item (
-  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  id                INTEGER PRIMARY KEY,
   name              TEXT    NOT NULL,
-  portrait_file_id  INTEGER REFERENCES media_file(id) ON DELETE RESTRICT,
-  landscape_file_id INTEGER REFERENCES media_file(id) ON DELETE RESTRICT,
-  display_duration  REAL,
-  system_generated  INTEGER NOT NULL DEFAULT 0,
-  audio_priority    TEXT,
-  backing_item_id   INTEGER REFERENCES media_item(id) ON DELETE RESTRICT,
-  overlay_item_id   INTEGER REFERENCES media_item(id) ON DELETE RESTRICT,
-  archived          INTEGER NOT NULL DEFAULT 0,
+  portrait_file_id  INTEGER REFERENCES media_file(id),
+  landscape_file_id INTEGER REFERENCES media_file(id),
+  display_duration  REAL,                                 -- seconds, stills
+  brand_member      TEXT,                                 -- style address, §9; NULL = not brand
   created           INTEGER NOT NULL,
   updated           INTEGER NOT NULL,
   CHECK (portrait_file_id IS NOT NULL OR landscape_file_id IS NOT NULL)
 );
+
+CREATE TABLE media_file (
+  id                 INTEGER PRIMARY KEY,
+  content_type       TEXT    NOT NULL,   -- MIME of the imported file
+  codec              TEXT,               -- what the imported file needs to decode
+  width              INTEGER,
+  height             INTEGER,
+  orientation        TEXT,               -- advisory
+  aspect_ratio       REAL,               -- advisory
+  intrinsic_duration REAL,               -- seconds, video
+  created            INTEGER NOT NULL,
+  updated            INTEGER NOT NULL
+);
 ```
 
-A **`media_item` is the orientation-independent thing an operator schedules.** It holds
-up to two `media_file`s — one per orientation — and the client picks by the orientation
-it is rendering (§5.6). At least one slot is always present.
+A **`media_item` is the orientation-independent thing Studio schedules.** It holds up to two
+`media_file`s, one per orientation, and the Surface picks by the orientation it renders (§5.7).
+At least one is always present.
 
-`media_file` carries the physical asset. The columns a client needs:
-
-| column | use |
-|---|---|
-| `source_file_name` | fallback deliverable name |
-| `optimized_file_name` | **preferred** deliverable name when non-NULL |
-| `content_type` | MIME. Drives image-vs-video. Video set: `video/mp4`, `video/quicktime`, `video/x-m4v` |
-| `width`, `height` | intrinsic pixels — see §7.5 |
-| `intrinsic_duration` | seconds, REAL. Video length; use as a playback watchdog |
-| `thumbnail_file_name` | optional; **not** in the manifest, do not assume it is fetchable |
-| `orientation`, `aspect_ratio` | advisory |
-| `file_size`, `content_hash` | mirrored into the manifest; prefer the manifest's copy |
-
-> **The deliverable name rule.** The object to fetch is
-> `optimized_file_name ?? source_file_name`. The publisher has already folded the chosen
-> variant into these columns, and `media_manifest.deliverable_file_name` is the same
-> value. **Use the manifest.** Re-deriving it from `media_file` is a second
-> implementation of one rule.
-
-`archived` items still render when referenced — archive is an authoring-library concept,
-not a delivery filter. Do **not** skip archived rows.
-
-`audio_priority`, `system_generated` are **⚠️ not honoured by the reference client**.
+A **`media_file` describes the imported asset.** `content_type` is the MIME type of the file as
+imported; the types of its renditions live in `media_file_variant`. Deliverable names live only
+in `media_manifest` and `media_file_variant`.
 
 ### 4.7 `session`, `session_set`, `session_set_entry`
 
-Carried in screen cartridges when a playlist entry has `resource_type = 'session_set'` —
-a signage board of scheduled conference sessions rather than a media asset.
+```sql
+CREATE TABLE session (
+  id          INTEGER PRIMARY KEY,
+  name        TEXT    NOT NULL,
+  abstract    TEXT,
+  presenters  TEXT,               -- JSON array
+  attributes  TEXT,               -- JSON array
+  source_id   TEXT,
+  source_type TEXT,
+  source_name TEXT,
+  created     INTEGER NOT NULL,
+  updated     INTEGER NOT NULL
+);
 
-> **⚠️ Apple client builds before 2026-09-21 do not render session boards.** The macOS
-> client draws them from that build, and the iOS client from its next release. The
-> reference web player (`player/`) draws none, but its `resolve()` can keep board entries
-> in the rotation for a client that does (`sessionBoards: true`). A conforming client may
-> skip `resource_type = 'session_set'` entries entirely. If you implement them, treat the
-> board layout as your own product decision; the cartridge carries content
-> (`session_set_entry.start_time`/`end_time`, `session.name`/`presenters`/`abstract`) and
-> branding pointers (`backing_item_id`, `logo_item_id`), not a layout.
->
-> `presenters` and `attributes` are **JSON arrays stored as TEXT**. `render_modes` is a
-> JSON array, default `["simple"]`. `schedule_template` is a JSON diff against a client
-> baseline; absent means baseline.
+CREATE TABLE session_set (
+  id                INTEGER PRIMARY KEY,
+  name              TEXT    NOT NULL,
+  render_modes      TEXT    NOT NULL DEFAULT '["simple"]',   -- JSON array
+  duration          REAL    NOT NULL DEFAULT 8,              -- seconds per board page
+  backing_item_id   INTEGER REFERENCES media_item(id),
+  logo_item_id      INTEGER REFERENCES media_item(id),
+  schedule_template TEXT,               -- JSON diff vs the Surface baseline; NULL = baseline
+  source_id         TEXT,
+  source_name       TEXT,
+  brand_style         TEXT,                               -- overrides the project's, §9
+  brand_style_item_id INTEGER REFERENCES media_item(id),  -- overrides the project's, §9
+  created           INTEGER NOT NULL,
+  updated           INTEGER NOT NULL
+);
 
----
+CREATE TABLE session_set_entry (
+  id              INTEGER PRIMARY KEY,
+  session_set_id  INTEGER NOT NULL REFERENCES session_set(id),
+  session_id      INTEGER NOT NULL REFERENCES session(id),
+  session_time_id TEXT,
+  start_time      INTEGER NOT NULL,
+  end_time        INTEGER NOT NULL,
+  source_room_id  TEXT,
+  room_name       TEXT,
+  created         INTEGER NOT NULL,
+  updated         INTEGER NOT NULL
+);
+```
 
-### 4.8 `media_file_variant` — the renditions a client may choose from (optional)
+A playlist entry with `resource_type = 'session_set'` puts a **session board** on screen: the
+room's sessions as text, composited over a backing (§5.10). `logo_item_id` is part of the board's
+content, placed by the board's layout. Session boards are
+**required** on every Surface. The cartridge carries content and branding pointers, not a
+layout: board design is a product decision per Surface platform.
+
+### 4.8 `media_file_variant` — the renditions offered
 
 ```sql
 CREATE TABLE media_file_variant (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  media_file_id INTEGER NOT NULL REFERENCES media_file(id) ON DELETE CASCADE,
-  kind          TEXT    NOT NULL,
-  file_name     TEXT    NOT NULL,
-  content_type  TEXT,
+  id            INTEGER PRIMARY KEY,
+  media_file_id INTEGER NOT NULL REFERENCES media_file(id),
+  kind          TEXT    NOT NULL,   -- 'original' | 'optimized' | 'webOptimized' | 'wifiOptimized' | …
+  file_name     TEXT    NOT NULL,   -- flat object key, §7.1
+  content_type  TEXT    NOT NULL,
+  codec         TEXT,               -- required for video
   width         INTEGER,
   height        INTEGER,
-  file_size     INTEGER,
-  content_hash  TEXT,        -- 'sha256:…' of THESE bytes, not the parent file's
-  codec         TEXT,
+  file_size     INTEGER NOT NULL,
+  content_hash  TEXT    NOT NULL,   -- 'sha256:…' of THESE bytes
   created       INTEGER NOT NULL,
   updated       INTEGER NOT NULL
 );
 ```
 
-**Present in cartridges from the Swift Studio; absent from cartridges the legacy web
-publisher produces.** When present it lists every rendition of every media file the
-cartridge carries, so a client can download the one it plays best rather than the one the
-publisher picked. §7.6 is the algorithm.
+Every media file has at least its `original` row. Ignore any `kind` you do not recognize.
 
-| `kind` | what it is |
+| `kind` | What it is |
 |---|---|
-| `original` | the file as imported. Always offered: an editing client may want the pristine bytes, while a signage client normally prefers an optimized rendition. Offering is not recommending. |
-| `optimized` | the venue master — visually lossless, Apple-native (HEVC video, HEIC stills). |
-| `webOptimized` | browser-universal — H.264 video at up to 1080p, JPEG or PNG stills. |
-| `wifiOptimized` | a smaller Apple-native rung for a weak uplink: a lower quality claim, not a better encode. Video only, and not every video has one. |
+| `original` | The file as imported. |
+| `optimized` | The venue master — visually lossless, Apple-native (HEVC video, HEIC stills). |
+| `webOptimized` | Browser-universal — H.264 up to 1080p, JPEG or PNG stills. |
+| `wifiOptimized` | A smaller Apple-native rung for a weak uplink. Video only; not every video has one. |
 
-Only rows that carry a `content_hash` are offered. Ignore any `kind` you do not recognise
-(§9.4) — more will appear.
+`codec` names what a Surface must **decode** (`HEVC`, `H.264`, `ProRes`; `HEIC`, `JPEG`, `PNG`,
+`WebP`). It is the column to choose on: for video, `content_type` does not say whether a
+`video/mp4` holds HEVC or H.264.
 
-`codec` names what a client must **decode**: `HEVC`, `H.264`, `ProRes` for video; `HEIC`,
-`JPEG`, `PNG`, `WebP` for stills. It is the column to choose on. **For video,
-`content_type` does not answer the question** — `video/mp4` holds HEVC or H.264, and the
-container does not say which.
+---
 
-> ⚠️ **`media_manifest` does not change when this table is present.** It still names
-> exactly one deliverable per media file — the `optimized` rendition where one exists,
-> else the original — and `media_file`'s deliverable columns agree with it. A client that
-> ignores this table plays exactly what it always played. That is deliberate: clients
-> that predate the table download everything the manifest names, so the rendition list
-> could never have gone there without multiplying every deployed device's downloads.
-
-## 5. The resolution algorithm
+## 5. What is on screen
 
 This is the part to get right. Everything else is plumbing.
 
+A Surface runs a loop driven by the display (DisplayLink on Apple, `requestAnimationFrame` in a
+browser, the equivalent elsewhere). Each tick samples two clocks (§8.1) and passes the pair
+through the whole evaluation, so every decision in a tick sees the same instant. Nothing may
+depend on a tick arriving at a particular moment: a throttled or late tick simply catches up.
+
 ```mermaid
 flowchart TD
-    A["now (venue-local, ms)"] --> B{"my orientation"}
-    B -->|from screen_location| C["renderedSlot:<br/>portrait | landscape"]
-    C --> D["screen_schedule_entry<br/>WHERE slot = renderedSlot<br/>AND timestamp &lt;= now<br/>ORDER BY timestamp DESC LIMIT 1"]
-    D --> E{"playlist_id NULL?"}
-    E -->|yes| F["show nothing<br/>(blank is a valid schedule)"]
-    E -->|no| G["playlist_entry<br/>WHERE playlist_id = ?"]
-    G --> H["for each entry:<br/>resolve item → file for this orientation"]
-    H --> I{"file exists?"}
-    I -->|no| J["skip entry"]
-    I -->|yes| K["activeDirective(entry, 'takeover', now)<br/>activeDirective(entry, 'standard', now)"]
-    K --> L{"takeover.on_screen?"}
-    L -->|yes| M["takeover set"]
-    K --> N{"standard.on_screen?"}
-    N -->|yes| O["standard set"]
-    M --> P{"takeover set empty?"}
-    O --> P
-    P -->|no| Q["working list = takeovers<br/>(standard is suppressed)"]
-    P -->|yes| R["working list = standard"]
-    Q --> S["advance one position, wrap"]
-    R --> S
+    A["tick: showNow (synthetic, venue) + jump check"] --> B["slot from surface_location.orientation"]
+    B --> C["surface_schedule_entry for my slot:<br/>latest timestamp ≤ showNow"]
+    C --> D{"playlist_id NULL?"}
+    D -->|yes| E["show nothing"]
+    D -->|no| F["playlist_entry in position order"]
+    F --> G["viability gates:<br/>day → orientation slot → directive ON"]
+    G --> H{"any takeover ON?"}
+    H -->|yes| I["working set = takeover set"]
+    H -->|no| J["working set = standard set"]
+    I --> K["cursor: next position after the last shown"]
+    J --> K
+    K --> L["render marker: now + duration, or interrupt time"]
 ```
 
 ### 5.1 Pick the slot
 
-Your **rendered slot** is `portrait` or `landscape`. There is no third rendering slot —
-`demo_station` is a parallel overlay mode (§5.5), not an alternative to these.
+The **rendered slot** is `portrait` or `landscape`, taken from the `orientation` of this
+installation's `surface_location` (§6). `demo_station` is a parallel mode slot (§5.11), never
+an alternative to these.
 
-Derive it from `screen_location.orientation` for the `location_id` this install is
-provisioned to (§6). If the cartridge has no locations, fall back to your device default
-— and see §6.1 for why that is the known failure mode.
+Re-resolve the schedule **immediately** whenever the rendered slot changes.
 
 ### 5.2 Pick the schedule entry
 
-Within your slot, the **most recent entry whose `timestamp <= now` wins**. Entries are a
-timeline of changeovers, not a list of windows: there is no end time. The next entry in
-the same slot supersedes this one.
+Within the slot, the **most recent entry whose `timestamp ≤ showNow` wins**. Entries are a
+timeline of changeovers, not windows: there is no end time.
 
 ```sql
-SELECT * FROM screen_schedule_entry
- WHERE config_id = ?1 AND slot = ?2 AND timestamp <= ?3
+SELECT * FROM surface_schedule_entry
+ WHERE config_id = :config AND slot = :slot AND timestamp <= :showNow
  ORDER BY timestamp DESC LIMIT 1;
 ```
 
-Compute your **next wake time** as the earliest `timestamp > now` across your slot *and*
-`demo_station`, so a demo changeover wakes the scheduler as readily as a playlist one.
+- A `playlist_id` of NULL means **show nothing from now**. Clear the active playlist.
+- The **next schedule boundary** is the earliest `timestamp > showNow` across the rendered slot
+  and `demo_station`. It is an interrupt time (§5.9).
+- When the active playlist changes, cut immediately and reset both rotation cursors (§5.6).
 
-**A `playlist_id` of NULL is meaningful**: it means "show nothing from now". Clear the
-active playlist; do not leave the previous one up.
+### 5.3 The viability pass
 
-### 5.3 Expand the playlist
+Run it each time the current content ends, always against the show clock. It is a sequence of
+**gates**, cheapest first; an entry that fails a gate is excluded and never reaches the next one.
 
-Read every `playlist_entry` for that playlist. `position` is the authored order.
+1. **Day gate.** Once per pass, find the `project_days` row containing `showNow` (§5.4). It scopes
+   every directive evaluated below to the current day. Outside every day, the whole timeline
+   participates.
+2. **Orientation gate.** For each `playlist_entry` of the active playlist, in `position` order: a
+   `media_item` entry passes only if its item has a file in the slot for the playlist orientation
+   (§5.7). An empty slot is an intentional exclusion, so the entry's directives are **never
+   evaluated**. A `session_set` entry passes if the set is present.
+3. **Directive gate.** Find the governing directive of each type within the current day (§5.4).
+   The entry joins the **takeover set** if its governing `takeover` directive is ON, and the
+   **standard set** if its governing `standard` directive is ON. It may join both.
 
-Drop an entry when:
+**An entry needs an ON directive to be viable.** An entry with no directive of a type is not ON
+for that type, and an entry with no ON directive of either type never appears. Cartridges also
+deliver media used outside playlists (wallpapers, backings, branding); being delivered never
+makes anything viable.
 
-- `resource_type = 'media_item'` **and** the item resolves to no file for your
-  orientation (§5.6); or
-- `resource_type = 'session_set'` and you do not implement session boards.
+### 5.4 Directives — the on/off timeline
 
-### 5.4 Apply directives — the on/off timeline
+A directive is a **state change**, not a window. For one entry, one type, at `showNow`:
 
-Each entry carries a `directive` timeline, in two independent types: `standard` and
-`takeover`. A directive is a **state change**, not a window.
-
-For one entry and one type, at time `now`:
-
-1. Find the **day window** containing `now`: the `project_days` row where
-   `now BETWEEN start_time AND end_time`.
-2. Take that entry's directives of that type with `timestamp <= now`.
-3. **If a day window was found**, keep only directives whose `timestamp` also falls
-   inside that window.
-4. The **latest** surviving directive wins. Its `on_screen` decides participation.
-5. If `now` falls outside every day, or the cartridge has no `project_days`, the whole
-   timeline participates (step 3 is skipped).
-
-The day scoping is what makes ON-only chains day-part correctly: yesterday's takeover
-cannot leak into today, because it is outside today's window — while any number of
-takeovers *within* today form a fluid priority set.
+1. Find the `project_days` row where `showNow BETWEEN start_time AND end_time`.
+2. Take that entry's directives of that type with `timestamp ≤ showNow`.
+3. If a day was found, keep only directives whose `timestamp` falls inside that day.
+4. The **latest** surviving directive governs. ON when its `on_screen` is 1.
+5. If `showNow` falls outside every day, skip step 3.
 
 ```sql
--- one entry, one type, at :now, scoped to the day window if there is one
 SELECT * FROM directive
- WHERE entry_id = :entry AND type = :type AND timestamp <= :now
-   AND (:windowStart IS NULL OR timestamp BETWEEN :windowStart AND :windowEnd)
+ WHERE entry_id = :entry AND type = :type AND timestamp <= :showNow
+   AND (:dayStart IS NULL OR timestamp BETWEEN :dayStart AND :dayEnd)
  ORDER BY timestamp DESC LIMIT 1;
 ```
 
-`directive.timezone` is per-directive authoring context. Evaluate against the cartridge
-timezone (§8.1); the column is informational.
+Day scoping is what makes directives day-part: yesterday's takeover cannot leak into today.
+`directive.timezone` is authoring context; never evaluate it.
 
-### 5.5 Takeover beats standard, wholesale
+### 5.5 The working set: takeover beats standard
 
-Build two lists: entries whose governing `takeover` directive is ON, and entries whose
-governing `standard` directive is ON. Then:
+> **If the takeover set is non-empty, it IS the rotation.** The standard set is suppressed
+> entirely — not appended, not interleaved.
 
-> **If the takeover list is non-empty, it IS the rotation. The standard list is
-> suppressed entirely — not appended, not interleaved.**
+- Several active takeovers form one set, in `position` order.
+- **A takeover is self-providing.** While any viable takeover entry is ON, the takeover set owns
+  the screen and the Surface never falls back to the standard set. A takeover entry with an empty
+  slot for this orientation is excluded like any other entry (§5.7), so a takeover authored for one
+  orientation does not take over the other. A takeover entry whose file fails to load is skipped
+  within the takeover set (§5.13).
+- **Empty standard set.** Keep the last frame up and run the viability pass again after 2 s
+  of show time. Directive windows can legitimately empty the set for a moment.
 
-This is how an operator cuts to emergency or sponsor content without editing the
-playlist. When the takeover directives go OFF, the standard rotation resumes.
+### 5.6 Rotation: position cursors
 
-Advance by finding the entry you rendered last **in the current working list** and taking
-the next position, wrapping at the end. If the last-rendered entry is no longer in the
-list, start at position 0. **Do not keep a bare index** — the list is recomputed every
-tick and its composition changes, so an index skips items.
+Keep **two cursors**, each an authored `position`:
 
-If the working list is empty, keep the last frame up and retry in ~2 s rather than
-stalling. Directive windows can legitimately empty the list for a moment.
+| Cursor | Tracks | Reset when |
+|---|---|---|
+| standard cursor | position of the last **standard** entry shown | active playlist changes; cartridge replaced |
+| takeover cursor | position of the last **takeover** entry shown | active playlist changes; cartridge replaced; a takeover period begins |
 
-#### The demo station slot
+The next entry is the first entry in the working set whose `position` is **greater than the
+cursor**, wrapping to the first entry. With no cursor, start at the first entry.
 
-`slot = 'demo_station'` is resolved the same "latest ≤ now" way, in parallel with your
-rendering slot. Its `CHECK` constraint encodes the rules:
+- Advance by position — never by an index into the recomputed list (it skips entries when the
+  list changes) and never by looking up the last entry's identity (it restarts at the top when
+  that entry drops out).
+- When a takeover period ends, the standard rotation resumes after the standard cursor: close to
+  where it left off, even if that entry is now excluded.
 
-- `portrait`/`landscape` entries carry **only** a playlist — never branding.
-- `demo_station` entries carry branding (`background_item_id`, optional
-  `overlay_item_id`) and **may also** carry a `playlist_id` — picture-in-picture
-  content, rendered at the **opposite** orientation to the host.
-- An all-NULL `demo_station` entry means **demo off**.
-
-Identify a demo entry by its `slot`, never by "it has no playlist". If you do not
-implement demo mode, ignore the slot entirely — it never affects `portrait`/`landscape`
-resolution.
-
-### 5.6 Item → file, by orientation
+### 5.7 Item → file, by orientation
 
 ```
-portrait  → portrait_file_id  ?? landscape_file_id
-landscape → landscape_file_id ?? portrait_file_id
+portrait  → portrait_file_id     -- no fallback
+landscape → landscape_file_id    -- no fallback
 ```
 
-Fall back to the other orientation; never render nothing when one slot is filled. An
-entry whose item resolves to no file at all is dropped in §5.3.
+**The slot is the author's decision.** There is no fallback to the other orientation.
 
-Then, if the cartridge offers renditions, choose which one of that `media_file` to fetch
-and play — §7.6. A client that ignores renditions uses the file as the manifest names it.
+- An **empty slot** for the rendered orientation is an intentional exclusion: the entry is not
+  viable on that orientation and is skipped (§5.3).
+- **Whatever file is in the slot plays**, whatever its pixel shape. A landscape image placed in
+  the portrait slot plays on a portrait Surface, as authored.
+- Both slots may reference the same file.
 
-### 5.7 Start and duration
+The same rule applies to backings (an empty slot means no backing on that orientation) and to
+`demo_station` branding. Then choose which rendition of the file to play (§7.6).
 
-Each entry resolves to a **start** and a **duration**, in seconds, for the orientation
-being rendered. They are the numbers Studio's editor shows as a row's Start and running
-time, so a player that follows this rule shows what the operator saw there.
+### 5.8 Start and duration
 
-| | rule |
+Each entry resolves to a **start** and a **duration**, in seconds, for the orientation being
+rendered. They are the numbers Studio's editor shows, so a Surface following this rule shows
+what the author saw.
+
+| | Rule |
 |---|---|
-| **start** | the entry's `start_time_<orientation>`, else `0` |
-| **duration** | `end_time_<orientation> − start` when the window has an end — **for a still too**, where the end is its dwell override · a video with no end: **to the end of the clip** · a still with no end: `media_item.display_duration`, else **8 s** |
+| **start** | `start_time_<orientation>`, else `0` |
+| **duration** | `end_time_<orientation> − start` when the window has an end — for a still too, where it is the dwell. A video with no end: to the end of the clip. A still with no end: `media_item.display_duration`, else **8 s**. |
 
 - For a video, start is the in-point and start + duration the out-point.
-- A window counts only when `end > start`. Studio refuses any other, and a zero-length
-  hold on a still would spin the rotation.
-- Keep a watchdog so one clip that never ends cannot park the rotation: the duration
-  when there is one, else `intrinsic_duration`, else 300 s — plus a 10 s grace.
+- A window counts only when `end > start`.
+- A session board lasts `session_set.duration × pageCount`: each page gets the full duration.
 
-> **⚠️ Apple client builds before 2026-09-23 hold every still for 8 s and play every
-> clip in full.** From that build the macOS client follows the rule above, and the iOS
-> client follows it from its next release. The reference web player (`player/`) follows
-> it too. Until a fleet is on those builds, two screens playing the same cartridge can
-> differ in timing wherever a show sets these fields.
+### 5.9 When content ends: the render marker and interrupts
 
-### 5.8 ⚠️ Content types you must expect
+Everything on screen — a still, a video, a session board, a composite — is governed by **one
+render marker**: a single timestamp on the show clock (§8.1). The render loop checks it on every
+tick, and **any tick where `showNow ≥ marker` evaluates the next content.** That check is the only
+place the next content is evaluated.
 
-`media_file.content_type` is stored **verbatim from whatever the operator uploaded**.
-The two producers do not agree on the set:
+Each render item the viability pass produces carries a **next-render hint**:
 
-| | accepts at import | so a cartridge may carry |
-|---|---|---|
-| Swift Studio | png, jpeg, **webp**, heic, mp4, quicktime, x-m4v | those seven |
-| Legacy web Studio | png, jpeg, **gif**, **webp**, svg→png, pdf→png, mp4 | png, jpeg, **`image/gif`**, **`image/webp`**, mp4 |
+| Hint | Marker |
+|---|---|
+| A **duration** (§5.8) | `showNow + duration`, read when the content's **first frame is on screen** |
+| A **time** | that timestamp |
 
-The reference client classifies by a fixed enum and treats anything outside it as
-unplayable — so a legitimately published asset of an unlisted type is **skipped on every
-rotation**, leaving an empty slot with no operator-visible cause.
+The viability pass gives a **time** hint when a known interrupt comes before the item's natural
+end — the next takeover activation (below) is substituted for the duration.
 
-**`image/webp` was in that hole until 2026-09-19** and is now supported. Worth keeping as
-the worked example, because the shape is what matters: Apple's ImageIO had decoded WebP
-since macOS 11 all along, so nothing about the *platform* was missing — an enum simply did
-not list it, and the cost was a silent skip rather than an error.
+**Setting the marker to 0 forces the next render loop to evaluate.** Use it for a show-clock jump,
+a video completing its window, a skip after a load failure, a change of active playlist, a mode
+change, and a newly committed cartridge.
 
-**`image/gif` is still in that hole.** A GIF published by the web Studio is skipped today.
+For video, the hint is a watchdog — the duration, else `intrinsic_duration`, else 300 s, plus
+10 s grace — or the interrupt time, whichever is earlier; the media completing its window sets
+the marker to 0. One clip that never completes cannot park the rotation.
 
-For a new client:
+**Interrupts** — the only things that end content early:
 
-- **Treat any `image/*` you can decode as an image, and any `video/*` you can decode as a
-  video.** Do not hard-code an allow-list; you will inherit this bug.
-- When you genuinely cannot decode a type, **say which file and which type**, loudly
-  enough that an operator sees it without reading a device log. A silently skipped asset
-  is the single most expensive failure mode in this system — it looks identical to
-  "everything is fine" from every angle except the wall.
-- **Where the cartridge offers renditions, decide on `codec`, not `content_type`** (§4.8).
-  It is the only column that separates an HEVC `video/mp4` from an H.264 one.
+| Interrupt | Effect |
+|---|---|
+| The working set changes from **standard to takeover** | Cut immediately to the takeover set's first entry |
+| The schedule boundary passes (§5.2) | Cut; resolve the new playlist; reset cursors |
+| The Surface's mode changes | Cut; enter the new mode |
+| The show clock jumps (§8.3) | Marker to 0; re-evaluate everything; cut |
+| A new cartridge is committed | Reset all state; cut |
+
+**Not interrupts** — these apply at the next viability pass, after the current content finishes
+naturally:
+
+- A standard directive turning on or off.
+- A takeover directive turning off, including the end of a takeover period. The takeover item
+  finishes its time; then the standard rotation resumes.
+- An entry joining a takeover set that is already active.
+
+Compute `interruptAt` during the viability pass: while the working set is standard, it is the
+earliest future `takeover` directive turning ON for an entry of the active playlist. The schedule
+boundary is checked separately in the render loop (`showNow ≥` next boundary); a changed playlist
+sets the marker to 0.
+
+The standard → takeover transition always cuts and starts the takeover set at its first entry,
+even when the entry on screen is also in the new takeover set.
+
+**Never disarm.** Every path out of an evaluation — success, skip, load failure, empty set —
+leaves the marker armed: 0 to skip to the next entry, or `showNow + 2 s` for an empty set.
+
+### 5.10 Composition: backing, content, overlay
+
+Content is layered, bottom to top:
+
+| Layer | Holds |
+|---|---|
+| Backing | Media behind content — supports transparent content |
+| Content | The entry's media, or a session board (text and logo) |
+| Demo overlay | In demo mode only: `demo_station` branding in front (§5.11) |
+
+A **session board is text**: it composites over its backing to complete what is on screen.
+
+**The backing is set at the project level, with an override for session boards.** A backing is
+a `media_item`, resolved to a file by orientation (§5.7), and may be a still or a video.
+
+| Content | Backing |
+|---|---|
+| Session board | `session_set.backing_item_id` if set → `project.backing_item_id` → none |
+| Media item | `project.backing_item_id` → none |
+
+- A composite has **one duration**: the content's (§5.8). A still backing holds for as long as
+  the content is up; a video backing loops for as long as the content is up, and its loop never
+  advances the rotation.
+- An interrupt ends the composite as a whole, including a multi-page board mid-board.
+
+### 5.11 The `demo_station` slot
+
+`demo_station` is resolved the same "latest ≤ now" way, in parallel with the rendered slot. Its
+`CHECK` constraint encodes the rules:
+
+- `portrait` / `landscape` entries carry **only** a playlist — never branding.
+- `demo_station` entries carry branding (`background_item_id`, optional `overlay_item_id`) and
+  **may** carry a `playlist_id` — picture-in-picture content, rendered at the **opposite**
+  orientation to the host, under the rules of this section unchanged.
+- An all-NULL `demo_station` entry means **demo off**.
+
+Identify a demo entry by its `slot`. Demo presentation is a Surface implementation choice; a
+Surface that does not implement demo mode ignores the slot entirely.
+
+### 5.12 Content types
+
+`media_file.content_type` and `media_file_variant.content_type` are MIME types. Studio imports
+`image/png`, `image/jpeg`, `image/webp`, `image/heic`, `video/mp4`, `video/quicktime`, and
+`video/x-m4v`, and produces renditions in the types of §4.8.
+
+- **Treat any `image/*` you can decode as an image and any `video/*` you can decode as a video.**
+  Do not hard-code an allow-list.
+- Choose renditions on `codec` (§7.6).
+- When you genuinely cannot decode something, name the file and type loudly enough that an
+  operator sees it without reading a device log.
+
+### 5.13 Failure handling: skip and warn
+
+- One bad reference, missing file, failed decode, or oversize asset never stops playback. Log the
+  entry, skip it, re-arm.
+- **Downscale oversize assets; never skip them.** Keep a hard texture ceiling (the reference
+  client uses 3840 px on the long edge) and say so at notice level when you scale.
+- Brand assets in a playlist are an authoring error: skip them loudly.
+- **Never let the render path wait on a database or the network.** Snapshot the cartridge into
+  memory, with its indexes, when it is committed.
 
 ---
 
 ## 6. Provisioning
 
-A screen cartridge may describe several **installations** of the same screen:
-`screen_location` rows sharing one `config_id`. They all play the same cartridge; each is
-tracked separately by its `location_id`.
+A surface cartridge describes one or more **installations** of the same surface config: its
+`surface_location` rows. They all play the same cartridge; each is tracked by its `location_id`.
 
 On first run:
 
-1. Read the cartridge's `screen_location` rows.
-2. Pick one — present the list (`label`, `orientation`) or take the first.
+1. Read the cartridge's `surface_location` rows.
+2. Pick one — present the list (`label`, `orientation`), or take the only one.
 3. **Persist the chosen `location_id`.**
-4. Adopt that location's `orientation` as your rendering slot.
+4. Adopt that location's `orientation` as the rendered slot.
 
-On subsequent runs, prefer the stored `location_id`, but **only while the cartridge still
-lists it**. If it is gone (renamed or deleted in Studio), re-pick — otherwise the device
-resolves no orientation forever and checks in for a location the server does not have.
+On later runs, keep the stored `location_id` **only while the cartridge still lists it**. If it is
+gone, re-pick. Clear the stored `location_id` whenever the configured `projectCode` or
+`surfaceCode` changes.
 
-Clear the stored `location_id` whenever the configured `projectCode` **or** `screenCode`
-changes: locations are rows of *that* screen's cartridge.
-
-### 6.1 ⚠️ The empty-`screen_location` failure
-
-Legacy cartridges published before 2026-09-18 carry **zero** `screen_location` rows. A
-client then has no orientation to adopt and falls back to its own default. If that
-default is `portrait` and the cartridge's only schedule entries are in the `landscape`
-slot, **§5.2 matches nothing, no playlist is selected, and the screen is black** — while
-sync reports complete success.
-
-Handle it explicitly:
-
-- Log the absence in a way an operator can find. Silence here costs a venue call.
-- Provide a manual orientation override, and make it take effect immediately
-  (re-evaluate §5.2 on change rather than waiting for the next schedule boundary).
-- When a location *does* arrive in a later publish, adopting its orientation is correct —
-  but do not stomp a manual override on every unrelated republish. Remember the last
-  orientation you adopted from a cartridge and act only when that value *changes*.
+Provide a manual orientation override for the operator. It takes effect immediately (§5.1). When
+a later publish changes the adopted location's orientation, adopt the new value — but do not
+overwrite a manual override on a republish that did not change it.
 
 ---
 
@@ -742,416 +747,446 @@ Handle it explicitly:
 ### 7.1 Addressing
 
 ```
-<mediaBase>/<projectCode>/<deliverable_file_name>
+<mediaBase>/<projectCode>/<file_name>
 ```
 
-Flat, per project. `deliverable_file_name` comes from `media_manifest` — or, where you chose
-a rendition (§7.6), use that rendition's `file_name` in its place. Renditions live in the
-same flat keyspace and are addressed identically. Names are UUID-unique and immutable — a
-re-optimize mints a *new* name — so **presence by name is a sufficient "already have it"
-check**. Cache on name, not on hash.
+Flat, per Show. `file_name` is the manifest's `deliverable_file_name`, or the `file_name` of the
+rendition you chose (§7.6); renditions live in the same keyspace. Names are UUID-unique and
+immutable — a re-encode mints a new name — so **presence by name is a sufficient "already have
+it" check**. Cache on name.
 
-Prune your cache against **what you play, plus what you are still fetching**: the
-manifest entries of the cartridges you currently hold, each replaced by the rendition you
-play where you chose one, plus any rendition still downloading (§7.6). A client that
-chooses renditions and then prunes against the raw manifests deletes the files it chose;
-one that prunes against only what it fetches deletes the file it is still playing while
-an upgrade downloads.
+Prune your cache against **what you play plus what you are still fetching**: the manifests of the
+cartridges you hold, each file replaced by the rendition you chose, plus any rendition still
+downloading.
 
-### 7.2 ⚠️ Two homes, and when to try the second
+### 7.2 Integrity
 
-`cartridge_meta.cloud_media_base_url`, when non-NULL, is a **second, complete media
-home** — and it is **already project-scoped** (it ends in the producer's own project
-identifier). Append the file name alone:
+Every manifest row and every rendition carries `file_size` and `content_hash`. Verify every file
+before use:
 
-```
-primary:  <mediaBase>/<projectCode>/<deliverable_file_name>
-fallback: <cloud_media_base_url>/<deliverable_file_name>      ← no projectCode
-```
+1. Downloaded length differs from `file_size` → **reject** as a truncated transfer; retry.
+2. SHA-256 differs from `content_hash` → **reject** as wrong bytes at that address; retrying will
+   not help.
 
-Legacy shows uploaded media to their own bucket and were only later mirrored into the
-show-code keyspace. A show published before that mirror has a manifest the primary home
-404s on and a `cloud_media_base_url` that resolves every file. Without the fallback such
-a show caches **0 of N** and the device shows nothing.
+Report the two failures with **different** messages. Verify a rendition against its **own** hash
+and size, never its parent file's.
 
-**Only a 404 means "try the other home."** A 403 or a 5xx is *this* home failing, and
-silently retrying elsewhere hides it.
+A missing or rejected file degrades the media count; it never fails the bootstrap. Remember what
+failed and retry on later passes.
 
-### 7.3 ⚠️ Integrity: the hash is optional, the size is what you have
+### 7.3 Resumable fetching (recommended)
 
-`media_manifest.content_hash` is **NULL by design** for legacy-published shows. There is
-no hash to check against, and rejecting those files rejects the entire show.
+The origin answers ranged GETs (`206`, `Accept-Ranges: bytes`, `Content-Range`, `ETag`). If you
+resume:
 
-The rule:
+1. **Store the origin's `ETag` beside the partial, and write it before the bytes it describes.**
+2. **No validator, or a mismatched one → discard and start clean.** Never append to bytes whose
+   identity you cannot prove.
 
-1. If `file_size` is present and the downloaded length differs → **reject**.
-2. If `content_hash` is present and does not match → **reject**.
-3. If neither is present → **admit the file, and count it.**
+Keep partials outside the directory your renderer resolves media from.
 
-Report the unverified count to the operator (the reference client says
-`… · 86 UNVERIFIED (no hash in the manifest — legacy cartridge)`). Admitting silently and
-rejecting wholesale are both wrong; admitting *audibly* is right.
+### 7.4 Renderer limits
 
-A rendition (§4.8) carries its **own** `content_hash` and `file_size`. Verify a chosen
-rendition against those, never against its parent file's — the right bytes under the
-parent's hash fail every download.
+`media_file.width` / `height` and the rendition's own dimensions are intrinsic pixels. Assets
+larger than your renderer can texture are legitimate: downscale them (§5.13).
 
-Keep the two rejections distinguishable. A size mismatch is usually a truncated transfer
-— worth retrying. A hash mismatch means the bytes at that address are not the bytes the
-cartridge was built from — retrying will not help. One message for both sends people
-hunting the wrong thing.
+### 7.5 Brand assets
 
-### 7.4 Resumable fetching (recommended)
-
-Both cloud homes answer ranged GETs (`206`, `Accept-Ranges: bytes`, `Content-Range`,
-`ETag`). For video-heavy shows on a venue uplink this is the difference between slow and
-never: every whole-file attempt is long enough to be interrupted, so every attempt is.
-
-If you implement it, two rules are not optional:
-
-1. **Store the origin's `ETag` beside the partial, and write the validator *before* the
-   bytes it describes.** A crash between them costs one chunk; bytes that outlive their
-   validator are indistinguishable from a stale partial.
-2. **No validator, or a mismatched one → discard and start clean.** Never append to bytes
-   whose identity you cannot prove.
-
-Under §7.3 there is often no whole-file hash to catch a bad splice, so the validator is
-the *only* thing standing between a resume and a file of exactly the right length and
-entirely the wrong content.
-
-Keep partials **outside** the directory your renderer resolves media from, and treat a
-404 at one home as "not at this address" — it says nothing about the other home, so it
-must not delete a partial the other home would have resumed.
-
-### 7.5 ⚠️ Renderer limits are yours to enforce
-
-`media_file.width`/`height` are the intrinsic pixels. A cartridge may legitimately
-contain assets larger than your renderer can texture (the reference client's ceiling is
-3840 px on the long edge; assets at 2344×4184 have shipped).
-
-**Downscale to fit. Do not silently skip.** A skipped asset is an empty slot every
-rotation with nothing in any log — sixteen of nineteen assets playing and no way to tell
-why. Keep a hard ceiling for safety, but make the failure mode "scaled" rather than
-"absent", and say so at `notice` level when you scale.
-
----
+Typefaces and the style book are delivered through the manifest like media, but they are **not
+decoded as media** and never choose among renditions. Take them exactly as the manifest names
+them. Their use is specified in §9.
 
 ### 7.6 Choosing a rendition
 
-When the cartridge carries `media_file_variant` (§4.8), a client may download a rendition
-in place of the manifest's deliverable. The reference client's order — the first one it
-can decode wins:
+A Surface may download a rendition in place of the manifest's default deliverable. The first one
+it can decode wins:
 
-1. `wifiOptimized`, **if the device is set to prefer it.** A weak uplink is a fact about
-   where a device is installed, not about the show, so this is a device setting.
-2. **The venue master: `optimized` when the file has one, else `original`.** A file with
-   no `optimized` rendition is either one whose original was already the best deliverable,
-   or one not yet optimized. In both cases the manifest names the original, so this matches
-   a client that ignores the table. "Optimized, else web" — the obvious order — would drop
-   an Apple device to the 1080p web rendition on exactly those files.
+1. `wifiOptimized`, **if the device is set to prefer it.** A weak uplink is a fact about where a
+   device is installed, not about the Show, so this is a device setting.
+2. **The venue master: `optimized` when the file has one, else `original`.**
 3. `webOptimized`.
 4. `original`, as a last resort.
 
-**A browser client puts `webOptimized` first.** The web rendition is made for browsers —
-H.264 at up to 1080p, JPEG or PNG: the lowest common denominator — so a browser takes it
-even where it could decode the master. A codec name says H.264; it does not say which
-profile, and an original can be a camera's High 4:2:2 at 60 fps. Only a file with no web
-rendition falls back to the order above.
+**A browser Surface puts `webOptimized` first**, and treats HEVC as undecodable unless it has
+probed the platform. H.264, JPEG, PNG, and WebP are the browser-safe set.
 
-What makes that order safe:
+Rules that make the order safe:
 
-- **Decide on `codec`.** A rendition with no `codec` is not known to be decodable, except
-  a still, whose `content_type` names its encoding unambiguously. Never infer a video codec
-  from `video/mp4`.
-- **Only rows with a `content_hash` are candidates.** You verify before you use (§7.3); a
-  hash-less rendition would be chosen and then refused.
-- **Media only.** Brand delivery — typefaces and a style manifest — is not decoded as
-  media. Take it exactly as the manifest names it.
-- **Render only what you hold, and prune from the same decision you render from** (§7.1).
-  A client that downloads one rendition and resolves another plays nothing.
-- **When nothing offered for a file decodes, keep the manifest's deliverable and report the
-  file and the codecs it offered.** Never end up holding fewer files than the cartridge
-  shipped: dropping the file turns an unplayable asset into a silent gap on the wall.
+- **Decide on `codec`.** A video rendition without a `codec` is not known to be decodable.
+- **Render only what you hold, and prune from the same decision you render from.**
+- **When nothing offered for a file decodes,** keep the manifest's deliverable and report the file
+  and the codecs it offered. Never hold fewer files than the cartridge shipped.
 
-#### Play what you hold
+**Play what you hold.** The order above is what to fetch when you hold nothing for a file.
 
-The order above is what to **fetch** when a client holds nothing for a file. A client that
-already holds a verified rendition should not treat it as a command:
+- **Tiers, highest first:** master (`optimized`, `original`) › `wifiOptimized` › `webOptimized`.
+  A browser Surface ranks `webOptimized` first.
+- **Going down a tier needs no download.** Holding a verified rendition at or above the preferred
+  tier, keep playing it.
+- **Going up a tier replaces once the new bytes are verified.** Keep playing what you hold until
+  then; if the fetch fails, nothing playable is lost.
+- A held rendition counts only if you can decode it and the current cartridge still offers it.
 
-- **Going down a tier needs no download.** A client holding a rendition at or above the
-  tier it now prefers keeps playing it and fetches nothing. Turning a WiFi preference on
-  with the master already on disk costs no bytes and loses no quality.
-- **Going up a tier replaces — once the new bytes are verified.** A client that prefers a
-  higher tier than it holds fetches the preferred rendition and keeps playing the one it
-  holds until then. If the download fails, the held rendition keeps playing and the fetch
-  is retried; nothing that was playable is lost.
-- **Tiers, highest first:** the master — `optimized` and `original`, one tier, because
-  the optimized rendition is a visually-lossless re-encode of its original — then
-  `wifiOptimized`, then `webOptimized`. When a client holds two in one tier it plays
-  `optimized`. A held rendition counts only if the client can decode it, it has a
-  `content_hash`, and the cartridge still offers it: a name the current cartridge no longer
-  lists has no hash to verify against.
-- **For a browser client, `webOptimized` ranks first**, above the master, so a browser
-  holding a master-tier original swaps to the web rendition once one is offered — playing
-  the original only until the web bytes are verified.
-
-The tiers are not the fetch order. That order answers what to download, and lists
-`original` last only because it is the fallback when nothing better decodes.
-
-**A browser client should treat HEVC as undecodable unless it has probed the platform.**
-HEVC support in a browser depends on the operating system, the hardware and the build.
-H.264, JPEG, PNG and WebP are the safe set.
+---
 
 ## 8. Time
 
-### 8.1 Evaluate in venue-local time
+### 8.1 One timeline
 
-Use `cartridge_meta.timezone` (screen cartridge) or `project.timezone` (project
-cartridge) — an IANA identifier. All `timestamp`, `start_time`, `end_time` values are
-absolute Unix ms, so comparison is timezone-free; the timezone matters for *presenting*
-times and for the day projection below.
+Every time-based decision runs on the **show clock** (§8.2): the schedule, directives, day
+scoping, session board now/next, **and the render marker** (§5.9).
 
-### 8.2 Synthetic time (preview outside the show window)
+The device's **monotonic clock** — `CACurrentMediaTime` or equivalent on Apple,
+`performance.now()` in a browser — has one job: detecting show-clock jumps (§8.3). It never
+decides content and never times it.
 
-When the real clock falls **outside** the show — before the first day's `start_time` or
-after the last day's `end_time` — the reference client projects the operator's wall-clock
-**H:M:S onto Day 1's date** in the event timezone, and evaluates the schedule at that
-projected instant. If the projection still lands outside the window, it clamps to
-`eventStart`.
+All `timestamp`, `start_time`, and `end_time` values are absolute Unix ms, so comparisons are
+timezone-free. The venue timezone (`cartridge_meta.timezone`) matters for the day projection
+below and for presenting times. **The device's own timezone is never used.**
 
-This only runs when the cartridge has `project_days`. Its purpose is that a screen
-powered up the week before a show demonstrates its opening state instead of showing
-nothing.
+### 8.2 The show clock
 
-This is a **client behaviour, not a data rule** — you may reasonably choose to show a
-"show has not started" state instead. Just decide deliberately: doing neither means a
-blank screen during setup, which reads as a broken device.
+A Surface always behaves as if it is **at the venue**.
 
-### 8.3 Freshness: when to re-pull
+```
+showNow(realNow):
+  eventStart = first project_days.start_time
+  eventEnd   = last  project_days.end_time
+  if eventStart ≤ realNow ≤ eventEnd:
+      return realNow                                   # real venue time
+  # outside the event: synthetic time
+  tod       = time-of-day of realNow in the venue timezone
+  synthetic = Day 1's date at tod, in the venue timezone
+  clamp synthetic into [Day 1 start_time, Day 1 end_time]
+  return synthetic
+```
 
-Two mechanisms, depending on the origin:
+- Outside the event, a Surface **always simulates Day 1** at the venue's current time of day. A
+  Surface in New York powered up the week before a Los Angeles Show shows, at 12:00 ET, what the
+  sign will show at 09:00 PT on Day 1.
+- Because days are whole venue-local days, the clamp is a guard, not a normal path.
+- A local time that does not exist (daylight-saving gap) resolves to the next valid instant.
+- **This is required behavior.** Viewing any other moment of the Show is a Studio preview
+  function; a Surface has no preview mode.
 
-**Cloud (static bucket):** conditional GET on the cartridge itself. Store the `ETag`,
-send `If-None-Match`, treat `304` as "unchanged, keep what you have".
+### 8.3 Show-clock jumps
 
-**LAN server:** a tiny status JSON at `<base>/<projectCode>/<fileName>/status`:
+A **jump** is a show-clock move that real elapsed time cannot explain. Each tick, compare the show
+clock's movement with the monotonic clock's movement since the previous tick. A move **backward**
+by any amount (midnight outside the event window; real time crossing the event end onto Day 1), or
+**forward by more than the elapsed real time** beyond 250 ms of noise (a wall-clock correction),
+is a jump. **Every jump sets the render marker to 0**, so the next render loop re-evaluates
+schedule, viability, and working set, and cuts (§5.9). Keep the rotation cursors unless the
+active playlist changed.
+
+Because days are whole venue-local days, the Day 1 clamp (§8.2) cannot engage, and a Surface's
+show clock never holds still.
+
+### 8.4 Freshness: when to re-pull
+
+**Cloud (static bucket):** conditional GET on each cartridge. Store the `ETag`, send
+`If-None-Match`, treat `304` as unchanged.
+
+**LAN server:** a status document at `<base>/<projectCode>/<fileName>/status`:
 
 ```json
-{ "projectCode": "SHOW26", "screenId": "LOBBY3", "isProjectOnly": false,
+{ "projectCode": "SHOW26", "surfaceId": "LOBBY3", "isProjectOnly": false,
   "generatedAt": 1789340889665, "publishedRevision": 3, "mediaFileCount": 98 }
 ```
 
-Poll every 30–60 s. **Compare for inequality, never for order.** Cache the last status and
-re-pull when *either* token differs.
+Poll every 30–60 s. **Compare for inequality, never for order**, and re-pull when either token
+differs: `generatedAt` is a wall clock, not monotonic across machines.
 
-`generatedAt` is a wall clock and is not monotonic across two publishers, a clock step, or
-a cloud pull. `publishedRevision` is monotonic per screen but bumps only on schedule
-edits, so a same-revision republish is real.
+**Refuse an older cartridge.** Before committing a pulled cartridge over the one you hold, compare
+`(published_revision, generated_at)` lexicographically and keep the current one if the new one is
+strictly older. Log the refusal.
 
-**Refusing an older cartridge.** Before committing a freshly pulled cartridge over one you
-already hold, compare `(published_revision, generated_at)` lexicographically and keep the
-current content if the new one is strictly older. Note that legacy publishers emit
-`published_revision = 0` for every cartridge, which makes that gate rest entirely on
-`generated_at` — a clock skew on the publishing machine is then the only thing between a
-republish and a device that refuses it. Log loudly when you refuse.
-
-### 8.4 Bootstrap sequence
+### 8.5 Bootstrap
 
 ```mermaid
 sequenceDiagram
-    participant D as Device
+    participant S as Surface
     participant O as Origin (LAN or cloud)
     participant C as Local cache
 
-    D->>C: load committed cartridges (if any) and render immediately
-    Note over D,C: never wait on the network to show something
+    S->>C: load committed cartridges (if any) and render immediately
+    Note over S,C: never wait on the network to show something
 
-    D->>O: GET /<project>/project.db   (If-None-Match)
-    O-->>D: 200 + ETag | 304
-    D->>O: GET /<project>/<SCREEN>.db  (If-None-Match)
-    O-->>D: 200 + ETag | 304
+    S->>O: GET /<project>/project.db   (If-None-Match)
+    O-->>S: 200 + ETag | 304
+    S->>O: GET /<project>/<SURFACE>.db (If-None-Match)
+    O-->>S: 200 + ETag | 304
 
-    Note over D: validate SQLite magic before replacing anything
-    Note over D: refuse if (revision, generatedAt) is older (§8.3)
-    D->>C: atomic replace, then open read-write, FKs ON
+    Note over S: check SQLite magic, cartridge_kind, format_version
+    Note over S: refuse if (revision, generatedAt) is older (§8.4)
+    S->>C: atomic replace, then open read-write, FKs ON
 
-    D->>D: provision location + orientation (§6)
-    D->>D: read media_manifest
-    loop each uncached deliverable
-        D->>O: GET /<project>/<file>   (404 → try cloud_media_base_url)
-        O-->>D: bytes
-        D->>D: size / hash check (§7.3)
-        D->>C: atomic move into media cache
+    S->>S: provision location + orientation (§6)
+    S->>S: choose renditions (§7.6)
+    loop each file not held
+        S->>O: GET /<project>/<file_name>
+        O-->>S: bytes
+        S->>S: size and hash check (§7.2)
+        S->>C: atomic move into media cache
     end
-    D->>D: prune cache to the manifest union
-    D->>D: evaluate schedule (§5) and render
+    S->>S: prune cache (§7.1)
+    S->>S: evaluate (§5) and render
 ```
 
-**Never replace a good cartridge with an unvalidated body.** A captive portal answers 200
-with an HTML login page. Check the 16-byte SQLite magic (`SQLite format 3\0`) before the
-atomic swap — a zero-byte file is a *valid empty database*, so "it opens" is not enough.
-
-A missing media file must degrade the count, never fail the bootstrap. Remember what
-failed and retry it on later passes.
+**Never replace a good cartridge with an unvalidated body.** A captive portal answers `200` with an
+HTML login page. Check the 16-byte SQLite magic (`SQLite format 3\0`) and read `cartridge_meta`
+before the swap — a zero-byte file is a valid empty database, so "it opens" is not enough.
 
 ---
 
-## 9. The compatibility contract
+## 9. Brand delivery
+
+A Show — or one session set — can be branded with a **style book**: a published, versioned set of
+typefaces and a style manifest (`style.json`). Surfaces use it to set type and colour on anything
+they draw themselves, such as session boards. The contents of `style.json` are defined by the
+Marquee branding specification (not public); this section covers how a style book reaches a Surface.
+
+### 9.1 Columns
+
+| Column | Meaning |
+|---|---|
+| `brand_style` (`project`, `session_set`) | **Provenance:** the style's portal address, `company/style/version`, e.g. `acme/acme-2026/3`. The version is pinned: a published version is immutable, so a republish can never silently restyle a signed-off Show. Not a reference; never resolved to a file. |
+| `brand_style_item_id` (`project`, `session_set`) | **Resolution:** the `media_item` holding that address's `style.json`. |
+| `media_item.brand_member` | The style address a media item belongs to. Every typeface and the style book itself carry it. |
+
+### 9.2 Resolution
+
+For anything a Surface draws in a session set's context:
+
+```
+style book = session_set.brand_style_item_id ?? project.brand_style_item_id ?? the Surface's built-in default
+```
+
+Everywhere else, the project's style book, then the built-in default.
+
+### 9.3 Delivery
+
+- **Brand files travel as ordinary media.** A Surface's media cache is a flat namespace pruned to
+  the manifest, so a brand folder could not survive it. Studio imports each file as a
+  `media_item` / `media_file` and rewrites the paths inside `style.json` to the deliverable names
+  the files were given. A Surface resolves faces through the manifest it already holds.
+- **Each surface cartridge carries every member of every style address it references** —
+  selected by `brand_member`, since nothing else in the cartridge references a typeface.
+- **Every platform's faces ship** (for example `.ttf` and `.woff2`). A cartridge is not addressed
+  to one platform; a Surface uses the formats it needs and ignores the rest.
+- `project.db` carries `brand_style` only; the style book rides in the surface cartridges (§3.2).
+
+### 9.4 Rules for a Surface
+
+- Fetch and verify brand files like any file (§7.2). Never decode them as media and never choose
+  renditions for them (§7.5).
+- A `brand_member` item is never playable and never viable. One found in a playlist is skipped
+  loudly (§5.13).
+- If a referenced style book fails to load, fall back to the next step of §9.2 and say so; never
+  render nothing.
+
+---
+
+## 10. The compatibility contract
 
 > **A record that reads a delivered artifact is a WIRE FORMAT, not a schema.**
 
-Cartridges are published once and read by whatever client turns up later — including
-clients older than the cartridge and clients newer than it. This section is the whole
-reason the rest works.
+The DDL in §4 is the **v25.0.1 baseline**. Every baseline column is present in every v25
+cartridge. From here, cartridges are read by Surfaces older and newer than they are, so:
 
-### 9.1 Producers may only add
+### 10.1 Producers may only add
 
-New columns are added **nullable, or `NOT NULL` with a `DEFAULT`**. Columns are never
-removed, renamed, reordered, or retyped. Migration identifiers are append-only and a
-shipped migration's SQL is never edited — deployed databases record only identifiers.
+New columns are added **nullable, or `NOT NULL` with a `DEFAULT`**. Tables and columns are never
+removed, renamed, reordered, or retyped. Enumerated values are never repurposed.
 
-### 9.2 Consumers must tolerate absence
+### 10.2 Consumers must tolerate absence
 
-**Decode every column that is not part of the original baseline as
-optional-with-default.** In practice: probe `PRAGMA table_info(<table>)` once per opened
-cartridge and build your row mapper from what is actually there, or use a decoder whose
-"missing column" behaviour is a default rather than an error.
+Decode every column added **after** the baseline as optional-with-default. Probe
+`PRAGMA table_info(<table>)` once per opened cartridge and build row mappers from what is there.
+A strict decode of a missing column fails the whole table, and the Surface reports "no content"
+for a Show whose rows are all present.
 
-The failure this prevents is specific and expensive: a strict decode of a column that
-does not exist throws for the **whole table**, the caller sees an empty list, and the
-device reports "no content" for a show whose rows are all present. It reached a live
-venue. The four `playlist_entry` v4 columns are the known instance; they will not be the
-last.
+### 10.3 Never let a read failure look like empty
 
-### 9.3 Never let a read failure look like empty
+If a table fails to decode, say so, distinctly from "this table has no rows". They are different
+facts and lead to opposite investigations.
 
-If a table fails to decode, **say so** — distinctly from "this table has no rows". Those
-are different facts about the world and they lead to opposite investigations. Swallowing
-the difference is what turned a one-line decode bug into an unexplained black screen.
+### 10.4 Ignore what you do not understand
 
-### 9.4 Ignore what you do not understand
+Unknown tables, columns, and values of `resource_type`, `slot`, `type`, and `kind` are skipped,
+not treated as errors.
 
-Unknown tables, unknown columns and unknown `resource_type` / `slot` / `type` values must
-be skipped, not treated as errors. Forward compatibility is a client obligation.
+### 10.5 A new table must be safe to ignore
 
-### 9.5 A new table must be safe to ignore
-
-When a producer adds a table a client may use — `media_file_variant` is the instance — the
-tables a client already reads keep their meaning. A client that has never heard of the new
-table still plays the cartridge correctly, and a client that uses it still plays a
-cartridge without it. Tell the two apart as §9.3 requires: an absent table is not a table
-that failed to decode.
+A Surface that has never heard of a new table still plays the cartridge correctly. An absent table
+is not a table that failed to decode.
 
 ---
 
-## 10. Conformance checklist
+## 11. Conformance
 
-A client is conforming when all of these hold.
+### 11.1 Conformance suite
+
+The **Marquee Conformance Suite** in this repository is a set of real SQLite cartridges, each with
+a clock script and an expected trace of on-screen transitions. A Surface conforms when its trace
+matches for every scenario. Scenarios cover, at minimum: basic rotation; takeover start (cut) and
+end (natural finish); standard directives turning off mid-item; cursor resume past an excluded
+entry; overlapping takeovers; synthetic time from a device in another timezone; show-clock jumps;
+multi-page session boards interrupted by a takeover; video completion and watchdog; schedule
+changeover; day scoping; empty orientation slots; a landscape file in a portrait slot; and
+all-entries-failing without disarming.
+
+### 11.2 Checklist
 
 **Artifacts**
+
 - [ ] Opens both artifacts read-write with foreign keys ON, and never migrates them.
-- [ ] Identifies a project cartridge by the **absence of `cartridge_meta`**.
+- [ ] Identifies an artifact by `cartridge_meta.cartridge_kind`, and refuses a different
+      `format_version` first component.
 - [ ] Validates the SQLite magic before replacing a committed cartridge.
-- [ ] Refuses a cartridge older than the committed one by `(published_revision, generated_at)`, and logs the refusal.
+- [ ] Refuses a cartridge older than the committed one by `(published_revision, generated_at)`,
+      and logs the refusal.
 
 **Compatibility**
-- [ ] Decodes a cartridge whose `playlist_entry` lacks the four v4 columns, and renders it.
-- [ ] Reports a table that failed to decode differently from a table that is empty.
-- [ ] Ignores unknown tables, columns, and enum values.
 
-**Resolution**
-- [ ] Picks the schedule entry as latest-`timestamp`-≤-now **within its own slot**.
-- [ ] Treats a NULL `playlist_id` as "show nothing".
-- [ ] Scopes directives to the containing `project_days` window, and skips that scoping when outside all days.
-- [ ] Suppresses the standard rotation entirely while any takeover is ON.
-- [ ] Advances by locating the last-rendered entry in the recomputed list, not by a stored index.
-- [ ] Falls back to the other orientation's file when its own slot is empty.
-- [ ] Renders archived `media_item`s that are referenced.
+- [ ] Decodes post-baseline columns as optional-with-default.
+- [ ] Reports a table that failed to decode differently from a table that is empty.
+- [ ] Ignores unknown tables, columns, and enumerated values.
+
+**Time**
+
+- [ ] Makes every content decision on the show clock, in the venue timezone, and never uses the
+      device timezone.
+- [ ] Outside the event, simulates Day 1 at the venue's current time of day.
+- [ ] Keeps one render marker on synthetic time, armed at first frame from the render item's hint; `≥` evaluates the next content; 0 forces the next loop.
+- [ ] Sets the marker to 0 on every show-clock jump.
+
+**What is on screen**
+
+- [ ] Picks the schedule entry as latest-`timestamp`-≤-now within its own slot; treats a NULL
+      `playlist_id` as show nothing.
+- [ ] Admits an entry only when a governing directive is ON.
+- [ ] Scopes directives to the containing day, and skips scoping outside all days.
+- [ ] Suppresses the standard set entirely while any takeover is ON, with no fallback.
+- [ ] Advances by position cursors, separately for standard and takeover.
+- [ ] Cuts immediately on the standard → takeover transition, and on no other directive change.
+- [ ] Skips an entry whose slot is empty for its orientation, and plays the slot's file as authored — never the other orientation's.
+- [ ] Composites backing, content, and overlay, with one duration per composite.
+- [ ] Renders session boards.
+- [ ] Never disarms: every evaluation leaves the marker armed.
 
 **Provisioning**
-- [ ] Persists `location_id`; re-picks when it leaves the cartridge; clears it when the address changes.
-- [ ] Surfaces an empty `screen_location` to the operator and offers a manual orientation override that applies immediately.
+
+- [ ] Persists `location_id`; re-picks when it leaves the cartridge; clears it when the address
+      changes.
+- [ ] Offers a manual orientation override that applies immediately.
 
 **Media**
-- [ ] Caches by file name and prunes to what it chose to hold (§7.1).
-- [ ] Falls back to `cloud_media_base_url` **on 404 only**.
-- [ ] Admits a hash-less file, counts it, and reports the count.
-- [ ] Rejects a size mismatch and a hash mismatch with **different** messages.
-- [ ] Downscales an oversized asset instead of skipping it, and says so.
+
+- [ ] Caches by file name and prunes to what it holds and is fetching.
+- [ ] Rejects size and hash mismatches, with different messages.
+- [ ] Downscales oversize assets instead of skipping them, and says so.
 - [ ] Degrades the media count on a missing file without failing the bootstrap.
-
-**Renditions** (§4.8, §7.6)
-- [ ] Plays a cartridge with no `media_file_variant` exactly as its manifest names.
-- [ ] Chooses on `codec`; never infers a video codec from `content_type`.
-- [ ] Verifies a chosen rendition against its **own** hash and size.
-- [ ] Renders and prunes from the **same** decision, and never renders a rendition it
-      does not hold.
-- [ ] Holding a rendition at or above the tier it prefers, fetches nothing; going up a
-      tier, keeps playing what it holds until the new bytes are verified.
-- [ ] A browser client takes `webOptimized` first, and ranks it first.
-- [ ] Reports a file none of whose renditions it can decode — by file and offered codec —
-      and keeps the manifest's deliverable rather than dropping it.
+- [ ] Chooses renditions on `codec`, verifies each against its own hash and size, and renders and
+      prunes from the same decision.
+- [ ] A browser Surface takes and ranks `webOptimized` first.
+- [ ] Takes brand assets exactly as the manifest names them.
 
 ---
 
-## 11. Worked example
+## 12. Worked example
 
-From a real cartridge that ran a live event, trimmed to four entries and with
-identifiers replaced. `PRAGMA foreign_key_check` clean; `grdb_migrations` = `v1-baseline`,
-`v2-media-variants` (i.e. **pre-v4** — no playback-state columns).
+A test Show, trimmed and with identifiers replaced.
 
 ```
-cartridge_meta
-  screen_id            LOBBY3
-  project_code         SHOW26
-  published_revision   0                    ← legacy producer
-  cloud_media_base_url https://legacy-media.example.net/1786977639120
-  timezone             America/Los_Angeles
-  generated_at         1789340889665
-
-project_days           3 rows, 2026-09-15 … 2026-09-17
-screen_config          1 row,  id 1789334727168, screen_id LOBBY3
-screen_location        0 rows                ← §6.1 applies
-screen_schedule_entry  1 row,  slot 'portrait', timestamp 1789455600000,
-                               playlist_id 1788222671798
-playlist_entry         4 rows
-directive             12 rows (3 per entry, all type 'standard')
-media_manifest         4 rows, content_hash NULL on all four,
-                               file_size present on two
+cartridge_meta   cartridge_kind 'surface', format_version '25.0.1',
+                 project_code SHOW26, surface_id LOBBY3,
+                 timezone America/Los_Angeles
+project_days     1 row: 2026-09-15, 00:00:00.000–23:59:59.999 PT
+surface_location 1 row: LOBBY3-A, orientation 'portrait'
+surface_schedule_entry  1 row: slot 'portrait', Day 1 00:00 PT → playlist "Editor parity"
+playlist_entry   12 rows
+directive        3 rows, all on entry 5 (position 3):
+                   standard ON  08:00 PT
+                   takeover ON  12:00 PT
+                   takeover OFF 12:30 PT
 ```
 
-Resolving at `now = 1789460000000` (Day 1, after the changeover):
+**A Surface in New York, the week before the Show, at 19:30 ET.**
 
-1. **Slot** — no `screen_location`, so the client falls back to its default. A
-   portrait-defaulting client matches the `portrait` entry and works; a
-   landscape-defaulting one matches nothing and shows black. This is exactly §6.1.
-2. **Schedule** — the single `portrait` row has `timestamp <= now` → playlist
-   `1788222671798`.
-3. **Entries** — four, each resolving to a `media_item` with a `portrait_file_id`.
-4. **Directives** — `now` falls inside Day 1, so only directives timestamped within Day 1
-   participate. The latest `standard` per entry is ON → all four join the rotation. No
-   `takeover` rows exist, so the takeover list is empty and standard governs.
-5. **Files** — each item's `portrait_file_id` → `media_file` → manifest's
-   `deliverable_file_name`, e.g. `3f477980-6c0e-47ca-955d-3c73855a941e.png`.
-6. **Bytes** — the primary home 404s for this legacy show; every file resolves from
-   `cloud_media_base_url` with the file name appended and no project code. All four are
-   admitted **unverified** (no hash), two of them with a size check.
+1. **Show clock** — real time is before the event, so the Surface simulates Day 1 at the venue's
+   current time of day: 16:30 PT on 2026-09-15 (§8.2).
+2. **Slot** — the only location is portrait.
+3. **Schedule** — the portrait entry at 00:00 is the latest ≤ 16:30 → "Editor parity".
+4. **Viability** — only entry 5 has directives. Its governing standard directive (08:00) is ON; its
+   governing takeover directive (12:30) is OFF. The standard set is {entry 5}. The other 11 entries
+   have no ON directive and never appear on a Surface — even though Studio's operator player plays
+   all 12. (Studio warns about this at publish.)
+5. **Rotation** — the takeover set is empty, so standard governs, and entry 5 repeats.
+6. **File** — entry 5's item has both orientations; portrait resolves to a 10 s H.264 portrait clip.
+   It has no `optimized` rendition, so the master is its `original`; a device set to prefer WiFi
+   renditions takes its `wifiOptimized` HEVC rendition instead.
+7. **Duration** — no trim, so the clip plays to its end: 10 s.
+
+**A Surface at the venue on Day 1, from 11:59:55 PT.**
+
+- The interrupt time computed at the last viability pass is 12:00:00 (entry 5's takeover turns
+  ON). At 12:00:00 the Surface cuts immediately; the working set becomes the takeover set
+  {entry 5}.
+- At 12:30:00 the takeover turns OFF. That is not an interrupt: the clip on screen finishes, then
+  the standard rotation resumes after the standard cursor.
 
 ---
 
-## 12. Glossary
+## 13. Glossary
 
-| term | meaning |
+| Term | Meaning |
 |---|---|
-| **cartridge** | a delivered, self-contained SQLite artifact for one screen |
-| **project cartridge** | `project.db` — show identity, days, wallpapers; no `cartridge_meta` |
-| **show code / `projectCode`** | the show's public identifier and media keyspace root |
-| **screen code** | names the cartridge file; `PROJECT` is reserved |
-| **location** | one physical installation of a screen; carries the mount orientation |
+| **Show** | The authored event; the same thing as the project |
+| **Surface** | Any device that conforms to this specification |
+| **cartridge** | A delivered, self-contained, immutable SQLite artifact |
+| **project cartridge** | `project.db` — Show identity, days, wallpapers |
+| **surface cartridge** | `<SURFACECODE>.db` — one surface config's schedule and content |
+| **show code / `projectCode`** | The Show's public identifier and media keyspace root |
+| **surface code** | Names the surface cartridge; `PROJECT` is reserved |
+| **location** | One physical installation of a surface config; carries the mount orientation |
 | **slot** | `portrait` \| `landscape` \| `demo_station` — schedule entries are scoped per slot |
-| **directive** | a timestamped on/off state change for one playlist entry, in one of two types |
-| **takeover** | a directive type that, while ON for any entry, replaces the standard rotation |
-| **rendition** | one encoding of a media file — original, optimized, web, WiFi; a client chooses among those a cartridge offers (§7.6) |
-| **tier** | a rendition's quality class, for deciding whether what a client holds is good enough: master (`optimized`, `original`) › `wifiOptimized` › `webOptimized` (§7.6) |
-| **deliverable** | the media object actually fetched: `optimized_file_name ?? source_file_name` |
-| **wire format** | a record that reads a delivered artifact; additive changes only |
+| **directive** | A timestamped on/off state change for one playlist entry, of type standard or takeover |
+| **takeover** | A directive type that, while ON for any entry, replaces the standard rotation |
+| **working set** | The takeover set if non-empty, else the standard set |
+| **cursor** | The authored position of the last entry shown, per set |
+| **show clock** | Synthetic venue time used for every decision and for the render marker |
+| **monotonic clock** | The device's never-stepping clock, used only to detect show-clock jumps |
+| **interrupt** | One of the closed set of events that end content before its duration (§5.9) |
+| **backing / overlay** | Media composited behind / in front of content |
+| **rendition** | One encoding of a media file — original, optimized, web, WiFi |
+| **tier** | A rendition's quality class: master › `wifiOptimized` › `webOptimized` |
+| **deliverable** | The manifest's default file for a media file |
+| **wire format** | A record that reads a delivered artifact; additive changes only |
+
+---
+
+## 14. Changes from the pre-v25 format
+
+| Area | Pre-v25 | v25.0.1 |
+|---|---|---|
+| Producers | Swift Studio and legacy web Studio | Studio only; the legacy web Studio is a separate product |
+| Names | `screen_config`, `screen_location`, `screen_schedule_entry`, `screen_id`, screen code | `surface_*`, `surface_id`, surface code |
+| Identification | Project cartridge identified by the absence of `cartridge_meta`; `grdb_migrations` carried | `cartridge_meta` in both, with `cartridge_kind` and `format_version`; no `grdb_migrations` |
+| Media homes | Primary plus `cloud_media_base_url` fallback | One home |
+| Integrity | Hash and size optional; hash-less files admitted and counted | Hash and size required on every file and rendition |
+| Deliverable names | In `media_file` and the manifest | In the manifest and renditions only |
+| Renditions | Optional table | Always present |
+| Locations | May be empty | At least one |
+| Studio runtime modifiers | Carried, not honoured | Not carried |
+| Server bookkeeping | `last_checked_at`, `last_pulled_revision`, `revision`, `archived` carried | Not carried |
+| Viability | Entry must have an ON directive (implicit) | Stated: an ON directive is required |
+| Rotation | Last entry by identity; restart at top when missing | Position cursors per set |
+| Takeover with no playable media | Falls back to standard | Takeover owns the screen; entries with an empty slot for this orientation are excluded |
+| Orientation | Empty slot falls back to the other orientation | No fallback: an empty slot excludes the entry; the slot's file plays as authored |
+| Durations | Not specified | One render marker on synthetic time, armed at first frame from the render item's hint |
+| Interrupts | Not specified | Closed set; standard → takeover cuts immediately |
+| Synthetic time | Optional; operator's wall clock projected onto Day 1 | Required; venue time of day on Day 1 |
+| Session boards | Optional | Required |
+| Composition | Backing and overlay on playlists and media items | Project default backing (`project.backing_item_id`, new), session board override; playlist and item backing/overlay removed |
+| Branding | v5/v6 columns, undocumented | Brand delivery specified (§9) |
