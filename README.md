@@ -479,7 +479,8 @@ The **rendered slot** is `portrait` or `landscape`, taken from the `orientation`
 installation's `surface_location` (§6). `demo_station` is a parallel mode slot (§5.11), never
 an alternative to these.
 
-Re-resolve the schedule **immediately** whenever the rendered slot changes.
+Re-resolve the schedule **immediately** whenever the rendered slot changes. A Surface always has
+an orientation; if one is ever missing, skip the orientation gate (§5.3) and log the error.
 
 ### 5.2 Pick the schedule entry
 
@@ -492,10 +493,13 @@ SELECT * FROM surface_schedule_entry
  ORDER BY timestamp DESC LIMIT 1;
 ```
 
-- A `playlist_id` of NULL means **show nothing from now**. Clear the active playlist.
+- A `playlist_id` of NULL means **show nothing from now**: clear to blank. (This differs from an
+  empty working set, §5.5, where nothing new is produced and the last frame stays.)
 - The **next schedule boundary** is the earliest `timestamp > showNow` across the rendered slot
   and `demo_station`. It is an interrupt time (§5.9).
-- When the active playlist changes, cut immediately and reset both rotation cursors (§5.6).
+- When a boundary **changes** the active playlist, cut immediately and reset both rotation
+  cursors (§5.6). When it keeps the **same** playlist, do nothing: back-to-back blocks of one
+  playlist are one run.
 
 ### 5.3 The viability pass
 
@@ -549,8 +553,8 @@ Day scoping is what makes directives day-part: yesterday's takeover cannot leak 
   slot for this orientation is excluded like any other entry (§5.7), so a takeover authored for one
   orientation does not take over the other. A takeover entry whose file fails to load is skipped
   within the takeover set (§5.13).
-- **Empty standard set.** Keep the last frame up and run the viability pass again after 2 s
-  of show time. Directive windows can legitimately empty the set for a moment.
+- **Empty standard set.** Nothing new is produced, so what is on screen stays. Run the
+  viability pass again after 2 s of show time. Directive windows can legitimately empty the set for a moment.
 
 ### 5.6 Rotation: position cursors
 
@@ -602,6 +606,9 @@ what the author saw.
 - For a video, start is the in-point and start + duration the out-point.
 - A window counts only when `end > start`.
 - A session board lasts `session_set.duration × pageCount`: each page gets the full duration.
+- Video plays with its sound. A device may mute locally; the cartridge carries no audio policy.
+- Hold the previous frame until the next item's first frame is ready; never flash to black
+  between items. Stop trimmed video on the last frame before its out-point.
 
 ### 5.9 When content ends: the render marker and interrupts
 
@@ -618,7 +625,9 @@ Each render item the viability pass produces carries a **next-render hint**:
 | A **time** | that timestamp |
 
 The viability pass gives a **time** hint when a known interrupt comes before the item's natural
-end — the next takeover activation (below) is substituted for the duration.
+end — the next takeover activation (below) is substituted for the duration. Only entries that
+passed the day and orientation gates count, so a takeover authored for the other orientation
+never interrupts. A standard item otherwise always finishes its time.
 
 **Setting the marker to 0 forces the next render loop to evaluate.** Use it for a show-clock jump,
 a video completing its window, a skip after a load failure, a change of active playlist, a mode
@@ -633,7 +642,7 @@ the marker to 0. One clip that never completes cannot park the rotation.
 | Interrupt | Effect |
 |---|---|
 | The working set changes from **standard to takeover** | Cut immediately to the takeover set's first entry |
-| The schedule boundary passes (§5.2) | Cut; resolve the new playlist; reset cursors |
+| A schedule boundary changes the active playlist (§5.2) | Cut; resolve the new playlist; reset cursors |
 | The Surface's mode changes | Cut; enter the new mode |
 | The show clock jumps (§8.3) | Marker to 0; re-evaluate everything; cut |
 | A new cartridge is committed | Reset all state; cut |
