@@ -1,0 +1,24 @@
+{
+  "id": "MCS-08",
+  "title": "Synthetic time before the first directive holds, then plays when it turns on",
+  "rules": "Reference §5.3, §6.4",
+  "cartridge": "base",
+  "engine": {
+    "slot": "portrait",
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 16,
+    "start": "2026-09-08T07:59:50-07:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {}
+  },
+  "events": []
+}

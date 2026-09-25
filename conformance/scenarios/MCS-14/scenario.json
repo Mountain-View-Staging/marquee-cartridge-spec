@@ -1,0 +1,35 @@
+{
+  "id": "MCS-14",
+  "title": "Studio preview: set, play, pause",
+  "rules": "Reference §5.4, §5.5",
+  "cartridge": "base",
+  "engine": {
+    "slot": "portrait",
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "preview",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 14,
+    "start": "2026-09-01T09:00:00-07:00",
+    "commands": [
+      {
+        "atSecond": 0,
+        "set": "2026-09-15T11:29:55-07:00",
+        "action": "play"
+      },
+      {
+        "atSecond": 8,
+        "action": "pause"
+      }
+    ]
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {}
+  },
+  "events": []
+}

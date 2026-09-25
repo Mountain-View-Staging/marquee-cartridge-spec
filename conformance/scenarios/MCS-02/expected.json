@@ -1,0 +1,51 @@
+{
+  "id": "MCS-02",
+  "trace": [
+    {
+      "t": "2026-09-15T11:29:36-07:00",
+      "kind": "render",
+      "code": "rotation.start",
+      "entry": 1,
+      "set": "standard",
+      "file": 101
+    },
+    {
+      "t": "2026-09-15T11:29:46-07:00",
+      "kind": "render",
+      "code": "rotation.next",
+      "entry": 2,
+      "set": "standard",
+      "file": 102
+    },
+    {
+      "t": "2026-09-15T11:29:56-07:00",
+      "kind": "render",
+      "code": "rotation.next",
+      "entry": 3,
+      "set": "standard",
+      "file": 103
+    },
+    {
+      "t": "2026-09-15T11:30:00-07:00",
+      "kind": "cut",
+      "code": "takeover.activate",
+      "entry": 3
+    },
+    {
+      "t": "2026-09-15T11:30:00-07:00",
+      "kind": "render",
+      "code": "rotation.start",
+      "entry": 2,
+      "set": "takeover",
+      "file": 102
+    },
+    {
+      "t": "2026-09-15T11:30:10-07:00",
+      "kind": "render",
+      "code": "rotation.wrap",
+      "entry": 2,
+      "set": "takeover",
+      "file": 102
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "MCS-18",
+  "title": "A late completion from a replaced item is ignored",
+  "rules": "Surface Engine PRD §5.6",
+  "cartridge": "late-callback",
+  "engine": {
+    "slot": "portrait",
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 18,
+    "start": "2026-09-15T08:00:00-07:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {}
+  },
+  "events": []
+}

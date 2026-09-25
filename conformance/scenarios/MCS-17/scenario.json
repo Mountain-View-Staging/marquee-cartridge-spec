@@ -1,0 +1,26 @@
+{
+  "id": "MCS-17",
+  "title": "No first frame within 10 s is a load failure",
+  "rules": "Surface Engine PRD §5.6",
+  "cartridge": "base",
+  "engine": {
+    "slot": "portrait",
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 36,
+    "start": "2026-09-15T08:00:00-07:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [
+      2
+    ],
+    "stuckEntries": [],
+    "boardPages": {}
+  },
+  "events": []
+}

@@ -1,0 +1,29 @@
+{
+  "id": "MCS-16",
+  "title": "Every entry fails: the engine holds and retries, never disarming",
+  "rules": "Reference §6.6, INV-10",
+  "cartridge": "base",
+  "engine": {
+    "slot": "portrait",
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 4,
+    "start": "2026-09-15T08:00:00-07:00"
+  },
+  "host": {
+    "failEntries": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {}
+  },
+  "events": []
+}

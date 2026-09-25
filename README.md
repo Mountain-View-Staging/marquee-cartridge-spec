@@ -1027,14 +1027,16 @@ is not a table that failed to decode.
 
 ### 11.1 Conformance suite
 
-The **Marquee Conformance Suite** in this repository is a set of real SQLite cartridges, each with
-a clock script and an expected trace of on-screen transitions. A Surface conforms when its trace
-matches for every scenario. Scenarios cover, at minimum: basic rotation; takeover start (cut) and
-end (natural finish); standard directives turning off mid-item; cursor resume past an excluded
-entry; overlapping takeovers; synthetic time from a device in another timezone; show-clock jumps;
-multi-page session boards interrupted by a takeover; video completion and watchdog; schedule
-changeover; day scoping; empty orientation slots; a landscape file in a portrait slot; and
-all-entries-failing without disarming.
+The **Marquee Conformance Suite** lives in [`conformance/`](conformance/README.md): fixture
+cartridges, and for each scenario its setup, clock, simulated-host behaviour, and the expected
+trace of on-screen transitions with stable reason codes. A Surface conforms when its trace matches
+for every scenario. The scenarios cover basic rotation; takeover start (cut) and end (natural
+finish); standard directives turning off mid-item; cursor resume past an excluded entry;
+overlapping takeovers; synthetic time from a device in another timezone; show-clock jumps;
+multi-page session boards interrupted by a takeover; video completion, load failure, and the
+watchdog; schedule changeover; day scoping; Studio preview; empty orientation slots and a
+landscape file in a portrait slot; all entries failing without disarming; the first-frame
+timeout; late callbacks from replaced items; and same-playlist boundaries and authored blanks.
 
 ### 11.2 Checklist
 

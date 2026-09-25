@@ -1,0 +1,24 @@
+{
+  "id": "MCS-05",
+  "title": "The cursor's entry is excluded during a takeover; standard resumes at the next position",
+  "rules": "Reference §6.5",
+  "cartridge": "e3-off-during-takeover",
+  "engine": {
+    "slot": "portrait",
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 70,
+    "start": "2026-09-15T11:29:36-07:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {}
+  },
+  "events": []
+}

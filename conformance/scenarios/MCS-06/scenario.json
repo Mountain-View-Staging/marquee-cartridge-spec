@@ -1,0 +1,24 @@
+{
+  "id": "MCS-06",
+  "title": "Overlapping takeovers form one set in position order",
+  "rules": "Reference §6.4",
+  "cartridge": "two-takeovers",
+  "engine": {
+    "slot": "portrait",
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 50,
+    "start": "2026-09-15T11:29:36-07:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {}
+  },
+  "events": []
+}

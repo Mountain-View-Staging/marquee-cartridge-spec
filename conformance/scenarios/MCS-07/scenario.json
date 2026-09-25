@@ -1,0 +1,24 @@
+{
+  "id": "MCS-07",
+  "title": "Outside the event, a device in another timezone shows Day 1 at the venue's time of day",
+  "rules": "Reference §5.3, INV-01",
+  "cartridge": "base",
+  "engine": {
+    "slot": "portrait",
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/New_York",
+    "tickMs": 1000,
+    "seconds": 16,
+    "start": "2026-09-08T12:00:00-04:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {}
+  },
+  "events": []
+}
