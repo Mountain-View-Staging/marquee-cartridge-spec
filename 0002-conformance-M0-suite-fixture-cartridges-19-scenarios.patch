@@ -1,0 +1,3861 @@
+From 4f9c13cdbf9bd4bb26075c1d578edd28471256ad Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 25 Sep 2026 21:40:43 +0000
+Subject: [PATCH] =?UTF-8?q?conformance:=20M0=20suite=20=E2=80=94=20fixture?=
+ =?UTF-8?q?=20cartridges,=2019=20scenarios,=20reason-coded=20traces,=20run?=
+ =?UTF-8?q?ner?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ README.md                                     |  18 +-
+ conformance/README.md                         | 176 ++++++++
+ conformance/build.py                          | 400 ++++++++++++++++++
+ conformance/cartridges/base.db                | Bin 0 -> 94208 bytes
+ conformance/cartridges/board.db               | Bin 0 -> 94208 bytes
+ conformance/cartridges/boundaries.db          | Bin 0 -> 94208 bytes
+ .../cartridges/e3-off-during-takeover.db      | Bin 0 -> 94208 bytes
+ conformance/cartridges/e3-off.db              | Bin 0 -> 94208 bytes
+ conformance/cartridges/late-callback.db       | Bin 0 -> 94208 bytes
+ conformance/cartridges/orientation.db         | Bin 0 -> 94208 bytes
+ conformance/cartridges/schedule-change.db     | Bin 0 -> 94208 bytes
+ conformance/cartridges/short-takeover.db      | Bin 0 -> 94208 bytes
+ conformance/cartridges/two-days.db            | Bin 0 -> 94208 bytes
+ conformance/cartridges/two-takeovers.db       | Bin 0 -> 94208 bytes
+ conformance/cartridges/video.db               | Bin 0 -> 94208 bytes
+ conformance/run.mjs                           | 157 +++++++
+ conformance/scenarios/MCS-01/expected.json    |  45 ++
+ conformance/scenarios/MCS-01/scenario.json    |  24 ++
+ conformance/scenarios/MCS-02/expected.json    |  51 +++
+ conformance/scenarios/MCS-02/scenario.json    |  24 ++
+ conformance/scenarios/MCS-03/expected.json    |  75 ++++
+ conformance/scenarios/MCS-03/scenario.json    |  24 ++
+ conformance/scenarios/MCS-04/expected.json    |  61 +++
+ conformance/scenarios/MCS-04/scenario.json    |  24 ++
+ conformance/scenarios/MCS-05/expected.json    |  75 ++++
+ conformance/scenarios/MCS-05/scenario.json    |  24 ++
+ conformance/scenarios/MCS-06/expected.json    |  59 +++
+ conformance/scenarios/MCS-06/scenario.json    |  24 ++
+ conformance/scenarios/MCS-07/expected.json    |  21 +
+ conformance/scenarios/MCS-07/scenario.json    |  24 ++
+ conformance/scenarios/MCS-08/expected.json    |  18 +
+ conformance/scenarios/MCS-08/scenario.json    |  24 ++
+ conformance/scenarios/MCS-09/expected.json    |  36 ++
+ conformance/scenarios/MCS-09/scenario.json    |  30 ++
+ conformance/scenarios/MCS-10/expected.json    |  59 +++
+ conformance/scenarios/MCS-10/scenario.json    |  26 ++
+ conformance/scenarios/MCS-11/expected.json    |  49 +++
+ conformance/scenarios/MCS-11/scenario.json    |  28 ++
+ conformance/scenarios/MCS-12/expected.json    |  59 +++
+ conformance/scenarios/MCS-12/scenario.json    |  24 ++
+ conformance/scenarios/MCS-13/expected.json    |  29 ++
+ conformance/scenarios/MCS-13/scenario.json    |  24 ++
+ conformance/scenarios/MCS-14/expected.json    |  27 ++
+ conformance/scenarios/MCS-14/scenario.json    |  35 ++
+ conformance/scenarios/MCS-15/expected.json    |  29 ++
+ conformance/scenarios/MCS-15/scenario.json    |  24 ++
+ conformance/scenarios/MCS-16/expected.json    |  58 +++
+ conformance/scenarios/MCS-16/scenario.json    |  29 ++
+ conformance/scenarios/MCS-17/expected.json    |  35 ++
+ conformance/scenarios/MCS-17/scenario.json    |  26 ++
+ conformance/scenarios/MCS-18/expected.json    |  35 ++
+ conformance/scenarios/MCS-18/scenario.json    |  24 ++
+ conformance/scenarios/MCS-19/expected.json    |  48 +++
+ conformance/scenarios/MCS-19/scenario.json    |  24 ++
+ 54 files changed, 2098 insertions(+), 8 deletions(-)
+ create mode 100644 conformance/README.md
+ create mode 100644 conformance/build.py
+ create mode 100644 conformance/cartridges/base.db
+ create mode 100644 conformance/cartridges/board.db
+ create mode 100644 conformance/cartridges/boundaries.db
+ create mode 100644 conformance/cartridges/e3-off-during-takeover.db
+ create mode 100644 conformance/cartridges/e3-off.db
+ create mode 100644 conformance/cartridges/late-callback.db
+ create mode 100644 conformance/cartridges/orientation.db
+ create mode 100644 conformance/cartridges/schedule-change.db
+ create mode 100644 conformance/cartridges/short-takeover.db
+ create mode 100644 conformance/cartridges/two-days.db
+ create mode 100644 conformance/cartridges/two-takeovers.db
+ create mode 100644 conformance/cartridges/video.db
+ create mode 100644 conformance/run.mjs
+ create mode 100644 conformance/scenarios/MCS-01/expected.json
+ create mode 100644 conformance/scenarios/MCS-01/scenario.json
+ create mode 100644 conformance/scenarios/MCS-02/expected.json
+ create mode 100644 conformance/scenarios/MCS-02/scenario.json
+ create mode 100644 conformance/scenarios/MCS-03/expected.json
+ create mode 100644 conformance/scenarios/MCS-03/scenario.json
+ create mode 100644 conformance/scenarios/MCS-04/expected.json
+ create mode 100644 conformance/scenarios/MCS-04/scenario.json
+ create mode 100644 conformance/scenarios/MCS-05/expected.json
+ create mode 100644 conformance/scenarios/MCS-05/scenario.json
+ create mode 100644 conformance/scenarios/MCS-06/expected.json
+ create mode 100644 conformance/scenarios/MCS-06/scenario.json
+ create mode 100644 conformance/scenarios/MCS-07/expected.json
+ create mode 100644 conformance/scenarios/MCS-07/scenario.json
+ create mode 100644 conformance/scenarios/MCS-08/expected.json
+ create mode 100644 conformance/scenarios/MCS-08/scenario.json
+ create mode 100644 conformance/scenarios/MCS-09/expected.json
+ create mode 100644 conformance/scenarios/MCS-09/scenario.json
+ create mode 100644 conformance/scenarios/MCS-10/expected.json
+ create mode 100644 conformance/scenarios/MCS-10/scenario.json
+ create mode 100644 conformance/scenarios/MCS-11/expected.json
+ create mode 100644 conformance/scenarios/MCS-11/scenario.json
+ create mode 100644 conformance/scenarios/MCS-12/expected.json
+ create mode 100644 conformance/scenarios/MCS-12/scenario.json
+ create mode 100644 conformance/scenarios/MCS-13/expected.json
+ create mode 100644 conformance/scenarios/MCS-13/scenario.json
+ create mode 100644 conformance/scenarios/MCS-14/expected.json
+ create mode 100644 conformance/scenarios/MCS-14/scenario.json
+ create mode 100644 conformance/scenarios/MCS-15/expected.json
+ create mode 100644 conformance/scenarios/MCS-15/scenario.json
+ create mode 100644 conformance/scenarios/MCS-16/expected.json
+ create mode 100644 conformance/scenarios/MCS-16/scenario.json
+ create mode 100644 conformance/scenarios/MCS-17/expected.json
+ create mode 100644 conformance/scenarios/MCS-17/scenario.json
+ create mode 100644 conformance/scenarios/MCS-18/expected.json
+ create mode 100644 conformance/scenarios/MCS-18/scenario.json
+ create mode 100644 conformance/scenarios/MCS-19/expected.json
+ create mode 100644 conformance/scenarios/MCS-19/scenario.json
+
+diff --git a/README.md b/README.md
+index 8532119..6db3791 100644
+--- a/README.md
++++ b/README.md
+@@ -1036,14 +1036,16 @@ is not a table that failed to decode.
+ 
+ ### 11.1 Conformance suite
+ 
+-The **Marquee Conformance Suite** in this repository is a set of real SQLite cartridges, each with
+-a clock script and an expected trace of on-screen transitions. A Surface conforms when its trace
+-matches for every scenario. Scenarios cover, at minimum: basic rotation; takeover start (cut) and
+-end (natural finish); standard directives turning off mid-item; cursor resume past an excluded
+-entry; overlapping takeovers; synthetic time from a device in another timezone; show-clock jumps;
+-multi-page session boards interrupted by a takeover; video completion and watchdog; schedule
+-changeover; day scoping; empty orientation slots; a landscape file in a portrait slot; and
+-all-entries-failing without disarming.
++The **Marquee Conformance Suite** lives in [`conformance/`](conformance/README.md): fixture
++cartridges, and for each scenario its setup, clock, simulated-host behaviour, and the expected
++trace of on-screen transitions with stable reason codes. A Surface conforms when its trace matches
++for every scenario. The scenarios cover basic rotation; takeover start (cut) and end (natural
++finish); standard directives turning off mid-item; cursor resume past an excluded entry;
++overlapping takeovers; synthetic time from a device in another timezone; show-clock jumps;
++multi-page session boards interrupted by a takeover; video completion, load failure, and the
++watchdog; schedule changeover; day scoping; Studio preview; empty orientation slots and a
++landscape file in a portrait slot; all entries failing without disarming; the first-frame
++timeout; late callbacks from replaced items; and same-playlist boundaries and authored blanks.
+ 
+ ### 11.2 Checklist
+ 
+diff --git a/conformance/README.md b/conformance/README.md
+new file mode 100644
+index 0000000..cd3b056
+--- /dev/null
++++ b/conformance/README.md
+@@ -0,0 +1,176 @@
++# Marquee Conformance Suite
++
++The executable definition of what a Marquee Surface puts on screen. A Surface engine conforms to
++the specification when, for every scenario here, the trace it produces matches `expected.json`
++exactly.
++
++Both first-party engines — Swift and TypeScript — run this suite in CI. Third-party Surfaces are
++welcome to run it too.
++
++```
++conformance/
++  build.py            builds cartridges/*.db from the definitions in the script
++  cartridges/         the fixture cartridges (committed; rebuild with build.py)
++  scenarios/MCS-NN/   scenario.json (setup, clock, host behaviour) + expected.json (the trace)
++  run.mjs             validates the suite, or runs it against an engine
++```
++
++```bash
++python3 conformance/build.py                          # rebuild the cartridges
++node conformance/run.mjs                              # validate the suite itself
++node conformance/run.mjs --engine path/to/engine.js   # run every scenario
++node conformance/run.mjs --engine path/to/engine.js MCS-02 MCS-10
++```
++
++No dependencies: `python3` 3.9+ and Node 22.13+ (built-in `node:sqlite`).
++
++## The fixture show
++
++All cartridges describe one fictional show: `SHOW26` / `LOBBY3`, venue timezone
++`America/Los_Angeles`, Day 1 = 2026-09-15 (a whole venue-local day; `two-days` adds 2026-09-16).
++One location, `LOBBY3-A`, portrait. There are no media bytes — an engine never reads them — so
++manifest hashes are derived from file names.
++
++IDs are systematic so a trace reads on its own:
++
++| | |
++|---|---|
++| Playlist entry id | = its media item id = its position (playlist B uses 11, 12; a session board entry takes its position) |
++| Portrait file id | 100 + item id |
++| Landscape file id | 200 + item id |
++| Stills | 10 s (`display_duration`) |
++| Videos | 12 s (`intrinsic_duration`), no trim |
++
++The **base** show: playlist A = entries 1–4, all standard ON at 08:00; entry 2 has a takeover
++from 11:30 to 12:30. Other cartridges are variations, named for what they change.
++
++## `scenario.json`
++
++| Field | Meaning |
++|---|---|
++| `id`, `title`, `rules` | Identity and the rules under test |
++| `cartridge` | Which `cartridges/<name>.db` to load |
++| `engine` | `slot` and `orientation` the engine is configured with |
++| `clock.source` | `surface` (real/synthetic show clock) or `preview` (Studio transport) |
++| `clock.start` | Wall-clock start, ISO 8601 with offset |
++| `clock.tickMs`, `clock.seconds` | Tick every `tickMs`; run ticks `0 … seconds − 1` |
++| `clock.deviceTimeZone` | The process timezone while running. Engines must not depend on it. |
++| `clock.commands` | Preview only: `{ atSecond, set?, action? }` with `action` `play` or `pause` |
++| `host` | How the simulated host answers render items (below) |
++| `events` | `{ atSecond, type: "wallJump", deltaMs }` — a wall-clock correction; `setOrientation` |
++
++## The simulated host
++
++The runner plays the host, the same way for every scenario. At each tick, in order:
++
++1. Apply `events` and preview `commands` due at this second. The monotonic time is always
++   `second × tickMs`; a `wallJump` moves only the wall clock.
++2. Deliver scheduled video completions whose monotonic time has come.
++3. Call `tick(wall, mono)`. If it returns a render item, answer it:
++   - entry in `host.failEntries` → `onLoadFailed`, then **tick again at the same instant**
++     (up to 64 times), so a skip and its replacement land on the same tick;
++   - entry in `host.noFirstFrameEntries` → no answer at all;
++   - otherwise → `onFirstFrame` at once. A video not in `host.stuckEntries` then has its
++     completion scheduled at `mono + duration`. **Completions are delivered even if the item has
++     since been replaced** — a real player's late callback — and the engine must ignore them.
++4. A `blank` render item needs no answer.
++
++Session board page counts come from `host.boardPages` (`{ "<session_set id>": pages }`) through
++an injected board resolver. Production resolvers are checked against the same page counts
++separately.
++
++## The trace
++
++`expected.json` is `{ id, trace: [event, …] }`. Events are compared field for field, in order.
++
++| Field | Present on | Meaning |
++|---|---|---|
++| `t` | all | Show-clock time, ISO 8601 with the venue offset (compared as Unix ms) |
++| `kind` | all | `render`, `cut`, `jump`, `hold`, `blank`, `skip`, `warning` |
++| `code` | all | The stable reason code (below) |
++| `entry` | render, cut, skip | The playlist entry concerned (for `cut`, the item that was on screen) |
++| `set` | render | `standard` or `takeover` |
++| `file` | render of a media item | The media file for this orientation |
++| `board` | render of a session board | The session set |
++
++A `render` event is recorded when the host reports the item's **first frame**. Nothing is
++recorded for a natural end: the next `render` shows when it happened.
++
++### Reason codes
++
++Codes are the stable contract; any human-readable text an engine attaches is free to change.
++
++| Kind | Code | Meaning |
++|---|---|---|
++| render | `rotation.start` | First entry of a set: no cursor yet, or a takeover period beginning |
++| render | `rotation.next` | The first entry after the cursor's position |
++| render | `rotation.wrap` | Nothing after the cursor, so the first entry again |
++| cut | `takeover.activate` | The standard → takeover transition (a `time` hint reached) |
++| cut | `schedule.change` | A schedule boundary changed the active playlist |
++| cut | `orientation.change` | The host changed orientation |
++| cut | `cartridge.commit` | A new cartridge was committed |
++| jump | `jump.backward`, `jump.forward` | A show-clock jump (Reference §5.5); re-evaluation follows at once |
++| hold | `set.empty` | The working set is empty; the last frame stays |
++| hold | `set.all_failed` | Every entry of the working set failed in a row; retrying after 2 s |
++| blank | `schedule.blank` | The schedule entry's playlist is NULL: an authored blank |
++| skip | `media.load_failed` | The host reported a load failure |
++| skip | `media.no_first_frame` | No first frame within 10 s of monotonic time |
++| skip | `media.watchdog` | A video did not complete within its duration + 10 s |
++| skip | `media.not_playable` | A brand asset or other non-playable item in a playlist |
++| warning | `orientation.missing` | No orientation supplied; the orientation gate was skipped |
++
++**Holds are recorded on entry, not on retry.** A `hold` is recorded unless the previous
++`render`, `hold`, or `blank` event was a `hold` with the same code. Skips are always recorded.
++
++## The engine module
++
++`run.mjs --engine <module>` imports an ES module exporting:
++
++| Export | Contract |
++|---|---|
++| `loadCartridge(bytes) → Promise<Snapshot>` | The Loader |
++| `surfaceClock()`, `previewClock()` | Clock sources; the preview clock has `set(showMs)`, `play()`, `pause()` |
++| `createEngine({ snapshot, slot, orientation, clock, boardResolver })` | Returns an engine |
++
++The engine has `tick(wallMs, monoMs) → { renderItem?, trace }`, and `onFirstFrame(token)`,
++`onMediaCompleted(token)`, `onLoadFailed(token, reason)`, `setOrientation(o)`, each returning the
++trace events they caused. A trace event carries `showTime` (ms), `kind`, `code`, and as relevant
++`entryId`, `set`, `mediaFileId`, `sessionSetId`. A render item carries `token`, `kind`
++(`media`, `sessionBoard`, `blank`), `entryId`, and for media `media.contentType` and
++`media.duration` (seconds). The Swift runner in `MarqueeSurfaceEngine` reads the same folders and
++applies the same host rules.
++
++## Scenarios
++
++| ID | Scenario | Cartridge | Rules |
++|---|---|---|---|
++| MCS-01 | Basic rotation | `base` | Reference §6.5, §6.6 |
++| MCS-02 | A takeover starting mid-item cuts immediately | `base` | Reference §6.6, §6.7 |
++| MCS-03 | A takeover ending mid-item lets it finish; standard resumes after its cursor | `short-takeover` | Reference §6.5, §6.7 |
++| MCS-04 | A standard directive turning off mid-item lets it finish; the entry then drops out | `e3-off` | Reference §6.3, §6.7 |
++| MCS-05 | The cursor's entry is excluded during a takeover; standard resumes at the next position | `e3-off-during-takeover` | Reference §6.5 |
++| MCS-06 | Overlapping takeovers form one set in position order | `two-takeovers` | Reference §6.4 |
++| MCS-07 | Outside the event, a device in another timezone shows Day 1 at the venue's time of day | `base` | Reference §5.3, INV-01 |
++| MCS-08 | Synthetic time before the first directive holds, then plays when it turns on | `base` | Reference §5.3, §6.4 |
++| MCS-09 | Show-clock jumps, backward and forward, force re-evaluation | `base` | Reference §5.5 |
++| MCS-10 | A multi-page session board lasts duration × pages; a takeover cuts it mid-board | `board` | Reference §6.8, INV-08 |
++| MCS-11 | Video: completion, a load failure, and the watchdog | `video` | Reference §6.6, §6.9 |
++| MCS-12 | A schedule change to another playlist cuts immediately and resets cursors | `schedule-change` | Reference §6.2, §6.7 |
++| MCS-13 | Directives are scoped to the current day | `two-days` | Reference §6.3 |
++| MCS-14 | Studio preview: set, play, pause | `base` | Reference §5.4, §5.5 |
++| MCS-15 | Orientation slots: an empty slot excludes; a slot's file plays as authored | `orientation` | Reference §9.4, INV-14 |
++| MCS-16 | Every entry fails: the engine holds and retries, never disarming | `base` | Reference §6.6, INV-10 |
++| MCS-17 | No first frame within 10 s is a load failure | `base` | Surface Engine PRD §5.6 |
++| MCS-18 | A late completion from a replaced item is ignored | `late-callback` | Surface Engine PRD §5.6 |
++| MCS-19 | Same-playlist boundary is a no-op; a NULL playlist blanks | `boundaries` | Reference §6.2 |
++
++Expected traces were derived by hand from the specification and are reviewed before either
++engine exists. When an engine disagrees with a trace, decide which is wrong against the
++specification — never edit a trace to match an engine.
++
++## Adding a scenario
++
++1. Add or reuse a cartridge definition in `build.py`, and run it.
++2. Add `scenarios/MCS-NN/scenario.json` and `expected.json`.
++3. `node conformance/run.mjs` must report every scenario well-formed.
++4. Keep everything fictional (see the repository's `CLAUDE.md`), and run its leak scan.
+diff --git a/conformance/build.py b/conformance/build.py
+new file mode 100644
+index 0000000..8f6b885
+--- /dev/null
++++ b/conformance/build.py
+@@ -0,0 +1,400 @@
++#!/usr/bin/env python3
++"""
++Marquee Conformance Suite — fixture cartridge builder.
++
++Builds every cartridge in cartridges/ from the definitions below. No dependencies
++beyond python3 (3.9+, for zoneinfo). Run from this folder:
++
++    python3 build.py
++
++The data is fictional: show SHOW26, surface LOBBY3, venue America/Los_Angeles,
++Day 1 = 2026-09-15. There are no media bytes — engines never read them — so the
++manifest's hashes are derived from the file names.
++
++IDs are systematic so expected traces are easy to read:
++  playlist entry id  = item id = position (1, 2, 3 …; playlist B uses 11, 12)
++  portrait file id   = 100 + item id
++  landscape file id  = 200 + item id
++"""
++import hashlib, os, sqlite3
++from datetime import datetime
++from zoneinfo import ZoneInfo
++
++TZ = "America/Los_Angeles"
++Z = ZoneInfo(TZ)
++HERE = os.path.dirname(os.path.abspath(__file__))
++OUT = os.path.join(HERE, "cartridges")
++NOW = 1789000000000  # fixed created/updated stamp, so rebuilds are byte-stable in content
++
++DDL = """
++CREATE TABLE cartridge_meta (
++  cartridge_kind     TEXT    NOT NULL,   -- 'project' | 'surface'
++  format_version     TEXT    NOT NULL,   -- e.g. '25.0.1'
++  project_code       TEXT    NOT NULL,   -- the show code; roots the media keyspace
++  surface_id         TEXT,               -- the surface code; NULL in project.db
++  published_revision INTEGER NOT NULL,   -- monotonic per artifact
++  timezone           TEXT    NOT NULL,   -- IANA venue timezone
++  generated_at       INTEGER NOT NULL    -- Unix ms the artifact was produced
++);
++
++CREATE TABLE media_manifest (
++  media_file_id         INTEGER NOT NULL UNIQUE REFERENCES media_file(id),
++  deliverable_file_name TEXT    NOT NULL,   -- flat object key, §7.1
++  content_hash          TEXT    NOT NULL,   -- 'sha256:…' of these bytes
++  file_size             INTEGER NOT NULL,   -- bytes
++  content_type          TEXT    NOT NULL
++);
++
++CREATE TABLE project (
++  id                        INTEGER PRIMARY KEY,
++  cloud_uid                 TEXT    NOT NULL,
++  name                      TEXT    NOT NULL,
++  project_code              TEXT    NOT NULL,
++  timezone                  TEXT    NOT NULL,
++  show_wallpaper_item_id    INTEGER REFERENCES media_item(id),
++  desktop_wallpaper_item_id INTEGER REFERENCES media_item(id),
++  backing_item_id           INTEGER REFERENCES media_item(id),   -- default backing, §5.10
++  brand_style               TEXT,     -- style address 'company/style/version', §9
++  brand_style_item_id       INTEGER REFERENCES media_item(id),   -- the style book file, §9
++  created                   INTEGER NOT NULL,
++  updated                   INTEGER NOT NULL
++);
++
++CREATE TABLE project_days (
++  id         INTEGER PRIMARY KEY,
++  day        TEXT    NOT NULL UNIQUE,   -- 'YYYY-MM-DD', venue-local
++  start_time INTEGER NOT NULL,          -- Unix ms, venue-local 00:00:00.000
++  end_time   INTEGER NOT NULL,          -- Unix ms, venue-local 23:59:59.999
++  created    INTEGER NOT NULL,
++  updated    INTEGER NOT NULL
++);
++
++CREATE TABLE surface_config (
++  id                 INTEGER PRIMARY KEY,
++  name               TEXT    NOT NULL,
++  surface_id         TEXT    NOT NULL,   -- the surface code
++  published_revision INTEGER NOT NULL,
++  published_at       INTEGER NOT NULL,
++  created            INTEGER NOT NULL,
++  updated            INTEGER NOT NULL
++);
++
++CREATE TABLE surface_location (
++  id          INTEGER PRIMARY KEY,
++  config_id   INTEGER NOT NULL REFERENCES surface_config(id),
++  location_id TEXT    NOT NULL UNIQUE,   -- globally unique real-world id
++  orientation TEXT    NOT NULL,          -- 'portrait' | 'landscape' (the mount)
++  label       TEXT,
++  created     INTEGER NOT NULL,
++  updated     INTEGER NOT NULL
++);
++
++CREATE TABLE surface_schedule_entry (
++  id                 INTEGER PRIMARY KEY,
++  config_id          INTEGER NOT NULL REFERENCES surface_config(id),
++  slot               TEXT    NOT NULL,   -- 'portrait' | 'landscape' | 'demo_station'
++  timestamp          INTEGER NOT NULL,   -- most-recent <= now wins, per slot
++  playlist_id        INTEGER REFERENCES playlist(id),
++  background_item_id INTEGER REFERENCES media_item(id),   -- demo branding (behind)
++  overlay_item_id    INTEGER REFERENCES media_item(id),   -- demo branding (front)
++  created            INTEGER NOT NULL,
++  updated            INTEGER NOT NULL,
++  CHECK (
++    ( slot IN ('portrait','landscape')
++        AND background_item_id IS NULL AND overlay_item_id IS NULL )
++    OR
++    ( slot = 'demo_station'
++        AND ( background_item_id IS NOT NULL OR overlay_item_id IS NULL ) )
++  )
++);
++
++CREATE TABLE playlist (
++  id              INTEGER PRIMARY KEY,
++  name            TEXT    NOT NULL,
++  created         INTEGER NOT NULL,
++  updated         INTEGER NOT NULL
++);
++
++CREATE TABLE playlist_entry (
++  id                   INTEGER PRIMARY KEY,
++  playlist_id          INTEGER NOT NULL REFERENCES playlist(id),
++  position             INTEGER NOT NULL,                  -- authored order
++  resource_type        TEXT    NOT NULL,                  -- 'media_item' | 'session_set'
++  media_item_id        INTEGER REFERENCES media_item(id),
++  session_set_id       INTEGER REFERENCES session_set(id),
++  start_time_portrait  REAL,
++  end_time_portrait    REAL,
++  start_time_landscape REAL,
++  end_time_landscape   REAL,
++  created              INTEGER NOT NULL,
++  updated              INTEGER NOT NULL,
++  CHECK (resource_type <> 'media_item'  OR media_item_id  IS NOT NULL),
++  CHECK (resource_type <> 'session_set' OR session_set_id IS NOT NULL)
++);
++
++CREATE TABLE directive (
++  id        INTEGER PRIMARY KEY,
++  entry_id  INTEGER NOT NULL REFERENCES playlist_entry(id),
++  type      TEXT    NOT NULL,   -- 'standard' | 'takeover'
++  timestamp INTEGER NOT NULL,
++  on_screen INTEGER NOT NULL,
++  timezone  TEXT,               -- authoring context only; never evaluated
++  created   INTEGER NOT NULL,
++  updated   INTEGER NOT NULL
++);
++
++CREATE TABLE media_item (
++  id                INTEGER PRIMARY KEY,
++  name              TEXT    NOT NULL,
++  portrait_file_id  INTEGER REFERENCES media_file(id),
++  landscape_file_id INTEGER REFERENCES media_file(id),
++  display_duration  REAL,                                 -- seconds, stills
++  brand_member      TEXT,                                 -- style address, §9; NULL = not brand
++  created           INTEGER NOT NULL,
++  updated           INTEGER NOT NULL,
++  CHECK (portrait_file_id IS NOT NULL OR landscape_file_id IS NOT NULL)
++);
++
++CREATE TABLE media_file (
++  id                 INTEGER PRIMARY KEY,
++  content_type       TEXT    NOT NULL,   -- MIME of the imported file
++  codec              TEXT,               -- what the imported file needs to decode
++  width              INTEGER,
++  height             INTEGER,
++  orientation        TEXT,               -- advisory
++  aspect_ratio       REAL,               -- advisory
++  intrinsic_duration REAL,               -- seconds, video
++  created            INTEGER NOT NULL,
++  updated            INTEGER NOT NULL
++);
++
++CREATE TABLE session (
++  id          INTEGER PRIMARY KEY,
++  name        TEXT    NOT NULL,
++  abstract    TEXT,
++  presenters  TEXT,               -- JSON array
++  attributes  TEXT,               -- JSON array
++  source_id   TEXT,
++  source_type TEXT,
++  source_name TEXT,
++  created     INTEGER NOT NULL,
++  updated     INTEGER NOT NULL
++);
++
++CREATE TABLE session_set (
++  id                INTEGER PRIMARY KEY,
++  name              TEXT    NOT NULL,
++  render_modes      TEXT    NOT NULL DEFAULT '["simple"]',   -- JSON array
++  duration          REAL    NOT NULL DEFAULT 8,              -- seconds per board page
++  backing_item_id   INTEGER REFERENCES media_item(id),
++  logo_item_id      INTEGER REFERENCES media_item(id),
++  schedule_template TEXT,               -- JSON diff vs the Surface baseline; NULL = baseline
++  source_id         TEXT,
++  source_name       TEXT,
++  brand_style         TEXT,                               -- overrides the project's, §9
++  brand_style_item_id INTEGER REFERENCES media_item(id),  -- overrides the project's, §9
++  created           INTEGER NOT NULL,
++  updated           INTEGER NOT NULL
++);
++
++CREATE TABLE session_set_entry (
++  id              INTEGER PRIMARY KEY,
++  session_set_id  INTEGER NOT NULL REFERENCES session_set(id),
++  session_id      INTEGER NOT NULL REFERENCES session(id),
++  session_time_id TEXT,
++  start_time      INTEGER NOT NULL,
++  end_time        INTEGER NOT NULL,
++  source_room_id  TEXT,
++  room_name       TEXT,
++  created         INTEGER NOT NULL,
++  updated         INTEGER NOT NULL
++);
++
++CREATE TABLE media_file_variant (
++  id            INTEGER PRIMARY KEY,
++  media_file_id INTEGER NOT NULL REFERENCES media_file(id),
++  kind          TEXT    NOT NULL,   -- 'original' | 'optimized' | 'webOptimized' | 'wifiOptimized' | …
++  file_name     TEXT    NOT NULL,   -- flat object key, §7.1
++  content_type  TEXT    NOT NULL,
++  codec         TEXT,               -- required for video
++  width         INTEGER,
++  height        INTEGER,
++  file_size     INTEGER NOT NULL,
++  content_hash  TEXT    NOT NULL,   -- 'sha256:…' of THESE bytes
++  created       INTEGER NOT NULL,
++  updated       INTEGER NOT NULL
++);
++
++"""
++
++def ms(local):
++    """'2026-09-15 08:00:00' in the venue timezone -> Unix ms."""
++    return int(datetime.strptime(local, "%Y-%m-%d %H:%M:%S").replace(tzinfo=Z).timestamp() * 1000)
++
++def day(d):
++    return (d, ms(d + " 00:00:00"), ms(d + " 23:59:59") + 999)
++
++# ── cartridge model ────────────────────────────────────────────────────────────
++
++def still(i, seconds=10, portrait=True, landscape=True, portrait_file=None):
++    return dict(id=i, kind="still", seconds=seconds, portrait=portrait, landscape=landscape,
++                portrait_file=portrait_file)
++
++def video(i, seconds=12):
++    return dict(id=i, kind="video", seconds=seconds, portrait=True, landscape=True, portrait_file=None)
++
++def base(**over):
++    c = dict(
++        days=[day("2026-09-15")],
++        items=[still(1), still(2), still(3), still(4)],
++        playlists={1: [1, 2, 3, 4]},
++        schedule=[("portrait", "2026-09-15 00:00:00", 1), ("landscape", "2026-09-15 00:00:00", 1)],
++        directives=[(e, "standard", "2026-09-15 08:00:00", 1) for e in (1, 2, 3, 4)]
++                   + [(2, "takeover", "2026-09-15 11:30:00", 1), (2, "takeover", "2026-09-15 12:30:00", 0)],
++        session_sets=[],
++        project_backing=None,
++    )
++    c.update(over)
++    return c
++
++def std(entries, when="2026-09-15 08:00:00"):
++    return [(e, "standard", when, 1) for e in entries]
++
++short_takeover = std((1, 2, 3, 4)) + [(2, "takeover", "2026-09-15 11:30:00", 1),
++                                      (2, "takeover", "2026-09-15 11:30:24", 0)]
++
++CARTRIDGES = {
++    # MCS-01, 02, 07, 08, 09, 14, 16, 17
++    "base": base(),
++    # MCS-03
++    "short-takeover": base(directives=short_takeover),
++    # MCS-04
++    "e3-off": base(directives=base()["directives"] + [(3, "standard", "2026-09-15 08:00:25", 0)]),
++    # MCS-05
++    "e3-off-during-takeover": base(directives=short_takeover + [(3, "standard", "2026-09-15 11:30:05", 0)]),
++    # MCS-06
++    "two-takeovers": base(directives=base()["directives"] + [(4, "takeover", "2026-09-15 11:30:00", 1),
++                                                             (4, "takeover", "2026-09-15 12:30:00", 0)]),
++    # MCS-10
++    "board": base(
++        items=[still(1), still(3)],
++        session_sets=[dict(id=1, duration=8)],
++        playlists={1: [1, ("board", 1), 3]},
++        directives=std((1, 2)) + [(3, "takeover", "2026-09-15 08:00:20", 1),
++                                  (3, "takeover", "2026-09-15 08:00:25", 0)]),
++    # MCS-11
++    "video": base(items=[video(1), video(2), still(3), video(4)], directives=std((1, 2, 3, 4))),
++    # MCS-12
++    "schedule-change": base(
++        items=[still(1), still(2), still(3), still(4), still(11), still(12)],
++        playlists={1: [1, 2, 3, 4], 2: [11, 12]},
++        schedule=[("portrait", "2026-09-15 00:00:00", 1), ("portrait", "2026-09-15 08:00:25", 2)],
++        directives=std((1, 2, 3, 4, 11, 12))),
++    # MCS-13
++    "two-days": base(
++        days=[day("2026-09-15"), day("2026-09-16")],
++        items=[still(1), still(2)],
++        playlists={1: [1, 2]},
++        directives=std((1, 2)) + std((1, 2), "2026-09-16 08:00:00")
++                   + [(2, "takeover", "2026-09-15 20:00:00", 1)]),
++    # MCS-15
++    "orientation": base(
++        items=[still(1, portrait=False), still(2, portrait_file=202), still(3)],
++        playlists={1: [1, 2, 3]},
++        directives=std((1, 2, 3))),
++    # MCS-18
++    "late-callback": base(
++        items=[video(1), still(2), still(3)],
++        playlists={1: [1, 2, 3]},
++        directives=std((1, 2)) + [(3, "takeover", "2026-09-15 08:00:05", 1)]),
++    # MCS-19
++    "boundaries": base(
++        schedule=[("portrait", "2026-09-15 00:00:00", 1), ("portrait", "2026-09-15 08:00:15", 1),
++                  ("portrait", "2026-09-15 08:00:35", None)],
++        directives=std((1, 2, 3, 4))),
++}
++
++# ── writer ─────────────────────────────────────────────────────────────────────
++
++def h(name):
++    return "sha256:" + hashlib.sha256(name.encode()).hexdigest()
++
++def build(name, c):
++    path = os.path.join(OUT, name + ".db")
++    if os.path.exists(path):
++        os.remove(path)
++    db = sqlite3.connect(path)
++    db.executescript(DDL)
++    x = db.execute
++    days = c["days"]
++    x("INSERT INTO cartridge_meta VALUES ('surface','25.0.1','SHOW26','LOBBY3',1,?,?)", (TZ, NOW))
++    for n, (d, s, e) in enumerate(days, 1):
++        x("INSERT INTO project_days VALUES (?,?,?,?,?,?)", (n, d, s, e, NOW, NOW))
++    x("INSERT INTO surface_config VALUES (1,'Lobby 3','LOBBY3',1,?,?,?)", (NOW, NOW, NOW))
++    x("INSERT INTO surface_location VALUES (1,1,'LOBBY3-A','portrait','Lobby 3 — north wall',?,?)", (NOW, NOW))
++
++    files = {}
++    for it in c["items"]:
++        i = it["id"]
++        pf = it["portrait_file"] or (100 + i if it["portrait"] else None)
++        lf = 200 + i if it["landscape"] or it["portrait_file"] else None
++        for fid, (w, hgt) in ((pf, (1080, 1920)), (lf, (1920, 1080))):
++            if fid is None or fid in files:
++                continue
++            if fid >= 200:
++                w, hgt = 1920, 1080
++            files[fid] = (it["kind"], w, hgt, it["seconds"])
++        x("INSERT INTO media_item VALUES (?,?,?,?,?,NULL,?,?)",
++          (i, f"Item {i}", pf, lf, it["seconds"] if it["kind"] == "still" else None, NOW, NOW))
++    for fid, (kind, w, hgt, secs) in sorted(files.items()):
++        is_video = kind == "video"
++        ctype, codec = ("video/mp4", "H.264") if is_video else ("image/png", "PNG")
++        ext = "mp4" if is_video else "png"
++        fname = f"file-{fid}.{ext}"
++        x("INSERT INTO media_file VALUES (?,?,?,?,?,?,?,?,?,?)",
++          (fid, ctype, codec, w, hgt, "portrait" if hgt > w else "landscape", w / hgt,
++           float(secs) if is_video else None, NOW, NOW))
++        x("INSERT INTO media_manifest VALUES (?,?,?,?,?)", (fid, fname, h(fname), 1024, ctype))
++        x("INSERT INTO media_file_variant VALUES (?,?,'original',?,?,?,?,?,?,?,?,?)",
++          (fid, fid, fname, ctype, codec, w, hgt, 1024, h(fname), NOW, NOW))
++
++    for s in c["session_sets"]:
++        x("INSERT INTO session_set (id,name,render_modes,duration,created,updated) VALUES (?,?,'[\"simple\"]',?,?,?)",
++          (s["id"], f"Room {s['id']}", s["duration"], NOW, NOW))
++        for k in range(1, 4):
++            x("INSERT INTO session VALUES (?,?,NULL,'[]','[]',NULL,NULL,NULL,?,?)",
++              (k, f"Session {k}", NOW, NOW))
++            x("INSERT INTO session_set_entry VALUES (?,?,?,NULL,?,?,NULL,?,?,?)",
++              (k, s["id"], k, ms(f"2026-09-15 {8 + k:02d}:00:00"), ms(f"2026-09-15 {8 + k:02d}:45:00"),
++               f"Room {s['id']}", NOW, NOW))
++
++    x("INSERT INTO project VALUES (1,'00000000-0000-4000-8000-000000000026','Show 26','SHOW26',?,NULL,NULL,?,NULL,NULL,?,?)",
++      (TZ, c["project_backing"], NOW, NOW))
++
++    for pid, entries in c["playlists"].items():
++        x("INSERT INTO playlist VALUES (?,?,?,?)", (pid, f"Playlist {chr(64 + pid)}", NOW, NOW))
++        for pos, e in enumerate(entries, 1):
++            if isinstance(e, tuple):  # ("board", session_set_id); entry id = position
++                x("INSERT INTO playlist_entry VALUES (?,?,?,'session_set',NULL,?,NULL,NULL,NULL,NULL,?,?)",
++                  (pos, pid, pos, e[1], NOW, NOW))
++            else:
++                x("INSERT INTO playlist_entry VALUES (?,?,?,'media_item',?,NULL,NULL,NULL,NULL,NULL,?,?)",
++                  (e, pid, pos, e, NOW, NOW))
++
++    for n, (slot, when, pid) in enumerate(c["schedule"], 1):
++        x("INSERT INTO surface_schedule_entry VALUES (?,1,?,?,?,NULL,NULL,?,?)", (n, slot, ms(when), pid, NOW, NOW))
++    for n, (entry, typ, when, on) in enumerate(c["directives"], 1):
++        x("INSERT INTO directive VALUES (?,?,?,?,?,?,?,?)", (n, entry, typ, ms(when), on, TZ, NOW, NOW))
++
++    db.commit()
++    db.execute("PRAGMA foreign_keys = ON")
++    bad = db.execute("PRAGMA foreign_key_check").fetchall()
++    assert not bad, (name, bad)
++    db.execute("VACUUM")
++    db.close()
++
++if __name__ == "__main__":
++    os.makedirs(OUT, exist_ok=True)
++    for name, c in CARTRIDGES.items():
++        build(name, c)
++        print("built", name)
+diff --git a/conformance/cartridges/base.db b/conformance/cartridges/base.db
+new file mode 100644
+index 0000000000000000000000000000000000000000..2fd935824fe6d5774c1c64defd8b745926819df4
+GIT binary patch
+literal 94208
+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
+A`2YX_
+
+literal 0
+HcmV?d00001
+
+diff --git a/conformance/cartridges/board.db b/conformance/cartridges/board.db
+new file mode 100644
+index 0000000000000000000000000000000000000000..69f43228ab060ca885207d9f0a0eb0b591ae7815
+GIT binary patch
+literal 94208
+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
+
+literal 0
+HcmV?d00001
+
+diff --git a/conformance/cartridges/boundaries.db b/conformance/cartridges/boundaries.db
+new file mode 100644
+index 0000000000000000000000000000000000000000..3866bdd0fa4c4bcb2251809caabf06963304a138
+GIT binary patch
+literal 94208
+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
+
+literal 0
+HcmV?d00001
+
+diff --git a/conformance/cartridges/e3-off-during-takeover.db b/conformance/cartridges/e3-off-during-takeover.db
+new file mode 100644
+index 0000000000000000000000000000000000000000..1fccada1087cf2528a8bd2b116f58791d17ad255
+GIT binary patch
+literal 94208
+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
+z{OZdmZ*MH!eRu6^>8k945BRdM`*ZvGZ=&b&Y%0Dh6e2}69>BmM0$40+_h9+;I2Egg
+zx%|-P!y6a2&dV!b{(KB;u6Nnzzp`=yWFht+J9lPVCQ(HA^5=AztbE?ja)S@PkU9S*
+z>eNV;&C?e)P?fE2F7L8Pc0&?Tc^Cet9MrnRgXXQ%4&c>jiK|9oG}a_?5fMP$uoD*2
+zKxQKPu9+<Mb{HK(`wpshp&essWE5=WyQ1hc@O}9bEISX&(VrVeKJggX8?$cEXZIw{
+zh<xAZKpu6XK7giCT&M9^aGE&dMg-zH9_)3qkQb@AA=lWz#_$r0B3LXwHE=fyd6T>n
+z^9I@BWOL0UQrCx+l>R!JtF<MEFG7LW!D@XOmzrOFp54}1I()eH($Qk;m(`X#C)Jd(
+zS|W;cjrviId2StX<3U8=5(b;_#csr6XmnWwbtO4g;V<GsR0%Q|M1ebmOTmrFXRT5a
+zA0p4}SaQv*9801_94j&xMc$8g_5A!QfBv66_?pxlF8=dkd*O!*j~x2bLu+sVHza@r
+zkN^@u0!RP}AOR$R1peO%T%EhRwJ1$3ALH*_o4R_qUYFhz{dv42YfV#H>+k}$>YLbR
+zq^x_2I=be&j_nw}?i-3_GlS`d?b^h%RL`?r#WobrW7N@H$8s%AZFy8{sftfD-C|Dh
+zy=Gv{;}v7xtr(+U(-_aCRJV!E6rHKWZ&?=c9K&?A7Ii2!Y0EP#op`=Vs6t)ld8Vl=
+zt_OxWo@KVoiZPE>jCrSGjCM_9G}=-$)$vT1+Kf52OBG@=OKq8k<|?XYX}Y01s_Scj
+z!Bt#hn!ZAHN<7Ul9EVhlIbAX4?TRt#wT;nD*E1B`vP{L%fre$68u-hxz#1KR8Ky;i
+zkF`w4&`r%VJj3=J#q}v`>9$rjW_D*07QD+tW~XF|Ivz3ng?6Ke@lDsTeBah>gZNs@
+zB9`Yny5(xj_LvTt6GeezCL?akvwg>EnW|$M#9@kNskCBBr))~6V#-*&luRLxVyLc0
+z9Ys|fTVobv!#sx>6x^gJEr;0@BGpxh4uK5LRQy&;Yv~p-RU2Zy<f2)>Yzp)ur~Tqd
+zJyMmiXepVZ>7L4n;~0ccyXDv_A$rTF)G#c=0dJ_Ps+iREd=Jig3Z;~|x^9^a{ASv|
+zQZ|K^O<@&N#$u&p3N?HU9AaCFVL6)V!5);}ZE1?FGN?|fsWRJVx~u4(r8uTdRH|Do
+N9irIvpb;pV@;_)&8KD3G
+
+literal 0
+HcmV?d00001
+
+diff --git a/conformance/cartridges/e3-off.db b/conformance/cartridges/e3-off.db
+new file mode 100644
+index 0000000000000000000000000000000000000000..0ff1fd67b6dc57543d1bc33937d2c63f5858b760
+GIT binary patch
+literal 94208
+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
+RrMlJ9A&OlO8iArI{{wXH8Pfm&
+
+literal 0
+HcmV?d00001
+
+diff --git a/conformance/cartridges/late-callback.db b/conformance/cartridges/late-callback.db
+new file mode 100644
+index 0000000000000000000000000000000000000000..48b7c695c06d031e96da4072b656eeccf3960144
+GIT binary patch
+literal 94208
+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
+GmHB^MrUw!L
+
+literal 0
+HcmV?d00001
+
+diff --git a/conformance/cartridges/orientation.db b/conformance/cartridges/orientation.db
+new file mode 100644
+index 0000000000000000000000000000000000000000..7d136569815b29d3b5e929f4662c1697578b96b8
+GIT binary patch
+literal 94208
+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
+
+literal 0
+HcmV?d00001
+
+diff --git a/conformance/cartridges/schedule-change.db b/conformance/cartridges/schedule-change.db
+new file mode 100644
+index 0000000000000000000000000000000000000000..7245af57eae87c2f04a25a30bb0dbeead19347f1
+GIT binary patch
+literal 94208
+zcmeI5dyFK<S-^Ytar@qJY+y0R$$d$Vy_IhFs^8t`1hcj`@x|-C<Q{;DqM@p*dbe{k
+z)8n4myKEG}T^t(+65x*@MMy|afJDHbkbj6|i4Z06LjuW$NT3MG1}PvUB$OZ`h{RX@
+zn10Oc+FlYlvA@>dOi%Y$Uw!razN+r7s_VM)f$eZ0)F6sGbf6l_9ZI92{DP_~igG9X
+zTY-Q1_BPm=%74IjqqKk6?w!iUjZaR)*@@<VNtvH&{!hAdSOPqb1dsp{Kmter2_OL^
+zfCP{L5<mh-015m62`o23+2Z^Xd^Vb2Rp1XdB!C2v01`j~NB{{S0VIF~kN^@u0!ZLT
+zn81a`?8&?DzI)D??(fF|^@VP2kPYq1LzjL@x3@3dfB&P#W=F)KPtR{h{nlo8SF}aH
+z@$^$)`n)2a{}&g2MrnSwNtVB{{Hsg<z4W_FtBcPpUR(J0g~#CpZb$$LAOR$R1dsp{
+zKmthMEkR&+ac1Jo?UNJtC@%$JTdeDvzR~OM_V=i6*%v&^6vDFvaZRB+9t#+80?*ei
+z;yXHVgzak{W1j1Kmd+Wqxo%j2;ToJUTeG=2rGy>2E6#()-Gw}(7qg7CQbxA!JBG#t
+z^)y4H#DTkeVNsJZPXqy+GIXD4fk!+qAk1}{%>&mqeNLIC=~TDN8O`Szy^v-^%u+_&
+zGxPu~_Q1}-B91F8VOTD6sqbjM?=s>-;e5e8op}y(bPaORO^pOpHyq)WGn&gYdOpj@
+zC}rd`&JCBkf*3-hf$2CDDA`OmxyL!M@h!)oexOlKI1|2a+Xi7iWa{~jZB|M&n`iV~
+zmQmS9IyZ@~dA`lK3(j&GC)5^>X4;m{h^9N>6T{P3po960fS2rmaD!8Dqvd(DT%wsg
+zqi3^>%0A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
+
+literal 0
+HcmV?d00001
+
+diff --git a/conformance/cartridges/short-takeover.db b/conformance/cartridges/short-takeover.db
+new file mode 100644
+index 0000000000000000000000000000000000000000..20abb8abd6c5da46ccb65b2cb084e5b5f5626b1c
+GIT binary patch
+literal 94208
+zcmeI5TWlm(T7au<_q6R9yK@1|Xx5sV&5k^l#-6%#-6jc%H*u0l98Y#GK(tylr|O()
+z*G_krQ`J2aM-j~AMxwp&vJWdHP<9cC5Rb4gEaD-ow3`bO4~te}g%Aly3ol403qpXz
+zf2!(qUAjG!i~^Y?f5~=NSN-Qd|M~v^oT@tKxX$@6Z3P1+`(e~016h}DlWH~Tep!|z
+z=??f^f?u)S4m&gA3w+iJ`}^(QA+2A2r4DDOn*YvaeyRCi>CS!$@Hi4c0!RP}AOR$R
+z1dsp{Kmter2_OL^@DUPNY=W{w^9%5|*8G74Ke!<QB!C2v01`j~NB{{S0VIF~kN^@u
+z0=F=M)3w<nhYuf~)9djt@`=YZV_jKS&p&eZ*EDnM>=(cIq`uK(QQ(nNTVdSZ=yzC`
+z#kE&o{@!;b{`^0C=+C9*x0}l1j~0Jp;Xf9>xo{i~;D!W{01`j~NB{{S0VIF~kN^_6
+zg$Q(J8&k)x9ho{Rz2gU6wx%hq_1%6a-XWS{o~Dkj`L1I-hOhgEV%f}Kx?#IE@hsKz
+zY*(=j#q$_-G}p0QOH*4O)mp0J6HT|6Gb05((qX4SW2Yf9dOOQVFJ$Dol<GFInW8h5
+z_$|vKo@1D<)}jujCT)3!r4!Fr300`eJkK<B#q}Ul$Ft0qS<L8w$mp#sBdw5;Mq7%e
+zI-coLn=!|BsX|O<sV&pcTt(F^O*eE$b$t!YcNLeIrms+)5>GP>$05ax>LQ~zvy9YY
+zM!M;GhGJWmsW>{6!ZJ(^7&;c@q(eCk(;~jdTBc*@rsf%*VSA3^`joYFTPtSd&opX@
+zk9LxL)RK#Q(={yLw{_bfzSgpc<@t_oxf-)Qrh{gpC~(YV#BF)D?^rEUbu5E8OwlZr
+zmhzd-^66yx6g@;7#ZX<1I*O_|w#F>b!90f<6yPaJ%V9PJzq<<2AuIr~;<s8_OSg!r
+z+7LknaQ;-5kDujJa**z+j5v-#2(?>|trDWQd`b<&G8}-Us;XjA*YiC%>nW5{;_A9(
+zGQertzEaGmmgU2;e2V^|hOYr9+foe6(M%8az;3stDYnWW^i)%2w$F4|(LGCXOq-}w
+zw^}+xh3i3ODC9E_^?A1WR}#$2|9SIYoB!N=xB1iNkKq7rNB{{S0VIF~kN^@u0!RP}
+zAOR$R1dzb3N#MZrR84wkHu-qFk$k*$Ao+N+UZ1Yjc4qkB&NTn)Pt8o%=2$xa|2tCi
+zJGW+$&?+Q=1dsp{Kmter2_OL^fCP{L5<mi<2?AfKEl3xS9M+S<*6T{Pt?|z_n7p8@
+z+58Xxnr@nTekZ&l!$&gzf8Uw^`TYM{^KT^h!3_x@0VIF~kN^@u0!RP}AOR$R1dsp{
+z_#_cntu>@$b=WjTGuISnO*Lw-{=wh9a<%sAA5H($Z>3NE>0dtozt;RW34U-x0!RP}
+zAOR$R1dsp{Kmter2_OL^fCN4@1Qw=`&E@?9>HPnnNX?&oY6^%2K>|ns2_OL^fCP{L
+z5<mh-00|%gB=A`wuu_|qjvStYDF9oc>+Z>Vx(q;Z<i9xoAJ_l;tON#@6A2&zB!C2v
+z01`j~NB{{S0VIF~KDh*7{Xc1LdD(%7{baGfwT;~{8bl-*WDo!HyH~#@_u<%%e1&wo
+z#a@7P{{Q<@^Zie5`O$JDfCP{L5<mh-00|%gB!C2v01`j~NMM}6!Rh5W(Nn<Z|4%jl
+zL~8ym{J{+gAOR$R1dsp{Kmter2_OL^fCP{L61Y_e9G{w(=8o3qB&lBSl0J<+vdhH#
+z{a*gwccpZE{|hw`TTaEqe1LJOg@x}+^U{;j!e1Wz&xPNdeZOJPe!u>MnJ-MgCp`(L
+zZhrgi#(ZPRacbXK9T2z6;$h?ykF{fOhtXk|wOM}<?M*&<@PTui8y7a^3maeD+LR~D
+z$S3AyIiPZNJF|UZ^Wn{N@)PIIJic-6N%^tOCr^T;7xw+2(=H|ulG|r5$lDjUw&Zi0
+z4{e^?+<sv5{3y>f*@=LzawTy$98~hVu=(p3_#vU>B<!!P$twc*iu|m+GICP#jj~?Y
+zjt68Ag#8uJItY3UzV>!=)m76nt-UZFtVPTNbn-p-!i0`1@|B<;pOkl5lo$uvcDrP+
+z8^nV`QH8cb`Gk}xnM=G&ohTgkX*(FO9#1?WRgcktBmzmgw5Yr|vKv7h2K|nF!eu)_
+zpRR%>;bj(qF(ZW_ev>-=DC`foN-tt$z)DURDn||gvEeTLAYu<ZviZPcNgT=YiPX7g
+zw&fGK?@ksx$FonjjqL~JNxaUdQN&MIi+(0Mmnu1XF42``d9S=ujfgy-6Z_>PV)pF0
+z{WFt!cB}KN_stzxI=@zvz%T6S_^B><xJ`zGF!|mV)vFtNNl3QU>XG^9muDMGYiqR^
+zd!?!@QdH&VCRSe|Jyvmr2d`6Og@|zSjjO82jYo2|j>;Fe&wT0PW>%>>-Oz<OQG4>R
+zA3QZ=GK5%n?MfJRDKswtFpL7IZwZ<)O<YB`U9Zxg80;{)2em5+;x2JnH%rA$OPZ%b
+zU{?#v&le-QdVYTOxu+V9rPbBii_0bdq>Y#GPWo+jqHof3W1h*36d6_=)F(YAN?#}r
+z-xYpJ8qKWXFEqVXhh(1Mlrn3fy`~Jxy*qTFF@q~cJ7SlE7+TCx8&b?87bBv97DgAv
+zKDy>(e)V~&-dH+*y!PS)3G>}3{3`PXZA$jy;{JgW@8X#%ZDDYQGAI;~tJunMyz(S$
+zYmYy^_TYmnC*{kmKV)mX7IXn4TwbC<n_p<g@d@q8b?ah3cv|kk6{V0~R+Q7p&pNCx
+z1j-m(BobA5dp?4EV`Z9t+Hl}!-EkaHR&a>`Fj5Am3vpjPJ-=!lII#5C@%`GhBI~wV
+z{MLABYNoMt<VfvnUoQGC6RA(~Sk+m1Ig>qMTg7)?HyqOTun_qoUDcJmqD-hynfN4W
+zQ6OGXgx2(Pk~H_%Ghx3X$>k?W$FP1>n@<$og&WK0!(G6kAe6<I2I1}m4T4kQPNZ^A
+z0m=Eb6>cSp*=7a2adHrZhL|#+47&rN>7@L|>&CjuV>h`^ft#<rZWRURkT&O_AQd2#
+zMl6oy6))`VlK$SQ<nSrDt>Fz3RI)c-=OJ9sS+V(p+M6_diA`=8UXuNw%Y^bm{m3AQ
+z521XY>LSFl&#E*uU{h1+MdQAt5~P0Uk$&LA-DvsSbg4>|&m}b@J;d!U+;)yNHCcOA
+zym;pc#hoZ+-2e#lM}~HyFsT+}Q3}NZKlxo~??acjyz(Ws$Dvv4D)<C0Xal%vw|7Xq
+zlats-%SyaMG{Zdo?$y^;<j|MF9Wj&Ly#b3sRboUOJW~#sD$nc^CK8GK2Yb7Pbk+Rl
+zSMQ!auyl5Hzb33qx~-PK&%m?UEPp<G;dCwW<jbcLPkPYSM*;1yc8?86`P)><ljU=X
+zC-Xy42h$tvs?}LhSF#o;d8WxO+x&6H52GF#w6j{0z~4s$TkovPE1I#ctgAfbgeGmD
+zlu3o*i`?<n?`}B?!$Hj5CMSe=D8#$)un9WF-A|zn<~q}wo<|16Qlc}xSIN{S4~0Qr
+z*tJewZsZ5JBT0j^7xu$J*bltq@eG_2zyt6AR7_}$_bKO@jqQ!}Qanlo={u|s6$GAx
+z+WX$^@RC89vdei=Hemq#2SCh=M28-u^Q-Cm|K5|D@7?^PKBhzhNB{{S0VIF~kN^@u
+z0!RP}AOR$R1U_~GM{0Gx8sHPz$gsRo{Qv)j*`G=Enk>yO&-{G4U6U97`q0jtIkyh0
+z0{-&HZuu=>zzg>*HkOVZtG%3#^Q2vHe2hHbyS>z@mLK0|&_Hw@Rt5{kyZ^^Jg?RT<
+z_F{*$Z<P0H33X$A>b&Dp^s0_#AdJ#|pky?N`AmT}9YTK-AAEzp+l{Si=ULv3CiZw2
+zI)gq?3L{DJAn0~^M{3$n-eWx%W-BDyq@FmTBLC#dlFsq0KR)RizdIdl=aV3ypP$b@
+zfE>m<%S9=#-$_16Dw`ZI#+wi27Y5%afXxM9?EU#W7aB`PkJersCVjIsfax0p=-?jh
+z+*S&n(cwz$2n#DQlgyz>y4;1p$hJZ_h{+!5lp7HedDrw<oB?})z5=6$eM%yl^zaVI
+zCB~;UlxM6|v*qJhVIL;>M2t-ys?9q;CwU*Tg_#LEFy;<(Ns><Vr=f$t-`%@g?lZ_;
+zW|v8K$ooD^?w({uK6F?;JHPtU@k2?E`Pb{|0HByNlkhC#YL@&{K38#49<rlKS@G8>
+zd7(RcBzryA38(FbagbKT37H866YA%PD@>jVBg!Jc2V+~|FoG#rc_d624lLx8?efsb
+z8@aUmABM@Gd1%LMz~du7TNn-!UMK`+E+@(t=Zf;A6H*rBMoC9w+-*^5v*rpc5@Xhd
+zQ~Ak!bi6&P&S^teOqrj`Q;s({z(|-oatCP1gR#JKl3>>Clzns0uat?)FzY90m)8G6
+ztHUedzIqDeR=A$Rcdn?=yg}=A?U93xrRC+?b6%;Qh%jE5ST`ot3Q^Wdg{WTi#+o81
+zN)@tDbv?dSnfX;on)%r+a65q}AOR$R1pdzmys*|xpI442O?G;j;Ew|N-W{c8J3l_L
+z;VxXzDsA_KISymZH>8H!g~!i4zL`y|kb@q-I>T)Uw~4pzFoN$DE{d?b&yC@g9T@KB
+zqx2;ea9_wM4E~2O>nEEucqO3lqPx<TT@Uz`afbz+9WhHV6)K!9&i2eS>|+k0Fd;FF
+z_CO_xclq4E<QXYTH0e2s--P9f0+{~}leYsef4bTy(dbd?azI%);fe@(RxfzGq!VsB
+zs$%K*|4h@Dnm=v+Y4aPfgBub+0!RP}AOR$R1dsp{Kmter2_OL^aFYa%&n!rDwPUp;
+zdA&Z9_ukJG2jh=Vm&B%XvFVc7R7q?q7n>@I-BkmzxnuC20NCpFT&gI<=l>sA{9~#4
+zqvr24f3>;1_>b@fHza@rkN^@u0!RP}AOR$R1dsp{Kms2h0qek=R9mjk>h=1Rn2uU|
+z^|gz?FKzT#6nNy+Rv5Q8`W*(Zn=3x!TJRD)NH|wbc>n!3N;or0I3s4m)?WR?Z~f2J
+z8zr0`C7k|n38zL0r#@6dvo@E!?GMWMq0;f^|C#2qQuFVdf6@Fs*uf16AOR$R1dsp{
+zKmter2_OL^fCP{L68K079EI+M!?mdz49=f{|0tJRJJLJz#g2=k(2Y<O&^yxGWdZ0e
+zC<<u4^j28_x&?{?DwEzU3GnCt*+oTa{;>JY=Edgc7XM-KwZ%(t05>Fn1dsp{Kmter
+z2_OL^fCP{L68KCLu&-?$l#bpxHFdNBkF7zEbl9oge&>nphZ|RC?9oed?)&eje)u`~
+zDL&2G*B-n1q>tWw(la-k)Y?f?E?0{>V>hmfmkizaZW<58l3JacP3YfjLUxl0`SZVY
+z+h;nYvG7O$2_OL^fCP{L5<mh-00|%gB!C1y^#t(w|5NW`EFcm<0!RP}AOR$R1dsp{
+zKmter2_OLppZ_rkkN^@u0!RP}AOR$R1dsp{Kmter34Hnq@aO-TMqOI`_CbH{cVP!N
+zB!C2v01`j~pA`Zx-f?GRNmXmFoUJUH+`derfb<9H+Btm5VsT_?pGB0#`3Z|Di^X><
+z>nIm=2Xt&9U-{hTL!0L|w;$L%FXxgc0=mkV_`MYLX}01peC)IQ@(L_!+zI-myCOd;
+zuY|jUpcg#DX!7j}bI+C!1b$FD^6u5wAfu${ebQq|Zu?~9cVUI*(ETbbhAdxVdne^L
+zUbog&zF=|KAF%$QJ=og?1!JibiQ+QQ`z*N}v8RSX#Mh1vBUvnlTwd)tV?4glbKyi%
+zmKYEuWf5N4K6^plzPPo;lL~uxNDK=}kJ$_9U@hmBc!y|)c^Uw%@YSs^JhFLyQ+D?T
+zEaoaAM))$<={6~o^7718iTTy%&)m^iI(4e{(nb=LF^l6M?6+e!Xamb=Z|uM?mO^su
+z^n{4a*Nv{kWHB)W<#nU7AS=RB9O6m&RxMmHs59AWQV3GkhV)4&08e<Sbp!zfM<=V~
+zZex8~kQmRF%f#U@@>n|x!yZ>Z(w`g{1$chE?8nJE%bpyUnO}YB)a{L>yY8xeJzbSu
+z@Bv>Ic7I_%|4sB<o=wGfg+ipL#se5QL;#CL?H(+@9;af}Fqa?Pd}!n1)&+Ux%b$;7
+z&Gjz({8v^^f-J=Tqvy|V%Or{jU;dm9la<f=S#I#b7c%GHM4cL`vU&Q#2CA~v&E;Jd
+z$!<s@D(}Mol!IEAc+k9c+5x;8EpgQ-jK-QoE+PV`8+O7%8pupU-*uD4-VUQfXx~BA
+zF0^ATjf{e=d{-2m2EH#}hGpkrIr{U%$R{2Hdt=rO`t0tc8IkWD9mu0j)CbTsit98U
+z3r-Vf+=xIt$Ai6Y7V;t$H{?1S*ce`BQ3Q*{rv~muA#ajbV%{J-oNTUnMC!(nlG5Km
+zbG5eQ@I@%_I#{hQ<5Kgh&#~JYOGl2>UOZN8{j%C}=cJl4R!c;Yu2Vm%G0&|dZajzx
+zT*6=zzSxae42>>}pspmxD*Q!Uh$=w_gD7x^a4Gm;@>#2t#D~Z;JC<BCE60*(5yy(m
+zMUnTTT|Ga)%Afyd556ijhl~HR*k1VY!o!FD?9dt<zzqo?0VIF~kN^@u0!RP}Ac6mP
+z0@voQZ7oVu%g6aU*QTx=sn?}<M1LOd$Xe5s);hd^t@<Xm87b?YqK>Zlu46lfult5#
+z+00<NVY@c*EY<UDSFsJn^B8qB*RfnnQ(GR@TB_m`O}Cg+e6JZ8^H{~0w=2fz*EPm-
+zDb;OaGeu`A@mrQfJjXCytwkM5P1^DdODCSM5~@&_d7f$NitB-4j%S%IvtrDn6=UA2
+z7^7X+7>%|RO?5oer8Z-Z?NWu9%u-vXp}C5xS(<L>j_UdvU~m<en5M5#of1zo496iA
+zW6o5Jd9z}SdVOPb)AbC+wk%U|bf94wrUw3UEU-ogUWREA-(xM)F?3V&49~DVM{#}1
+zTDq;3jhWq9gaz;Nkl87jqK-!lf1%wdVtmszEZ?_v+aSKyvWVsRj&8XcvpuFm=0s88
+zn8}FS@@(I+TBhn)26338St_lV(kYwLshBbrFC|lmqZq2IQAbe~$JUqy*)Y#x1_d`M
+zO3Pt3g-CT3qC+5qGZnwp(ptJjOx1>%FS%&eFPj3r$Z5ZLQjb(+ELuvYXu78|;y4B&
+z)NVPpN{HU_DK!ksaKIa?swyURJ>P?~o<b=luC7}q1HYNJuar$;Wm8zil(ASTnL-U;
+y1Bcj_Vpxu5dawtjcUzibs|>1>YO2ikneHmOXDN<p6P4;#ONS_SJ!k}qru;ALxCU|n
+
+literal 0
+HcmV?d00001
+
+diff --git a/conformance/cartridges/two-days.db b/conformance/cartridges/two-days.db
+new file mode 100644
+index 0000000000000000000000000000000000000000..6dc8cb26f2811063ba990460f04670721c4df276
+GIT binary patch
+literal 94208
+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
+F{{gU#b`Agl
+
+literal 0
+HcmV?d00001
+
+diff --git a/conformance/cartridges/two-takeovers.db b/conformance/cartridges/two-takeovers.db
+new file mode 100644
+index 0000000000000000000000000000000000000000..42ce7269dc2263ff16008fdda8e2a5bd1027858e
+GIT binary patch
+literal 94208
+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
+Z-BonYQXJDJD%Gu)4pHoS&<GSw`CkjdEU^Fp
+
+literal 0
+HcmV?d00001
+
+diff --git a/conformance/cartridges/video.db b/conformance/cartridges/video.db
+new file mode 100644
+index 0000000000000000000000000000000000000000..84edeeac674d5ee4f56e7d1a786ebfc6d5c4cd17
+GIT binary patch
+literal 94208
+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
+zk4AU{&6O@j`|&j&v&%0D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
+
+literal 0
+HcmV?d00001
+
+diff --git a/conformance/run.mjs b/conformance/run.mjs
+new file mode 100644
+index 0000000..3be7139
+--- /dev/null
++++ b/conformance/run.mjs
+@@ -0,0 +1,157 @@
++#!/usr/bin/env node
++/**
++ * Marquee Conformance Suite — runner.
++ *
++ *   node conformance/run.mjs                      validate the suite itself
++ *   node conformance/run.mjs --engine <module>    run every scenario against an engine
++ *   node conformance/run.mjs --engine <module> MCS-02 MCS-10
++ *
++ * No dependencies. Node ≥ 22.13 (built-in `node:sqlite`).
++ *
++ * The runner is the simulated HOST described in README.md: it drives the
++ * engine's clock, answers each render item the way `scenario.host` says a real
++ * host would, and compares the engine's trace with `expected.json`.
++ */
++import { readFileSync, readdirSync, existsSync } from "node:fs";
++import { dirname, join, resolve } from "node:path";
++import { fileURLToPath, pathToFileURL } from "node:url";
++import { DatabaseSync } from "node:sqlite";
++
++const HERE = dirname(fileURLToPath(import.meta.url));
++const CODES = {
++  render: ["rotation.start", "rotation.next", "rotation.wrap"],
++  cut: ["takeover.activate", "schedule.change", "orientation.change", "cartridge.commit"],
++  jump: ["jump.backward", "jump.forward"],
++  hold: ["set.empty", "set.all_failed"],
++  blank: ["schedule.blank"],
++  skip: ["media.load_failed", "media.no_first_frame", "media.watchdog", "media.not_playable"],
++  warning: ["orientation.missing"],
++};
++const MAX_RETICKS = 64;
++
++const args = process.argv.slice(2);
++const engineAt = args.includes("--engine") ? args[args.indexOf("--engine") + 1] : null;
++const only = args.filter((a, i) => a.startsWith("MCS-") && args[i - 1] !== "--engine");
++
++const scenarioDirs = readdirSync(join(HERE, "scenarios")).filter((d) => !only.length || only.includes(d)).sort();
++const read = (p) => JSON.parse(readFileSync(p, "utf8"));
++const ms = (iso) => Date.parse(iso);
++
++// ── validation: is the suite itself well-formed? ────────────────────────────────
++
++function validate(dir) {
++  const problems = [];
++  const s = read(join(HERE, "scenarios", dir, "scenario.json"));
++  const e = read(join(HERE, "scenarios", dir, "expected.json"));
++  if (s.id !== dir || e.id !== dir) problems.push("id does not match its folder");
++  const cart = join(HERE, "cartridges", `${s.cartridge}.db`);
++  if (!existsSync(cart)) return [...problems, `missing cartridge ${s.cartridge}.db (run build.py)`];
++  const db = new DatabaseSync(cart, { readOnly: true });
++  const meta = db.prepare("SELECT * FROM cartridge_meta").all();
++  if (meta.length !== 1 || meta[0].format_version !== "25.0.1" || meta[0].cartridge_kind !== "surface")
++    problems.push("cartridge_meta is not a single v25.0.1 surface row");
++  db.exec("PRAGMA foreign_keys = ON");
++  if (db.prepare("PRAGMA foreign_key_check").all().length) problems.push("foreign_key_check fails");
++  const entries = new Set(db.prepare("SELECT id FROM playlist_entry").all().map((r) => r.id));
++  db.close();
++  let last = -Infinity;
++  for (const [i, ev] of e.trace.entries()) {
++    if (!CODES[ev.kind]?.includes(ev.code)) problems.push(`event ${i}: unknown ${ev.kind}/${ev.code}`);
++    if (ev.entry !== undefined && !entries.has(ev.entry)) problems.push(`event ${i}: entry ${ev.entry} not in cartridge`);
++    const t = ms(ev.t);
++    if (Number.isNaN(t)) problems.push(`event ${i}: bad time ${ev.t}`);
++    if (t < last && ev.kind !== "jump" && e.trace[i - 1]?.kind !== "jump") problems.push(`event ${i}: out of order`);
++    last = t;
++  }
++  return problems;
++}
++
++// ── running: the simulated host ─────────────────────────────────────────────────
++
++function normalize(ev) {
++  const out = { t: ev.showTime, kind: ev.kind, code: ev.code };
++  if (ev.entryId != null) out.entry = ev.entryId;
++  if (ev.set != null) out.set = ev.set;
++  if (ev.mediaFileId != null) out.file = ev.mediaFileId;
++  if (ev.sessionSetId != null) out.board = ev.sessionSetId;
++  return out;
++}
++
++async function run(engineMod, dir) {
++  const s = read(join(HERE, "scenarios", dir, "scenario.json"));
++  const expected = read(join(HERE, "scenarios", dir, "expected.json")).trace.map((ev) => ({ ...ev, t: ms(ev.t) }));
++  const bytes = readFileSync(join(HERE, "cartridges", `${s.cartridge}.db`));
++  const snapshot = await engineMod.loadCartridge(new Uint8Array(bytes));
++  const clock = s.clock.source === "preview" ? engineMod.previewClock() : engineMod.surfaceClock();
++  const pages = s.host.boardPages ?? {};
++  const engine = engineMod.createEngine({
++    snapshot, slot: s.engine.slot, orientation: s.engine.orientation, clock,
++    boardResolver: (set) => ({ model: null, pageCount: pages[String(set.id)] ?? 1, anchorPage: 0 }),
++  });
++
++  const trace = [];
++  const take = (evs) => { for (const ev of evs ?? []) trace.push(normalize(ev)); };
++  const due = [];               // scheduled host reports: { mono, token }
++  let wallOffset = 0;
++
++  for (let sec = 0; sec < s.clock.seconds; sec++) {
++    const mono = sec * s.clock.tickMs;
++    for (const ev of s.events.filter((x) => x.atSecond === sec))
++      if (ev.type === "wallJump") wallOffset += ev.deltaMs;
++      else if (ev.type === "setOrientation") take(engine.setOrientation(ev.orientation));
++    for (const c of (s.clock.commands ?? []).filter((x) => x.atSecond === sec)) {
++      if (c.set) clock.set(ms(c.set));
++      if (c.action === "play") clock.play();
++      if (c.action === "pause") clock.pause();
++    }
++    const wall = ms(s.clock.start) + mono + wallOffset;
++    for (const d of due.filter((x) => x.mono <= mono)) { take(engine.onMediaCompleted(d.token)); due.splice(due.indexOf(d), 1); }
++
++    for (let i = 0; i < MAX_RETICKS; i++) {
++      const out = engine.tick(wall, mono);
++      take(out.trace);
++      const item = out.renderItem;
++      if (!item || item.kind === "blank") break;
++      const entry = item.entryId;
++      if (s.host.failEntries.includes(entry)) { take(engine.onLoadFailed(item.token, "fixture: load fails")); continue; }
++      if (s.host.noFirstFrameEntries.includes(entry)) break;
++      take(engine.onFirstFrame(item.token));
++      if (item.kind === "media" && /^video\//.test(item.media.contentType) && !s.host.stuckEntries.includes(entry))
++        due.push({ mono: mono + item.media.duration * 1000, token: item.token });
++      break;
++    }
++  }
++
++  const diffs = [];
++  const n = Math.max(trace.length, expected.length);
++  for (let i = 0; i < n; i++) {
++    const a = JSON.stringify(trace[i] ?? null), b = JSON.stringify(expected[i] ?? null);
++    if (a !== b) diffs.push(`#${i}\n    expected ${b}\n    actual   ${a}`);
++  }
++  return diffs;
++}
++
++// ── main ────────────────────────────────────────────────────────────────────────
++
++let failed = 0;
++if (!engineAt) {
++  for (const dir of scenarioDirs) {
++    const problems = validate(dir);
++    console.log(`${problems.length ? "✗" : "✓"} ${dir}`);
++    for (const p of problems) console.log(`    ${p}`);
++    failed += problems.length ? 1 : 0;
++  }
++  console.log(`\n${scenarioDirs.length - failed}/${scenarioDirs.length} scenarios well-formed`);
++} else {
++  const engineMod = await import(pathToFileURL(resolve(engineAt)).href);
++  for (const dir of scenarioDirs) {
++    const s = read(join(HERE, "scenarios", dir, "scenario.json"));
++    if (s.clock.deviceTimeZone) process.env.TZ = s.clock.deviceTimeZone;
++    const diffs = await run(engineMod, dir);
++    console.log(`${diffs.length ? "✗" : "✓"} ${dir}  ${s.title}`);
++    for (const d of diffs.slice(0, 5)) console.log(`    ${d}`);
++    failed += diffs.length ? 1 : 0;
++  }
++  console.log(`\n${scenarioDirs.length - failed}/${scenarioDirs.length} scenarios pass`);
++}
++process.exit(failed ? 1 : 0);
+diff --git a/conformance/scenarios/MCS-01/expected.json b/conformance/scenarios/MCS-01/expected.json
+new file mode 100644
+index 0000000..8b99d6d
+--- /dev/null
++++ b/conformance/scenarios/MCS-01/expected.json
+@@ -0,0 +1,45 @@
++{
++  "id": "MCS-01",
++  "trace": [
++    {
++      "t": "2026-09-15T08:00:00-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-15T08:00:10-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 2,
++      "set": "standard",
++      "file": 102
++    },
++    {
++      "t": "2026-09-15T08:00:20-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 3,
++      "set": "standard",
++      "file": 103
++    },
++    {
++      "t": "2026-09-15T08:00:30-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 4,
++      "set": "standard",
++      "file": 104
++    },
++    {
++      "t": "2026-09-15T08:00:40-07:00",
++      "kind": "render",
++      "code": "rotation.wrap",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-01/scenario.json b/conformance/scenarios/MCS-01/scenario.json
+new file mode 100644
+index 0000000..5134ac9
+--- /dev/null
++++ b/conformance/scenarios/MCS-01/scenario.json
+@@ -0,0 +1,24 @@
++{
++  "id": "MCS-01",
++  "title": "Basic rotation",
++  "rules": "Reference §6.5, §6.6",
++  "cartridge": "base",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 46,
++    "start": "2026-09-15T08:00:00-07:00"
++  },
++  "host": {
++    "failEntries": [],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [],
++    "boardPages": {}
++  },
++  "events": []
++}
+diff --git a/conformance/scenarios/MCS-02/expected.json b/conformance/scenarios/MCS-02/expected.json
+new file mode 100644
+index 0000000..680156a
+--- /dev/null
++++ b/conformance/scenarios/MCS-02/expected.json
+@@ -0,0 +1,51 @@
++{
++  "id": "MCS-02",
++  "trace": [
++    {
++      "t": "2026-09-15T11:29:36-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-15T11:29:46-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 2,
++      "set": "standard",
++      "file": 102
++    },
++    {
++      "t": "2026-09-15T11:29:56-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 3,
++      "set": "standard",
++      "file": 103
++    },
++    {
++      "t": "2026-09-15T11:30:00-07:00",
++      "kind": "cut",
++      "code": "takeover.activate",
++      "entry": 3
++    },
++    {
++      "t": "2026-09-15T11:30:00-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 2,
++      "set": "takeover",
++      "file": 102
++    },
++    {
++      "t": "2026-09-15T11:30:10-07:00",
++      "kind": "render",
++      "code": "rotation.wrap",
++      "entry": 2,
++      "set": "takeover",
++      "file": 102
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-02/scenario.json b/conformance/scenarios/MCS-02/scenario.json
+new file mode 100644
+index 0000000..b2abaa1
+--- /dev/null
++++ b/conformance/scenarios/MCS-02/scenario.json
+@@ -0,0 +1,24 @@
++{
++  "id": "MCS-02",
++  "title": "A takeover starting mid-item cuts immediately",
++  "rules": "Reference §6.6, §6.7",
++  "cartridge": "base",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 40,
++    "start": "2026-09-15T11:29:36-07:00"
++  },
++  "host": {
++    "failEntries": [],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [],
++    "boardPages": {}
++  },
++  "events": []
++}
+diff --git a/conformance/scenarios/MCS-03/expected.json b/conformance/scenarios/MCS-03/expected.json
+new file mode 100644
+index 0000000..6a62a4b
+--- /dev/null
++++ b/conformance/scenarios/MCS-03/expected.json
+@@ -0,0 +1,75 @@
++{
++  "id": "MCS-03",
++  "trace": [
++    {
++      "t": "2026-09-15T11:29:36-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-15T11:29:46-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 2,
++      "set": "standard",
++      "file": 102
++    },
++    {
++      "t": "2026-09-15T11:29:56-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 3,
++      "set": "standard",
++      "file": 103
++    },
++    {
++      "t": "2026-09-15T11:30:00-07:00",
++      "kind": "cut",
++      "code": "takeover.activate",
++      "entry": 3
++    },
++    {
++      "t": "2026-09-15T11:30:00-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 2,
++      "set": "takeover",
++      "file": 102
++    },
++    {
++      "t": "2026-09-15T11:30:10-07:00",
++      "kind": "render",
++      "code": "rotation.wrap",
++      "entry": 2,
++      "set": "takeover",
++      "file": 102
++    },
++    {
++      "t": "2026-09-15T11:30:20-07:00",
++      "kind": "render",
++      "code": "rotation.wrap",
++      "entry": 2,
++      "set": "takeover",
++      "file": 102
++    },
++    {
++      "t": "2026-09-15T11:30:30-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 4,
++      "set": "standard",
++      "file": 104
++    },
++    {
++      "t": "2026-09-15T11:30:40-07:00",
++      "kind": "render",
++      "code": "rotation.wrap",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-03/scenario.json b/conformance/scenarios/MCS-03/scenario.json
+new file mode 100644
+index 0000000..4806910
+--- /dev/null
++++ b/conformance/scenarios/MCS-03/scenario.json
+@@ -0,0 +1,24 @@
++{
++  "id": "MCS-03",
++  "title": "A takeover ending mid-item lets it finish; standard resumes after its cursor",
++  "rules": "Reference §6.5, §6.7",
++  "cartridge": "short-takeover",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 70,
++    "start": "2026-09-15T11:29:36-07:00"
++  },
++  "host": {
++    "failEntries": [],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [],
++    "boardPages": {}
++  },
++  "events": []
++}
+diff --git a/conformance/scenarios/MCS-04/expected.json b/conformance/scenarios/MCS-04/expected.json
+new file mode 100644
+index 0000000..2b95346
+--- /dev/null
++++ b/conformance/scenarios/MCS-04/expected.json
+@@ -0,0 +1,61 @@
++{
++  "id": "MCS-04",
++  "trace": [
++    {
++      "t": "2026-09-15T08:00:00-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-15T08:00:10-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 2,
++      "set": "standard",
++      "file": 102
++    },
++    {
++      "t": "2026-09-15T08:00:20-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 3,
++      "set": "standard",
++      "file": 103
++    },
++    {
++      "t": "2026-09-15T08:00:30-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 4,
++      "set": "standard",
++      "file": 104
++    },
++    {
++      "t": "2026-09-15T08:00:40-07:00",
++      "kind": "render",
++      "code": "rotation.wrap",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-15T08:00:50-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 2,
++      "set": "standard",
++      "file": 102
++    },
++    {
++      "t": "2026-09-15T08:01:00-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 4,
++      "set": "standard",
++      "file": 104
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-04/scenario.json b/conformance/scenarios/MCS-04/scenario.json
+new file mode 100644
+index 0000000..38db952
+--- /dev/null
++++ b/conformance/scenarios/MCS-04/scenario.json
+@@ -0,0 +1,24 @@
++{
++  "id": "MCS-04",
++  "title": "A standard directive turning off mid-item lets it finish; the entry then drops out",
++  "rules": "Reference §6.3, §6.7",
++  "cartridge": "e3-off",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 66,
++    "start": "2026-09-15T08:00:00-07:00"
++  },
++  "host": {
++    "failEntries": [],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [],
++    "boardPages": {}
++  },
++  "events": []
++}
+diff --git a/conformance/scenarios/MCS-05/expected.json b/conformance/scenarios/MCS-05/expected.json
+new file mode 100644
+index 0000000..3df7d38
+--- /dev/null
++++ b/conformance/scenarios/MCS-05/expected.json
+@@ -0,0 +1,75 @@
++{
++  "id": "MCS-05",
++  "trace": [
++    {
++      "t": "2026-09-15T11:29:36-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-15T11:29:46-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 2,
++      "set": "standard",
++      "file": 102
++    },
++    {
++      "t": "2026-09-15T11:29:56-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 3,
++      "set": "standard",
++      "file": 103
++    },
++    {
++      "t": "2026-09-15T11:30:00-07:00",
++      "kind": "cut",
++      "code": "takeover.activate",
++      "entry": 3
++    },
++    {
++      "t": "2026-09-15T11:30:00-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 2,
++      "set": "takeover",
++      "file": 102
++    },
++    {
++      "t": "2026-09-15T11:30:10-07:00",
++      "kind": "render",
++      "code": "rotation.wrap",
++      "entry": 2,
++      "set": "takeover",
++      "file": 102
++    },
++    {
++      "t": "2026-09-15T11:30:20-07:00",
++      "kind": "render",
++      "code": "rotation.wrap",
++      "entry": 2,
++      "set": "takeover",
++      "file": 102
++    },
++    {
++      "t": "2026-09-15T11:30:30-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 4,
++      "set": "standard",
++      "file": 104
++    },
++    {
++      "t": "2026-09-15T11:30:40-07:00",
++      "kind": "render",
++      "code": "rotation.wrap",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-05/scenario.json b/conformance/scenarios/MCS-05/scenario.json
+new file mode 100644
+index 0000000..b20ddfa
+--- /dev/null
++++ b/conformance/scenarios/MCS-05/scenario.json
+@@ -0,0 +1,24 @@
++{
++  "id": "MCS-05",
++  "title": "The cursor's entry is excluded during a takeover; standard resumes at the next position",
++  "rules": "Reference §6.5",
++  "cartridge": "e3-off-during-takeover",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 70,
++    "start": "2026-09-15T11:29:36-07:00"
++  },
++  "host": {
++    "failEntries": [],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [],
++    "boardPages": {}
++  },
++  "events": []
++}
+diff --git a/conformance/scenarios/MCS-06/expected.json b/conformance/scenarios/MCS-06/expected.json
+new file mode 100644
+index 0000000..685730c
+--- /dev/null
++++ b/conformance/scenarios/MCS-06/expected.json
+@@ -0,0 +1,59 @@
++{
++  "id": "MCS-06",
++  "trace": [
++    {
++      "t": "2026-09-15T11:29:36-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-15T11:29:46-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 2,
++      "set": "standard",
++      "file": 102
++    },
++    {
++      "t": "2026-09-15T11:29:56-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 3,
++      "set": "standard",
++      "file": 103
++    },
++    {
++      "t": "2026-09-15T11:30:00-07:00",
++      "kind": "cut",
++      "code": "takeover.activate",
++      "entry": 3
++    },
++    {
++      "t": "2026-09-15T11:30:00-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 2,
++      "set": "takeover",
++      "file": 102
++    },
++    {
++      "t": "2026-09-15T11:30:10-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 4,
++      "set": "takeover",
++      "file": 104
++    },
++    {
++      "t": "2026-09-15T11:30:20-07:00",
++      "kind": "render",
++      "code": "rotation.wrap",
++      "entry": 2,
++      "set": "takeover",
++      "file": 102
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-06/scenario.json b/conformance/scenarios/MCS-06/scenario.json
+new file mode 100644
+index 0000000..7b7cecc
+--- /dev/null
++++ b/conformance/scenarios/MCS-06/scenario.json
+@@ -0,0 +1,24 @@
++{
++  "id": "MCS-06",
++  "title": "Overlapping takeovers form one set in position order",
++  "rules": "Reference §6.4",
++  "cartridge": "two-takeovers",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 50,
++    "start": "2026-09-15T11:29:36-07:00"
++  },
++  "host": {
++    "failEntries": [],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [],
++    "boardPages": {}
++  },
++  "events": []
++}
+diff --git a/conformance/scenarios/MCS-07/expected.json b/conformance/scenarios/MCS-07/expected.json
+new file mode 100644
+index 0000000..a0b6b99
+--- /dev/null
++++ b/conformance/scenarios/MCS-07/expected.json
+@@ -0,0 +1,21 @@
++{
++  "id": "MCS-07",
++  "trace": [
++    {
++      "t": "2026-09-15T09:00:00-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-15T09:00:10-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 2,
++      "set": "standard",
++      "file": 102
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-07/scenario.json b/conformance/scenarios/MCS-07/scenario.json
+new file mode 100644
+index 0000000..03dc4d5
+--- /dev/null
++++ b/conformance/scenarios/MCS-07/scenario.json
+@@ -0,0 +1,24 @@
++{
++  "id": "MCS-07",
++  "title": "Outside the event, a device in another timezone shows Day 1 at the venue's time of day",
++  "rules": "Reference §5.3, INV-01",
++  "cartridge": "base",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/New_York",
++    "tickMs": 1000,
++    "seconds": 16,
++    "start": "2026-09-08T12:00:00-04:00"
++  },
++  "host": {
++    "failEntries": [],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [],
++    "boardPages": {}
++  },
++  "events": []
++}
+diff --git a/conformance/scenarios/MCS-08/expected.json b/conformance/scenarios/MCS-08/expected.json
+new file mode 100644
+index 0000000..73aca82
+--- /dev/null
++++ b/conformance/scenarios/MCS-08/expected.json
+@@ -0,0 +1,18 @@
++{
++  "id": "MCS-08",
++  "trace": [
++    {
++      "t": "2026-09-15T07:59:50-07:00",
++      "kind": "hold",
++      "code": "set.empty"
++    },
++    {
++      "t": "2026-09-15T08:00:00-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-08/scenario.json b/conformance/scenarios/MCS-08/scenario.json
+new file mode 100644
+index 0000000..8a8e5ab
+--- /dev/null
++++ b/conformance/scenarios/MCS-08/scenario.json
+@@ -0,0 +1,24 @@
++{
++  "id": "MCS-08",
++  "title": "Synthetic time before the first directive holds, then plays when it turns on",
++  "rules": "Reference §5.3, §6.4",
++  "cartridge": "base",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 16,
++    "start": "2026-09-08T07:59:50-07:00"
++  },
++  "host": {
++    "failEntries": [],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [],
++    "boardPages": {}
++  },
++  "events": []
++}
+diff --git a/conformance/scenarios/MCS-09/expected.json b/conformance/scenarios/MCS-09/expected.json
+new file mode 100644
+index 0000000..0ecfe51
+--- /dev/null
++++ b/conformance/scenarios/MCS-09/expected.json
+@@ -0,0 +1,36 @@
++{
++  "id": "MCS-09",
++  "trace": [
++    {
++      "t": "2026-09-15T23:59:55-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-15T00:00:00-07:00",
++      "kind": "jump",
++      "code": "jump.backward"
++    },
++    {
++      "t": "2026-09-15T00:00:00-07:00",
++      "kind": "hold",
++      "code": "set.empty"
++    },
++    {
++      "t": "2026-09-15T08:00:05-07:00",
++      "kind": "jump",
++      "code": "jump.forward"
++    },
++    {
++      "t": "2026-09-15T08:00:05-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 2,
++      "set": "standard",
++      "file": 102
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-09/scenario.json b/conformance/scenarios/MCS-09/scenario.json
+new file mode 100644
+index 0000000..ea50798
+--- /dev/null
++++ b/conformance/scenarios/MCS-09/scenario.json
+@@ -0,0 +1,30 @@
++{
++  "id": "MCS-09",
++  "title": "Show-clock jumps, backward and forward, force re-evaluation",
++  "rules": "Reference §5.5",
++  "cartridge": "base",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 14,
++    "start": "2026-09-08T23:59:55-07:00"
++  },
++  "host": {
++    "failEntries": [],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [],
++    "boardPages": {}
++  },
++  "events": [
++    {
++      "atSecond": 10,
++      "type": "wallJump",
++      "deltaMs": 28800000
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-10/expected.json b/conformance/scenarios/MCS-10/expected.json
+new file mode 100644
+index 0000000..424f41f
+--- /dev/null
++++ b/conformance/scenarios/MCS-10/expected.json
+@@ -0,0 +1,59 @@
++{
++  "id": "MCS-10",
++  "trace": [
++    {
++      "t": "2026-09-15T08:00:00-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-15T08:00:10-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 2,
++      "set": "standard",
++      "board": 1
++    },
++    {
++      "t": "2026-09-15T08:00:20-07:00",
++      "kind": "cut",
++      "code": "takeover.activate",
++      "entry": 2
++    },
++    {
++      "t": "2026-09-15T08:00:20-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 3,
++      "set": "takeover",
++      "file": 103
++    },
++    {
++      "t": "2026-09-15T08:00:30-07:00",
++      "kind": "render",
++      "code": "rotation.wrap",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-15T08:00:40-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 2,
++      "set": "standard",
++      "board": 1
++    },
++    {
++      "t": "2026-09-15T08:01:04-07:00",
++      "kind": "render",
++      "code": "rotation.wrap",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-10/scenario.json b/conformance/scenarios/MCS-10/scenario.json
+new file mode 100644
+index 0000000..a82a73f
+--- /dev/null
++++ b/conformance/scenarios/MCS-10/scenario.json
+@@ -0,0 +1,26 @@
++{
++  "id": "MCS-10",
++  "title": "A multi-page session board lasts duration × pages; a takeover cuts it mid-board",
++  "rules": "Reference §6.8, INV-08",
++  "cartridge": "board",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 66,
++    "start": "2026-09-15T08:00:00-07:00"
++  },
++  "host": {
++    "failEntries": [],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [],
++    "boardPages": {
++      "1": 3
++    }
++  },
++  "events": []
++}
+diff --git a/conformance/scenarios/MCS-11/expected.json b/conformance/scenarios/MCS-11/expected.json
+new file mode 100644
+index 0000000..f7cc640
+--- /dev/null
++++ b/conformance/scenarios/MCS-11/expected.json
+@@ -0,0 +1,49 @@
++{
++  "id": "MCS-11",
++  "trace": [
++    {
++      "t": "2026-09-15T08:00:00-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-15T08:00:12-07:00",
++      "kind": "skip",
++      "code": "media.load_failed",
++      "entry": 2
++    },
++    {
++      "t": "2026-09-15T08:00:12-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 3,
++      "set": "standard",
++      "file": 103
++    },
++    {
++      "t": "2026-09-15T08:00:22-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 4,
++      "set": "standard",
++      "file": 104
++    },
++    {
++      "t": "2026-09-15T08:00:44-07:00",
++      "kind": "skip",
++      "code": "media.watchdog",
++      "entry": 4
++    },
++    {
++      "t": "2026-09-15T08:00:44-07:00",
++      "kind": "render",
++      "code": "rotation.wrap",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-11/scenario.json b/conformance/scenarios/MCS-11/scenario.json
+new file mode 100644
+index 0000000..ca00e8d
+--- /dev/null
++++ b/conformance/scenarios/MCS-11/scenario.json
+@@ -0,0 +1,28 @@
++{
++  "id": "MCS-11",
++  "title": "Video: completion, a load failure, and the watchdog",
++  "rules": "Reference §6.6, §6.9",
++  "cartridge": "video",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 51,
++    "start": "2026-09-15T08:00:00-07:00"
++  },
++  "host": {
++    "failEntries": [
++      2
++    ],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [
++      4
++    ],
++    "boardPages": {}
++  },
++  "events": []
++}
+diff --git a/conformance/scenarios/MCS-12/expected.json b/conformance/scenarios/MCS-12/expected.json
+new file mode 100644
+index 0000000..0ccc744
+--- /dev/null
++++ b/conformance/scenarios/MCS-12/expected.json
+@@ -0,0 +1,59 @@
++{
++  "id": "MCS-12",
++  "trace": [
++    {
++      "t": "2026-09-15T08:00:00-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-15T08:00:10-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 2,
++      "set": "standard",
++      "file": 102
++    },
++    {
++      "t": "2026-09-15T08:00:20-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 3,
++      "set": "standard",
++      "file": 103
++    },
++    {
++      "t": "2026-09-15T08:00:25-07:00",
++      "kind": "cut",
++      "code": "schedule.change",
++      "entry": 3
++    },
++    {
++      "t": "2026-09-15T08:00:25-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 11,
++      "set": "standard",
++      "file": 111
++    },
++    {
++      "t": "2026-09-15T08:00:35-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 12,
++      "set": "standard",
++      "file": 112
++    },
++    {
++      "t": "2026-09-15T08:00:45-07:00",
++      "kind": "render",
++      "code": "rotation.wrap",
++      "entry": 11,
++      "set": "standard",
++      "file": 111
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-12/scenario.json b/conformance/scenarios/MCS-12/scenario.json
+new file mode 100644
+index 0000000..affb74c
+--- /dev/null
++++ b/conformance/scenarios/MCS-12/scenario.json
+@@ -0,0 +1,24 @@
++{
++  "id": "MCS-12",
++  "title": "A schedule change to another playlist cuts immediately and resets cursors",
++  "rules": "Reference §6.2, §6.7",
++  "cartridge": "schedule-change",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 51,
++    "start": "2026-09-15T08:00:00-07:00"
++  },
++  "host": {
++    "failEntries": [],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [],
++    "boardPages": {}
++  },
++  "events": []
++}
+diff --git a/conformance/scenarios/MCS-13/expected.json b/conformance/scenarios/MCS-13/expected.json
+new file mode 100644
+index 0000000..2a10605
+--- /dev/null
++++ b/conformance/scenarios/MCS-13/expected.json
+@@ -0,0 +1,29 @@
++{
++  "id": "MCS-13",
++  "trace": [
++    {
++      "t": "2026-09-16T11:45:00-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-16T11:45:10-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 2,
++      "set": "standard",
++      "file": 102
++    },
++    {
++      "t": "2026-09-16T11:45:20-07:00",
++      "kind": "render",
++      "code": "rotation.wrap",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-13/scenario.json b/conformance/scenarios/MCS-13/scenario.json
+new file mode 100644
+index 0000000..3474f01
+--- /dev/null
++++ b/conformance/scenarios/MCS-13/scenario.json
+@@ -0,0 +1,24 @@
++{
++  "id": "MCS-13",
++  "title": "Directives are scoped to the current day",
++  "rules": "Reference §6.3",
++  "cartridge": "two-days",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 26,
++    "start": "2026-09-16T11:45:00-07:00"
++  },
++  "host": {
++    "failEntries": [],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [],
++    "boardPages": {}
++  },
++  "events": []
++}
+diff --git a/conformance/scenarios/MCS-14/expected.json b/conformance/scenarios/MCS-14/expected.json
+new file mode 100644
+index 0000000..d5e9e23
+--- /dev/null
++++ b/conformance/scenarios/MCS-14/expected.json
+@@ -0,0 +1,27 @@
++{
++  "id": "MCS-14",
++  "trace": [
++    {
++      "t": "2026-09-15T11:29:55-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-15T11:30:00-07:00",
++      "kind": "cut",
++      "code": "takeover.activate",
++      "entry": 1
++    },
++    {
++      "t": "2026-09-15T11:30:00-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 2,
++      "set": "takeover",
++      "file": 102
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-14/scenario.json b/conformance/scenarios/MCS-14/scenario.json
+new file mode 100644
+index 0000000..6358e60
+--- /dev/null
++++ b/conformance/scenarios/MCS-14/scenario.json
+@@ -0,0 +1,35 @@
++{
++  "id": "MCS-14",
++  "title": "Studio preview: set, play, pause",
++  "rules": "Reference §5.4, §5.5",
++  "cartridge": "base",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "preview",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 14,
++    "start": "2026-09-01T09:00:00-07:00",
++    "commands": [
++      {
++        "atSecond": 0,
++        "set": "2026-09-15T11:29:55-07:00",
++        "action": "play"
++      },
++      {
++        "atSecond": 8,
++        "action": "pause"
++      }
++    ]
++  },
++  "host": {
++    "failEntries": [],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [],
++    "boardPages": {}
++  },
++  "events": []
++}
+diff --git a/conformance/scenarios/MCS-15/expected.json b/conformance/scenarios/MCS-15/expected.json
+new file mode 100644
+index 0000000..1208d19
+--- /dev/null
++++ b/conformance/scenarios/MCS-15/expected.json
+@@ -0,0 +1,29 @@
++{
++  "id": "MCS-15",
++  "trace": [
++    {
++      "t": "2026-09-15T08:00:00-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 2,
++      "set": "standard",
++      "file": 202
++    },
++    {
++      "t": "2026-09-15T08:00:10-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 3,
++      "set": "standard",
++      "file": 103
++    },
++    {
++      "t": "2026-09-15T08:00:20-07:00",
++      "kind": "render",
++      "code": "rotation.wrap",
++      "entry": 2,
++      "set": "standard",
++      "file": 202
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-15/scenario.json b/conformance/scenarios/MCS-15/scenario.json
+new file mode 100644
+index 0000000..0d2039f
+--- /dev/null
++++ b/conformance/scenarios/MCS-15/scenario.json
+@@ -0,0 +1,24 @@
++{
++  "id": "MCS-15",
++  "title": "Orientation slots: an empty slot excludes; a slot's file plays as authored",
++  "rules": "Reference §9.4, INV-14",
++  "cartridge": "orientation",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 26,
++    "start": "2026-09-15T08:00:00-07:00"
++  },
++  "host": {
++    "failEntries": [],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [],
++    "boardPages": {}
++  },
++  "events": []
++}
+diff --git a/conformance/scenarios/MCS-16/expected.json b/conformance/scenarios/MCS-16/expected.json
+new file mode 100644
+index 0000000..8f68d5c
+--- /dev/null
++++ b/conformance/scenarios/MCS-16/expected.json
+@@ -0,0 +1,58 @@
++{
++  "id": "MCS-16",
++  "trace": [
++    {
++      "t": "2026-09-15T08:00:00-07:00",
++      "kind": "skip",
++      "code": "media.load_failed",
++      "entry": 1
++    },
++    {
++      "t": "2026-09-15T08:00:00-07:00",
++      "kind": "skip",
++      "code": "media.load_failed",
++      "entry": 2
++    },
++    {
++      "t": "2026-09-15T08:00:00-07:00",
++      "kind": "skip",
++      "code": "media.load_failed",
++      "entry": 3
++    },
++    {
++      "t": "2026-09-15T08:00:00-07:00",
++      "kind": "skip",
++      "code": "media.load_failed",
++      "entry": 4
++    },
++    {
++      "t": "2026-09-15T08:00:00-07:00",
++      "kind": "hold",
++      "code": "set.all_failed"
++    },
++    {
++      "t": "2026-09-15T08:00:02-07:00",
++      "kind": "skip",
++      "code": "media.load_failed",
++      "entry": 1
++    },
++    {
++      "t": "2026-09-15T08:00:02-07:00",
++      "kind": "skip",
++      "code": "media.load_failed",
++      "entry": 2
++    },
++    {
++      "t": "2026-09-15T08:00:02-07:00",
++      "kind": "skip",
++      "code": "media.load_failed",
++      "entry": 3
++    },
++    {
++      "t": "2026-09-15T08:00:02-07:00",
++      "kind": "skip",
++      "code": "media.load_failed",
++      "entry": 4
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-16/scenario.json b/conformance/scenarios/MCS-16/scenario.json
+new file mode 100644
+index 0000000..3e90a79
+--- /dev/null
++++ b/conformance/scenarios/MCS-16/scenario.json
+@@ -0,0 +1,29 @@
++{
++  "id": "MCS-16",
++  "title": "Every entry fails: the engine holds and retries, never disarming",
++  "rules": "Reference §6.6, INV-10",
++  "cartridge": "base",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 4,
++    "start": "2026-09-15T08:00:00-07:00"
++  },
++  "host": {
++    "failEntries": [
++      1,
++      2,
++      3,
++      4
++    ],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [],
++    "boardPages": {}
++  },
++  "events": []
++}
+diff --git a/conformance/scenarios/MCS-17/expected.json b/conformance/scenarios/MCS-17/expected.json
+new file mode 100644
+index 0000000..dd9dd0b
+--- /dev/null
++++ b/conformance/scenarios/MCS-17/expected.json
+@@ -0,0 +1,35 @@
++{
++  "id": "MCS-17",
++  "trace": [
++    {
++      "t": "2026-09-15T08:00:00-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-15T08:00:20-07:00",
++      "kind": "skip",
++      "code": "media.no_first_frame",
++      "entry": 2
++    },
++    {
++      "t": "2026-09-15T08:00:20-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 3,
++      "set": "standard",
++      "file": 103
++    },
++    {
++      "t": "2026-09-15T08:00:30-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 4,
++      "set": "standard",
++      "file": 104
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-17/scenario.json b/conformance/scenarios/MCS-17/scenario.json
+new file mode 100644
+index 0000000..be25f07
+--- /dev/null
++++ b/conformance/scenarios/MCS-17/scenario.json
+@@ -0,0 +1,26 @@
++{
++  "id": "MCS-17",
++  "title": "No first frame within 10 s is a load failure",
++  "rules": "Surface Engine PRD §5.6",
++  "cartridge": "base",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 36,
++    "start": "2026-09-15T08:00:00-07:00"
++  },
++  "host": {
++    "failEntries": [],
++    "noFirstFrameEntries": [
++      2
++    ],
++    "stuckEntries": [],
++    "boardPages": {}
++  },
++  "events": []
++}
+diff --git a/conformance/scenarios/MCS-18/expected.json b/conformance/scenarios/MCS-18/expected.json
+new file mode 100644
+index 0000000..3848398
+--- /dev/null
++++ b/conformance/scenarios/MCS-18/expected.json
+@@ -0,0 +1,35 @@
++{
++  "id": "MCS-18",
++  "trace": [
++    {
++      "t": "2026-09-15T08:00:00-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-15T08:00:05-07:00",
++      "kind": "cut",
++      "code": "takeover.activate",
++      "entry": 1
++    },
++    {
++      "t": "2026-09-15T08:00:05-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 3,
++      "set": "takeover",
++      "file": 103
++    },
++    {
++      "t": "2026-09-15T08:00:15-07:00",
++      "kind": "render",
++      "code": "rotation.wrap",
++      "entry": 3,
++      "set": "takeover",
++      "file": 103
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-18/scenario.json b/conformance/scenarios/MCS-18/scenario.json
+new file mode 100644
+index 0000000..564ac95
+--- /dev/null
++++ b/conformance/scenarios/MCS-18/scenario.json
+@@ -0,0 +1,24 @@
++{
++  "id": "MCS-18",
++  "title": "A late completion from a replaced item is ignored",
++  "rules": "Surface Engine PRD §5.6",
++  "cartridge": "late-callback",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 18,
++    "start": "2026-09-15T08:00:00-07:00"
++  },
++  "host": {
++    "failEntries": [],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [],
++    "boardPages": {}
++  },
++  "events": []
++}
+diff --git a/conformance/scenarios/MCS-19/expected.json b/conformance/scenarios/MCS-19/expected.json
+new file mode 100644
+index 0000000..52ce529
+--- /dev/null
++++ b/conformance/scenarios/MCS-19/expected.json
+@@ -0,0 +1,48 @@
++{
++  "id": "MCS-19",
++  "trace": [
++    {
++      "t": "2026-09-15T08:00:00-07:00",
++      "kind": "render",
++      "code": "rotation.start",
++      "entry": 1,
++      "set": "standard",
++      "file": 101
++    },
++    {
++      "t": "2026-09-15T08:00:10-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 2,
++      "set": "standard",
++      "file": 102
++    },
++    {
++      "t": "2026-09-15T08:00:20-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 3,
++      "set": "standard",
++      "file": 103
++    },
++    {
++      "t": "2026-09-15T08:00:30-07:00",
++      "kind": "render",
++      "code": "rotation.next",
++      "entry": 4,
++      "set": "standard",
++      "file": 104
++    },
++    {
++      "t": "2026-09-15T08:00:35-07:00",
++      "kind": "cut",
++      "code": "schedule.change",
++      "entry": 4
++    },
++    {
++      "t": "2026-09-15T08:00:35-07:00",
++      "kind": "blank",
++      "code": "schedule.blank"
++    }
++  ]
++}
+diff --git a/conformance/scenarios/MCS-19/scenario.json b/conformance/scenarios/MCS-19/scenario.json
+new file mode 100644
+index 0000000..beef853
+--- /dev/null
++++ b/conformance/scenarios/MCS-19/scenario.json
+@@ -0,0 +1,24 @@
++{
++  "id": "MCS-19",
++  "title": "Same-playlist boundary is a no-op; a NULL playlist blanks",
++  "rules": "Reference §6.2",
++  "cartridge": "boundaries",
++  "engine": {
++    "slot": "portrait",
++    "orientation": "portrait"
++  },
++  "clock": {
++    "source": "surface",
++    "deviceTimeZone": "America/Los_Angeles",
++    "tickMs": 1000,
++    "seconds": 46,
++    "start": "2026-09-15T08:00:00-07:00"
++  },
++  "host": {
++    "failEntries": [],
++    "noFirstFrameEntries": [],
++    "stuckEntries": [],
++    "boardPages": {}
++  },
++  "events": []
++}
+-- 
+2.43.0
+
