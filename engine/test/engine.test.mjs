@@ -402,7 +402,11 @@ test("the minimal board resolver marks past, now, next and later", async () => {
     snapshot,
   });
   assert.equal(pageCount, 1);
-  assert.deepEqual(model.sessions.map((s) => [s.name, s.state]), [["Session 1", "past"], ["Session 2", "now"], ["Session 3", "next"]]);
+  // The fixture's thirteen Day 1 sessions run hourly from 09:00: at 10:10 one is past, one on, one next, ten later.
+  assert.deepEqual(model.sessions.map((s) => [s.name, s.state]), [
+    ["Session 1", "past"], ["Session 2", "now"], ["Session 3", "next"],
+    ...Array.from({ length: 10 }, (_, i) => [`Session ${i + 4}`, "later"]),
+  ]);
 });
 
 test("venue time on a Day 1 that springs forward: the skipped hour resolves to the next valid instant", () => {
