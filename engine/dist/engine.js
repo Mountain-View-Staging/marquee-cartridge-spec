@@ -98,6 +98,8 @@ export class SurfaceEngine {
     since = Number.NaN;
     pendingItem = null;
     pendingMono = Number.NaN;
+    /** The last item skipped, so a repeated report for it is not a second skip. */
+    skippedToken = null;
     issued = null;
     events = null;
     lastStateKind = null;
@@ -256,7 +258,7 @@ export class SurfaceEngine {
             this.pendingItem = null;
             this.skip(item, "media.load_failed", this.show, why);
         }
-        else if (this.currentItem !== null && this.currentItem.kind !== "blank" && this.currentItem.token === token) {
+        else if (this.currentItem !== null && this.currentItem.kind !== "blank" && this.currentItem.token === token && token !== this.skippedToken) {
             this.skip(this.currentItem, "media.load_failed", this.show, why);
         }
         return this.events ?? NO_EVENTS;
@@ -342,6 +344,8 @@ export class SurfaceEngine {
     }
     afterOrientationChange(show) {
         this.orientationChanged = false;
+        if (this.orientationValue === this.previousOrientation)
+            return; // changed and changed back before a tick
         const on = this.currentItem;
         if (on !== null && on.kind !== "blank") {
             this.emit({ showTime: show, kind: "cut", code: "orientation.change", entryId: on.entryId, message: `orientation ${this.previousOrientation ?? "missing"} → ${this.orientationValue ?? "missing"}` });
@@ -677,6 +681,7 @@ export class SurfaceEngine {
     }
     /** A host-reported failure of an issued item: trace it, move the cursor past it, force the next content. */
     skip(item, code, show, why) {
+        this.skippedToken = item.token;
         this.emit({ showTime: show, kind: "skip", code, entryId: item.entryId, message: `entry ${item.entryId} "${item.name}": ${why}` });
         (item.set === "takeover" ? this.takeoverCursor : this.standardCursor).set(item.position, item.entryId);
         this.failed.add(item.entryId);

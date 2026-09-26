@@ -229,6 +229,8 @@ export class SurfaceEngine {
   private since = Number.NaN;
   private pendingItem: PlayableRenderItem | null = null;
   private pendingMono = Number.NaN;
+  /** The last item skipped, so a repeated report for it is not a second skip. */
+  private skippedToken: string | null = null;
   private issued: RenderItem | null = null;
 
   private events: TraceEvent[] | null = null;
@@ -388,7 +390,7 @@ export class SurfaceEngine {
       const item = this.pendingItem;
       this.pendingItem = null;
       this.skip(item, "media.load_failed", this.show, why);
-    } else if (this.currentItem !== null && this.currentItem.kind !== "blank" && this.currentItem.token === token) {
+    } else if (this.currentItem !== null && this.currentItem.kind !== "blank" && this.currentItem.token === token && token !== this.skippedToken) {
       this.skip(this.currentItem, "media.load_failed", this.show, why);
     }
     return this.events ?? NO_EVENTS;
@@ -478,6 +480,7 @@ export class SurfaceEngine {
 
   private afterOrientationChange(show: number): void {
     this.orientationChanged = false;
+    if (this.orientationValue === this.previousOrientation) return; // changed and changed back before a tick
     const on = this.currentItem;
     if (on !== null && on.kind !== "blank") {
       this.emit({ showTime: show, kind: "cut", code: "orientation.change", entryId: on.entryId, message: `orientation ${this.previousOrientation ?? "missing"} → ${this.orientationValue ?? "missing"}` });
@@ -808,6 +811,7 @@ export class SurfaceEngine {
 
   /** A host-reported failure of an issued item: trace it, move the cursor past it, force the next content. */
   private skip(item: PlayableRenderItem, code: SkipCode, show: number, why: string): void {
+    this.skippedToken = item.token;
     this.emit({ showTime: show, kind: "skip", code, entryId: item.entryId, message: `entry ${item.entryId} "${item.name}": ${why}` });
     (item.set === "takeover" ? this.takeoverCursor : this.standardCursor).set(item.position, item.entryId);
     this.failed.add(item.entryId);

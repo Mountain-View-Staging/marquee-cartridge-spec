@@ -179,6 +179,27 @@ test("setting the preview clock is a jump, and the rotation keeps its cursor", a
   ]);
 });
 
+test("an orientation changed and changed back before a tick is no change", async () => {
+  const { trace } = await run(fixture("base"), {
+    start: "2026-09-15T08:00:00-07:00",
+    seconds: 11,
+    events: { 5: (engine) => { engine.setOrientation("landscape"); engine.setOrientation("portrait"); } },
+  });
+  assert.deepEqual(brief(trace).map((e) => e.code), ["rotation.start", "rotation.next"]);
+});
+
+test("a failure reported twice for the item on screen skips it once", async () => {
+  const snapshot = await loadCartridge(fixture("base"));
+  const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+  const start = at("2026-09-15T08:00:00-07:00");
+  const item = engine.tick(start, 0).renderItem;
+  engine.onFirstFrame(item.token);
+  assert.equal(engine.onLoadFailed(item.token, "decoder gave up").length, 1);
+  assert.equal(engine.onLoadFailed(item.token, "decoder gave up").length, 0);
+  const next = engine.tick(start + 1000, 1000);
+  assert.equal(next.renderItem.entryId, 2);
+});
+
 test("a first frame reported for a superseded item is ignored", async () => {
   const snapshot = await loadCartridge(fixture("base"));
   const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });

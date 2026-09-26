@@ -139,6 +139,8 @@ export declare class SurfaceEngine {
     private since;
     private pendingItem;
     private pendingMono;
+    /** The last item skipped, so a repeated report for it is not a second skip. */
+    private skippedToken;
     private issued;
     private events;
     private lastStateKind;
