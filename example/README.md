@@ -1,51 +1,53 @@
-# A working example
-
-A complete Marquee player in one HTML file, reading real cartridges.
+# Explorer and demo show
 
 **Live:** https://mountain-view-staging.github.io/marquee-cartridge-spec/example/
 
-Nothing here is mocked. `SHOW26/` holds two ordinary SQLite cartridges built with
-the DDL in the specification, plus the PNGs their `media_manifest` lists.
-`index.html` opens them with sql.js and resolves what to show using the rules in
-[§5](../README.md#5-the-resolution-algorithm). A static site is a complete
-Marquee origin — the spec's addressing is `<base>/<projectCode>/<file>`, and this
-directory *is* the base.
+`SHOW26/` is a complete v25.0.1 show: two ordinary SQLite cartridges, built with the DDL
+in the specification, and every file their manifests name, with the size and SHA-256
+the manifests give. A static site is a complete Marquee origin: the addressing is
+`<base>/<projectCode>/<file>`, and this directory is the base.
 
-## What it demonstrates
+`index.html` plays the show with the [reference engine](../engine/) on a **preview
+clock**, the kind an authoring tool uses: pick any moment of either day and watch what a
+Surface would put on screen, and read why in the engine's trace. The stage is drawn by
+the same host as the [reference player](../player/).
 
-| | Try it |
+## What the show makes visible
+
+| Rule | Where to look |
 | --- | --- |
-| **Per-slot schedule resolution** (§5.2) | Switch Landscape / Portrait — a different schedule entry resolves, so a different playlist plays |
-| **Takeover suppression** (§5.5) | Scrub to 12:00–14:00 on Day 1. One takeover entry replaces the whole rotation; past 14:00 the standard rotation resumes |
-| **Day-scoped directives** (§5.4) | The takeover is authored on Day 1 only. Scrub into Day 2 — it does not leak across |
-| **Orientation fallback** (§5.6) | "Sponsors" has a landscape file only and is scheduled in the *portrait* playlist. It renders letterboxed rather than being dropped |
-| **Provisioning** (§6) | The client adopts the orientation from the cartridge's single `screen_location` |
-| **Hash-less media** (§7.3) | Every manifest row has `file_size` and no `content_hash`, like a legacy publisher's output. The client admits and *counts* them instead of rejecting the show |
-| **Synthetic time** (§8.2) | The show's days are fixed in 2026. Opening the page any time projects your wall clock onto Day 1 |
+| **Per-slot schedule resolution** (§5.2) | Switch Landscape / Portrait. Each lane runs its own playlist, and the switch cuts (`orientation.change`) and resolves the other lane. |
+| **Takeover suppression and the immediate cut** (§5.5, §5.9) | Day 1, 11:59:50. At 12:00:00 SAFETY NOTICE takes over both lanes: the item on screen is cut (`takeover.activate`) and the standard rotation is suppressed entirely. |
+| **Position cursors** (§5.6) | Day 1, 13:59:50. The takeover turns off at 14:00: the notice finishes its time, then the standard rotation resumes after the entry the takeover cut, not at the top. |
+| **Day-scoped directives** (§5.4) | RECEPTION turns on at 17:00 on Day 1 and has no OFF. On Day 2 at 17:00 it is not on: Day 1's directive governs Day 1 only. The noon takeover was authored for Day 1 and does not happen on Day 2. |
+| **An empty orientation slot excludes** (§5.7) | WAYFINDING has a portrait file only: the landscape playlist lists it and never plays it; the explorer says why. |
+| **A slot's file plays as authored** (§5.7) | SPONSORS' portrait slot holds its landscape file: in portrait it plays letterboxed, over the project's backing. |
+| **Composition** (§5.10) | The project's backing shows wherever content does not cover the stage; the session board has its own backing. |
+| **A trimmed video** (§5.8) | The landscape SIZZLE REEL plays 1 s to 5 s of a 6 s clip and stops on the last frame before 5 s. |
+| **A session board** (§4.7) | MAIN HALL: the room's sessions, now and next, drawn over its backing for `duration × pages`. |
+| **An authored blank** (§5.2) | Day 2, 17:59:52. At 18:00 both lanes are scheduled with no playlist, and the screen clears. |
+| **Synthetic time** (§8.2) | "Now, as a Surface sees it": outside the show's days, Day 1 at the venue's current time of day. |
+| **Integrity** (§7.2) | Every file is checked against its size and SHA-256 before it is used. |
 
 ## Running it locally
 
-`fetch` cannot read `file://`, so serve the directory:
+`fetch` cannot read `file://`, and SHA-256 in the browser needs a secure context
+(`localhost` counts). Serve the repository root, since the page imports `../engine/` and
+`../player/`:
 
 ```bash
-cd example
 python3 -m http.server 8000
-# http://localhost:8000
+# http://localhost:8000/example/
 ```
 
 ## Rebuilding the demo show
 
 ```bash
-python3 build-demo.py
+cd example && python3 build-demo.py
 ```
 
-Rewrites `SHOW26/` from scratch — cartridges and media. No dependencies beyond
-python3. The script is worth reading: it is a miniature publisher, and the
-comments say why each row is shaped the way it is.
-
-## What this client does not do
-
-Video, the demo-station slot, session boards, and the trim and playback-state
-columns. The specification marks each of those as carried-but-not-honoured by the
-reference client, and this one is honest about the same gaps rather than
-implying they are live.
+It rewrites `SHOW26/` from scratch: both cartridges and all media, byte for byte the same
+on every run with the same `ffmpeg`. No dependencies beyond `python3`. `ffmpeg` is optional
+and only makes the video item; without it the show builds without that item rather than
+failing. The script is a miniature publisher, and its comments say why each row is shaped
+the way it is.

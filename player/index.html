@@ -7,237 +7,218 @@
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
   body { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #e6edf3; }
-  #stage { position: fixed; inset: 0; display: grid; place-items: center; background: #000; }
-  #stage img, #stage video { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
-  #idle { color: #6e7681; text-align: center; padding: 24px; max-width: 34rem; }
+  #stage { position: fixed; inset: 0; }
+  #message { position: fixed; inset: 0; display: grid; place-items: center; color: #8b949e; text-align: center; padding: 24px; }
+  #message[hidden] { display: none; }
+  #message .box { max-width: 36rem; }
+  #message button { font: inherit; color: #e6edf3; background: #21262d; border: 1px solid #30363d; border-radius: 6px;
+    padding: 10px 14px; margin: 6px; cursor: pointer; text-align: left; min-width: 18rem; }
+  #message button:hover { border-color: #8b949e; }
   #overlay {
-    position: fixed; left: 12px; bottom: 12px; max-width: min(30rem, calc(100vw - 24px));
-    background: rgba(13, 17, 23, .88); border: 1px solid #30363d; border-radius: 8px;
-    padding: 10px 12px; backdrop-filter: blur(6px);
+    position: fixed; left: 12px; bottom: 12px; width: min(34rem, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto;
+    background: rgba(13, 17, 23, .9); border: 1px solid #30363d; border-radius: 8px; padding: 10px 12px; backdrop-filter: blur(6px);
   }
   #overlay[hidden] { display: none; }
   #overlay table { border-collapse: collapse; width: 100%; }
   #overlay td { padding: 1px 0; vertical-align: top; }
-  #overlay td:first-child { color: #8b949e; padding-right: 10px; white-space: nowrap; }
+  #overlay td:first-child { color: #8b949e; padding-right: 10px; white-space: nowrap; width: 7.5rem; }
+  #trace { margin: 8px 0 0; padding: 0; list-style: none; border-top: 1px solid #30363d; }
+  #trace li { padding: 3px 0; border-bottom: 1px solid #21262d; }
+  #trace .code { color: #58a6ff; }
+  #trace .skip .code, #trace .warning .code { color: #d29922; }
+  #trace .cut .code, #trace .jump .code { color: #f85149; }
+  #trace .t { color: #6e7681; }
   .hint { color: #6e7681; margin-top: 8px; font-size: 11.5px; }
   .warn { color: #d29922; }
   .alert { color: #f85149; }
   .ok { color: #3fb950; }
+  #notice { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); background: rgba(210, 153, 34, .92); color: #0d1117;
+    padding: 6px 12px; border-radius: 6px; font-weight: 600; }
+  #notice[hidden] { display: none; }
 </style>
 </head>
 <body>
 
-<div id="stage"><div id="idle">loading cartridge…</div></div>
+<div id="stage"></div>
+<div id="message"><div class="box">loading the cartridge…</div></div>
+<div id="notice" hidden></div>
 
 <div id="overlay">
   <table id="status"></table>
-  <div class="hint">O orientation · N next · S overlay · F fullscreen</div>
+  <ol id="trace"></ol>
+  <div class="hint">O orientation · M mute · S overlay · F fullscreen · L choose the installation again</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
 <script type="module">
-import {
-  assertSqlite, one, rows, syntheticNow, provision, resolve, advance,
-  deliverableName, playbackWindow, isVideo, signatureOf,
-} from "./player.js";
+import { CartridgeError, createEngine, isSqlite, loadCartridge, sqlJsOpener, surfaceClock } from "../engine/dist/index.js";
+import { BrowserHost } from "./host.js";
+import { MediaStore } from "./media.js";
 
-// The cartridge this player shows. Hard-coded, the way an installed player's
-// address effectively is: one screen, one show. Change these three values and
-// this file plays a different screen.
-const SOURCE = { base: "../example", projectCode: "SHOW26", screenCode: "DEMO1" };
+// The show this player plays. Hard-coded, the way an installed player's
+// address effectively is: change these three values and it plays another.
+const SOURCE = { base: "../example", projectCode: "SHOW26", surfaceCode: "DEMO1" };
 
-const stage = document.getElementById("stage");
-const overlay = document.getElementById("overlay");
-const statusTable = document.getElementById("status");
-
-const state = {
-  db: null, meta: null, days: [], timezone: "UTC",
-  slot: "landscape", locationId: null, provisioned: null,
-  cursorId: null, signature: null, holdTimer: null, projected: false,
+const $ = (id) => document.getElementById(id);
+const address = `${SOURCE.projectCode}/${SOURCE.surfaceCode}`;
+// §6 — stored per address, so changing the show or surface code forgets them.
+const KEYS = { location: `marquee.location:${address}`, override: `marquee.override:${address}`, muted: "marquee.muted" };
+const store = {
+  get: (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set: (k, v) => { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 
-async function openCartridge(SQL, url) {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  assertSqlite(bytes, url);
-  return new SQL.Database(bytes);
+const escape = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+function say(html) {
+  $("message").hidden = false;
+  $("message").innerHTML = `<div class="box">${html}</div>`;
 }
 
-// ── painting ─────────────────────────────────────────────────────────────────
-
-function paint(resolved) {
-  clearTimeout(state.holdTimer);
-  stage.replaceChildren();
-
-  if (!resolved.current) {
-    const idle = document.createElement("div");
-    idle.id = "idle";
-    idle.textContent = resolved.playlistId === null && resolved.scheduled
-      ? "scheduled blank — showing nothing, as authored"
-      : `nothing scheduled for the ${resolved.slot} slot`;
-    stage.append(idle);
-    return;
-  }
-
-  const { entry, item, file } = resolved.current;
-  const url = `${SOURCE.base}/${SOURCE.projectCode}/${deliverableName(state.db, file)}`;
-  // §5.7 — start and duration, exactly as the authoring tool resolves them.
-  const { start, duration } = playbackWindow(entry, item, file, resolved.slot);
-
-  if (isVideo(file.content_type)) {
-    const end = duration > 0 ? start + duration : null;   // 0 = to the end of the clip
-    const video = document.createElement("video");
-    video.src = start ? `${url}#t=${start}` : url;
-    video.autoplay = true;
-    video.muted = true;            // autoplay is blocked otherwise, everywhere
-    video.playsInline = true;
-    video.preload = "auto";
-    if (start) video.currentTime = start;
-    // Advance when the clip ends — or at the trim out-point, whichever is first.
-    video.addEventListener("ended", step, { once: true });
-    if (end) {
-      video.addEventListener("timeupdate", function watchOut() {
-        if (video.currentTime >= end) { video.removeEventListener("timeupdate", watchOut); step(); }
-      });
-    }
-    // A clip that never fires `ended` (a truncated file, a codec the device
-    // cannot finish) would park the rotation forever. The watchdog is why a
-    // single bad asset degrades one slot instead of the whole screen.
-    const watchdog = (duration > 0 ? duration : Number(file.intrinsic_duration) || 300) + 10;
-    state.holdTimer = setTimeout(step, watchdog * 1000);
-    video.addEventListener("error", () => { console.warn("undecodable", url); step(); }, { once: true });
-    stage.append(video);
-    video.play().catch(() => {/* autoplay policy — the watchdog still advances */});
-  } else {
-    const img = document.createElement("img");
-    img.src = url;
-    img.alt = item.name;
-    img.addEventListener("error", () => { console.warn("unfetchable", url); step(); }, { once: true });
-    stage.append(img);
-    state.holdTimer = setTimeout(step, duration * 1000);
-  }
+async function fetchCartridge(name) {
+  const url = `${SOURCE.base}/${SOURCE.projectCode}/${name}`;
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  // §8.5 — a 200 is not proof: check the magic before anything else.
+  if (!isSqlite(bytes)) throw new Error(`${url} is not a SQLite database (a captive portal's page?)`);
+  return bytes;
 }
 
-function currentState() {
-  const clock = syntheticNow(Date.now(), state.days, state.timezone);
-  state.projected = clock.projected;
-  return resolve(state.db, { at: clock.at, slot: state.slot, cursorId: state.cursorId });
-}
-
-/** Advance one position in the CURRENT list, then repaint. */
-function step() {
-  const resolved = currentState();
-  const next = advance(resolved.rotation.list, state.cursorId);
-  state.cursorId = next?.entry.id ?? null;
-  const after = currentState();
-  state.signature = signatureOf(after);
-  paint(after);
-  report(after);
+/** §6 — pick an installation: the stored one while the cartridge still lists it, the only one, or ask. */
+function provision(snapshot) {
+  const locations = snapshot.locations;
+  const stored = store.get(KEYS.location);
+  const kept = locations.find((l) => l.locationId === stored);
+  if (kept) return Promise.resolve(kept);
+  if (locations.length === 1) return Promise.resolve(locations[0]);
+  if (locations.length === 0) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    say(`<p>This surface is installed in more than one place. Which one is this?</p>${
+      locations.map((l, i) => `<button data-i="${i}">${escape(l.label ?? l.locationId)}<br><span class="hint">${escape(l.locationId)} · ${l.orientation}</span></button>`).join("<br>")}`);
+    $("message").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => resolve(locations[Number(b.dataset.i)])));
+  });
 }
 
 /**
- * The clock tick. Almost no tick changes what should be on screen, and
- * repainting anyway would restart the video every second — so repaint only
- * when the resolved signature actually changes.
+ * §6 — the operator's override applies at once and survives a republish that
+ * did not change the location's orientation; a publish that did change it wins.
  */
-function tick() {
-  if (!state.db) return;
-  const resolved = currentState();
-  const signature = signatureOf(resolved);
-  if (signature !== state.signature) {
-    state.signature = signature;
-    state.cursorId = resolved.current?.entry.id ?? null;
-    paint(resolved);
-  }
-  report(resolved);
+function orientationFor(location) {
+  const override = store.get(KEYS.override);
+  if (override && location && override.from !== location.orientation) store.set(KEYS.override, null);
+  return store.get(KEYS.override)?.orientation ?? location?.orientation ?? "landscape";
 }
-
-// ── status overlay ───────────────────────────────────────────────────────────
-
-const fmt = (ms) => new Intl.DateTimeFormat("en-GB", {
-  timeZone: state.timezone, weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false,
-}).format(new Date(ms));
-
-function report(r) {
-  const takeover = r.rotation.source === "takeover";
-  const current = r.current;
-  const kind = current && isVideo(current.file.content_type) ? "video" : "image";
-  const timing = current && playbackWindow(current.entry, current.item, current.file, r.slot);
-  const hold = !current ? "—"
-    : timing.source === "clip" ? `to the end — ${current.file.intrinsic_duration ?? "?"}s intrinsic`
-    : `${timing.duration}s (${timing.source})${timing.start ? ` from ${timing.start}s` : ""}`;
-
-  const lines = [
-    ["screen", `${state.meta.screen_id} · ${state.meta.project_code}`],
-    ["time", `${fmt(r.at)}${state.projected ? ` <span class="warn">projected → Day 1</span>` : ""}`],
-    ["slot", `${r.slot}${state.provisioned?.orientation ? "" : ` <span class="alert">no screen_location</span>`}`],
-    ["playlist", r.playlist ? r.playlist.name : `<span class="warn">none — showing nothing</span>`],
-    ["rotation", takeover
-      ? `<span class="alert">takeover · ${r.rotation.list.length}, ${r.rotation.suppressed} suppressed</span>`
-      : `standard · ${r.rotation.list.length}`],
-    ["now playing", current ? `${current.item.name} <span class="ok">${kind}</span>` : "—"],
-    ["holds for", hold],
-    ["next change", r.nextBoundary ? fmt(r.nextBoundary) : "none today"],
-  ];
-  if (r.rotation.skipped.length) {
-    lines.push(["skipped", `<span class="warn">${r.rotation.skipped
-      .map(([id, why]) => `entry ${id}: ${why}`).join("<br>")}</span>`]);
-  }
-  statusTable.innerHTML = lines.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
-}
-
-// ── boot ─────────────────────────────────────────────────────────────────────
 
 (async function boot() {
+  let SQL;
   try {
-    const SQL = await initSqlJs({
-      locateFile: (f) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}`,
-    });
-
-    // §1 — a client with a screen code pulls BOTH artifacts.
-    await openCartridge(SQL, `${SOURCE.base}/${SOURCE.projectCode}/project.db`);
-    state.db = await openCartridge(SQL, `${SOURCE.base}/${SOURCE.projectCode}/${SOURCE.screenCode}.db`);
-
-    state.meta = one(state.db, "SELECT * FROM cartridge_meta");
-    state.days = rows(state.db, "SELECT * FROM project_days ORDER BY start_time");
-    state.timezone = state.meta?.timezone ?? "UTC";
-
-    // §6 — provisioning. A deployed player persists this id; a demo need not.
-    state.provisioned = provision(state.db, localStorage.getItem("marquee.locationId"));
-    if (state.provisioned.locationId) {
-      localStorage.setItem("marquee.locationId", state.provisioned.locationId);
-      state.slot = state.provisioned.orientation;
-    }
-
-    const first = currentState();
-    state.cursorId = first.current?.entry.id ?? null;
-    state.signature = signatureOf(first);
-    paint(first);
-    report(first);
-    setInterval(tick, 1000);
-
-    addEventListener("keydown", (e) => {
-      const key = e.key.toLowerCase();
-      if (key === "o") {
-        state.slot = state.slot === "portrait" ? "landscape" : "portrait";
-        state.cursorId = null;          // a different slot is a different list
-        state.signature = null;
-        tick();
-      } else if (key === "n") {
-        step();
-      } else if (key === "s") {
-        overlay.hidden = !overlay.hidden;
-      } else if (key === "f") {
-        document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
-      }
-    });
-  } catch (err) {
-    stage.innerHTML = `<div id="idle">${err.message}<br><br>
-      Serve this over HTTP — <code>fetch</code> cannot read <code>file://</code>.<br>
-      <code>python3 -m http.server</code></div>`;
-    console.error(err);
+    SQL = await initSqlJs({ locateFile: (f) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}` });
+  } catch (error) {
+    say(`sql.js did not load: ${escape(error.message)}`);
+    return;
   }
+  const open = sqlJsOpener(SQL);
+
+  let project, snapshot;
+  try {
+    // §1 — a surface with a surface code pulls both artifacts.
+    project = await loadCartridge(await fetchCartridge("project.db"), { open, kind: "project" });
+    snapshot = await loadCartridge(await fetchCartridge(`${SOURCE.surfaceCode}.db`), { open });
+  } catch (error) {
+    const why = error instanceof CartridgeError ? `${error.message} <span class="hint">(${error.code})</span>` : escape(error.message);
+    say(`${why}<br><br><span class="hint">Serve the repository over HTTP: <code>python3 -m http.server</code></span>`);
+    console.error(error);
+    return;
+  }
+  for (const w of [...project.warnings, ...snapshot.warnings]) console.warn(`[cartridge] ${w.message}`);
+
+  const location = await provision(snapshot);
+  if (location) store.set(KEYS.location, location.locationId);
+  let orientation = orientationFor(location);
+
+  say("fetching and verifying media…");
+  const media = new MediaStore({ base: SOURCE.base, projectCode: SOURCE.projectCode });
+  const synced = await media.sync(snapshot, { onProgress: (n, of) => say(`fetching and verifying media… ${n} / ${of}`) });
+  $("message").hidden = true;
+
+  const engine = createEngine({ snapshot, slot: orientation, orientation, clock: surfaceClock() });
+  const recent = [];
+  let lastRender = null;
+  let notice = null;
+  const host = new BrowserHost({
+    engine,
+    stage: $("stage"),
+    media,
+    muted: store.get(KEYS.muted) === true,
+    onTrace: (event) => {
+      console.info(`[trace] ${engine.venueCalendar.format(event.showTime)} ${event.kind} ${event.code} — ${event.message}`);
+      if (event.kind === "render" || event.kind === "blank") lastRender = event;
+      recent.unshift(event);
+      recent.length = Math.min(recent.length, 8);
+    },
+    onNotice: (text) => {
+      notice = text;
+      $("notice").hidden = !text;
+      $("notice").textContent = text ?? "";
+    },
+  });
+  host.start();
+
+  // ── keys ────────────────────────────────────────────────────────────────────
+  addEventListener("keydown", (e) => {
+    const key = e.key.toLowerCase();
+    if (key === "o") {
+      orientation = orientation === "portrait" ? "landscape" : "portrait";
+      store.set(KEYS.override, { orientation, from: location?.orientation ?? null });
+      engine.setOrientation(orientation);   // §5.1: re-resolved at the next tick
+    } else if (key === "m") {
+      store.set(KEYS.muted, !host.muted);
+      host.setMuted(!host.muted);
+    } else if (key === "s") {
+      $("overlay").hidden = !$("overlay").hidden;
+    } else if (key === "f") {
+      document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    } else if (key === "l") {
+      store.set(KEYS.location, null);
+      store.set(KEYS.override, null);
+      window.location.reload();
+    }
+  });
+
+  // ── status ──────────────────────────────────────────────────────────────────
+  const at = (ms) => engine.venueCalendar.format(ms);
+  function status() {
+    if ($("overlay").hidden) return;
+    const v = engine.inspect();
+    const overridden = location && orientation !== location.orientation;
+    const rotation = v.workingSet === "takeover"
+      ? `<span class="alert">takeover</span> · ${v.rotation.length} ${v.suppressed.length ? `(${v.suppressed.length} standard suppressed)` : ""}`
+      : v.workingSet === "standard" ? `standard · ${v.rotation.length}`
+      : v.workingSet === "blank" ? `<span class="warn">authored blank</span>`
+      : `<span class="warn">${v.workingSet} — the last frame stays</span>`;
+    const excluded = v.entries.filter((e) => e.excluded).map((e) => `entry ${e.entryId}: ${escape(e.excluded)}`);
+    const failures = media.failures.size ? ` · <span class="alert">${media.failures.size} rejected</span>` : "";
+    const sound = host.muted ? "muted (M)" : notice ? `<span class="warn">blocked by the browser — click or press a key</span>` : "on";
+    const rows = [
+      ["surface", `${escape(snapshot.meta.surfaceId)} · ${escape(snapshot.meta.projectCode)} · revision ${snapshot.meta.publishedRevision}`],
+      ["installation", location ? `${escape(location.locationId)} — ${escape(location.label ?? "")}` : `<span class="alert">none in the cartridge</span>`],
+      ["orientation", `${orientation}${overridden ? ` <span class="warn">operator override (was ${location.orientation})</span>` : ""}`],
+      ["show clock", `${at(v.showNow)}${lastProjected ? ` <span class="warn">synthetic: Day 1 at the venue's time</span>` : ""}`],
+      ["schedule", v.scheduleEntry ? `entry ${v.scheduleEntry.id} from ${at(v.scheduleEntry.timestamp)} → ${v.playlist ? escape(v.playlist.name) : "<span class=warn>no playlist</span>"}` : "nothing yet"],
+      ["rotation", rotation],
+      ["on screen", lastRender ? escape(lastRender.message) : "—"],
+      ["next change", v.interruptAt ? `takeover at ${at(v.interruptAt)}` : v.nextBoundary ? `schedule at ${at(v.nextBoundary)}` : "none scheduled"],
+      ["media", `${synced.held} of ${synced.wanted} held and verified${failures}`],
+      ["sound", sound],
+    ];
+    if (excluded.length) rows.push(["excluded", `<span class="warn">${excluded.join("<br>")}</span>`]);
+    $("status").innerHTML = rows.map(([k, val]) => `<tr><td>${k}</td><td>${val}</td></tr>`).join("");
+    $("trace").innerHTML = recent.map((e) => `<li class="${e.kind}"><span class="t">${at(e.showTime).slice(11)}</span> <span class="code">${e.code}</span> ${escape(e.message)}</li>`).join("");
+  }
+  let lastProjected = false;
+  host.onTick = (_showNow, projected) => { lastProjected = projected; };
+  setInterval(status, 250);
 })();
 </script>
 </body>

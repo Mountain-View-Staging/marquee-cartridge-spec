@@ -15,8 +15,12 @@ cartridges only.
 From v25.0.1 onward the format evolves **additively** under the compatibility contract (§10),
 so a cartridge published this year opens in a Surface written next year.
 
-> **Repository note.** `example/` and `player/` implement the pre-v25 rules and will be
-> updated to v25.0.1. Until then, treat this document as authoritative wherever they differ.
+> **Repository note.** [`engine/`](engine/) implements §5 and §8 in TypeScript and passes
+> every scenario of the [conformance suite](conformance/README.md); [`player/`](player/) and
+> [`example/`](example/) run on it. Where this document leaves a choice to an implementation,
+> the engine's README lists the choice it makes. The reference player loads its show once:
+> it keeps no cartridge or media between page loads and does not re-pull (§8.4, §8.5), which
+> a deployed Surface must. This document is authoritative wherever they differ.
 
 ### Relationship to the internal platform specification
 
@@ -1055,6 +1059,12 @@ multi-page session boards interrupted by a takeover; video completion, load fail
 watchdog; schedule changeover; day scoping; Studio preview; empty orientation slots and a
 landscape file in a portrait slot; all entries failing without disarming; the first-frame
 timeout; late callbacks from replaced items; and same-playlist boundaries and authored blanks.
+
+The reference engine in [`engine/`](engine/) passes every scenario:
+
+```bash
+node conformance/run.mjs --engine engine/dist/node.js
+```
 
 ### 11.2 Checklist
 

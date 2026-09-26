@@ -1,0 +1,36 @@
+{
+  "name": "marquee-surface-engine",
+  "version": "25.0.1",
+  "private": true,
+  "description": "The Marquee Surface engine: a v25.0.1 cartridge Loader and the on-screen rules, in TypeScript with no runtime dependencies.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/*.test.mjs",
+    "conformance": "node ../conformance/run.mjs --engine dist/node.js",
+    "bench": "node --expose-gc --max-semi-space-size=64 test/bench.mjs"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}

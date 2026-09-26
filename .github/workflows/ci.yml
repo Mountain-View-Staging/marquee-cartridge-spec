@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  engine:
+    name: Engine and conformance (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: engine/package-lock.json
+
+      - name: The suite is well-formed
+        run: node conformance/run.mjs
+
+      - name: Install the compiler
+        working-directory: engine
+        run: npm ci
+
+      - name: The committed dist/ is what the source compiles to
+        working-directory: engine
+        run: |
+          npm run build
+          git diff --exit-code -- dist || {
+            echo "::error::engine/dist is out of date: run 'npm run build' in engine/ and commit the result"
+            exit 1
+          }
+
+      - name: Conformance — every scenario against the engine
+        run: node conformance/run.mjs --engine engine/dist/node.js
+
+      - name: Unit tests
+        working-directory: engine
+        run: npm test
+
+  leak-scan:
+    name: Leak scan (public repository)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No live infrastructure, real codes or internal ids (see CLAUDE.md)
+        run: |
+          if grep -rnE "\b(DF[0-9]{4}[A-Z]*|TBF[0-9]+|RG[0-9]+)\b|amazonaws|mvsmarquee|r2\.dev|\bAB-[TDL]-[0-9]{4}\b" \
+               --exclude-dir=node_modules --exclude-dir=.git \
+               --include="*.md" --include="*.html" --include="*.js" --include="*.mjs" --include="*.ts" \
+               --include="*.py" --include="*.json" --include="*.yml" . \
+             | grep -v -e "CLAUDE.md:" -e "workflows/ci.yml:"; then
+            echo "::error::the lines above must not be published"
+            exit 1
+          fi
+          echo "clean"
