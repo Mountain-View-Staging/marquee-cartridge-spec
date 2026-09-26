@@ -13,7 +13,7 @@
  *     a jump?  → marker = 0                       §8.3
  *     showNow ≥ next schedule boundary → resolve  §5.2; a new playlist cuts
  *     waiting for a first frame?  10 s of monotonic time → skip; else return
- *     showNow ≥ marker → renderNext               §5.9: the only place content changes
+ *     marker forced, or showNow ≥ marker → renderNext   §5.9: the only place content changes
  *
  *   renderNext:
  *     viability pass → working set → next entry after the cursor → RenderItem
@@ -136,6 +136,7 @@ export declare class SurfaceEngine {
     /** Entries that failed since an item last finished its time: when it covers the working set, hold. */
     private readonly failed;
     private marker;
+    private markerForced;
     private markerReason;
     private currentItem;
     private since;
@@ -228,6 +229,10 @@ export declare class SurfaceEngine {
     private backing;
     /** §5.5 — nothing new is produced: the last frame stays, and the marker is armed 2 s out. */
     private rearm;
+    /** §5.9 — marker 0: the next tick evaluates, whatever the show time's value or sign. */
+    private forceMarker;
+    /** Arm the marker at a show instant; any tick at or after it evaluates. */
+    private armMarker;
     /** Whether this hold is already recorded: holds are recorded on entry, not on each retry. */
     private holding;
     private hold;

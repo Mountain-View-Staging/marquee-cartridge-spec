@@ -26,7 +26,7 @@ export type * from "./trace.js";
 export { CartridgeError, type CartridgeErrorCode } from "./errors.js";
 export { isSqlite, loadCartridgeWith, readCartridge, type DatabaseAdapter, type LoadOptions, type Opener } from "./loader.js";
 export { buildSnapshot, type DecodedRow, type RawTables } from "./snapshot.js";
-export { BASELINE, FORMAT_MAJOR, type ColumnSpec, type ColumnType, type TableSpec } from "./schema.js";
+export { BASELINE, FORMAT_MAJOR, type ColumnSpec, type ColumnType, type MalformedRowPolicy, type TableSpec } from "./schema.js";
 export { sqlJsOpener, type SqlJsModule } from "./sqljs.js";
 
 export {

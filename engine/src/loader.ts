@@ -24,6 +24,14 @@
  *
  * What it accepts with a warning (§10.4): unknown tables, unknown columns, and
  * rows carrying an unknown enumerated value, which are skipped.
+ *
+ * A row holding a NUL byte (U+0000) in a text column is malformed (§4). Where a
+ * row with an unknown enumerated value is skipped, it is skipped with a warning
+ * naming the column; in the tables that hold exactly one row it is refused with
+ * that table's code (meta_invalid, structure_invalid). The byte is found in SQL,
+ * not in the string the binding returns: sql.js, and node:sqlite before Node 24,
+ * end the string at the first NUL, and the Loader must say the same on every
+ * binding.
  */
 
 import { CartridgeError } from "./errors.js";
@@ -140,11 +148,16 @@ function checkIdentity(db: DatabaseAdapter, kind: CartridgeKind): void {
     if (!columns.has(need)) throw new CartridgeError("column_missing", `${table} has no ${need} column`, { table });
   }
   const surfaceId = columns.has("surface_id") ? `"surface_id"` : "NULL AS surface_id";
-  const rows = db.all(`SELECT "cartridge_kind", "format_version", ${surfaceId} FROM "${table}"`);
+  const flags = [nulFlag("cartridge_kind"), nulFlag("format_version"), columns.has("surface_id") ? nulFlag("surface_id") : `0 AS ${quote(nulAlias("surface_id"))}`];
+  const rows = db.all(`SELECT "cartridge_kind", "format_version", ${surfaceId}, ${flags.join(", ")} FROM "${table}"`);
   if (rows.length !== 1) {
     throw new CartridgeError("meta_invalid", `${table} has ${rows.length} rows; a cartridge has exactly one`, { table });
   }
   const meta = rows[0]!;
+  const spec = BASELINE.find((t) => t.name === table)!;
+  for (const name of ["cartridge_kind", "format_version", "surface_id"]) {
+    if (holdsNul(meta, name)) malformedRow(spec, name, meta, 0); // refuses: cartridge_meta's policy
+  }
 
   const version = meta["format_version"];
   const match = typeof version === "string" ? /^\s*(\d+)(?:\.|\s*$)/.exec(version) : null;
@@ -203,22 +216,70 @@ function decodeTable(db: DatabaseAdapter, spec: TableSpec, warnings: LoadWarning
 
   const readable = spec.columns.filter((c) => c.read && present.has(c.name));
   const absent = spec.columns.filter((c) => c.read && !present.has(c.name));
+  // Each text column is read with a flag saying whether it holds a NUL byte (§4).
+  const select = [...readable.map((c) => quote(c.name)), ...readable.filter((c) => c.type === "text").map((c) => nulFlag(c.name))];
   let rows: readonly Record<string, unknown>[];
   try {
-    rows = db.all(`SELECT ${readable.map((c) => quote(c.name)).join(", ")} FROM ${quote(spec.name)}`);
+    rows = db.all(`SELECT ${select.join(", ")} FROM ${quote(spec.name)}`);
   } catch (error) {
     throw new CartridgeError("table_unreadable", `table ${spec.name} could not be read: ${(error as Error).message}`, { table: spec.name });
   }
 
-  const out: DecodedRow[] = new Array(rows.length);
+  const out: DecodedRow[] = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!;
     const decoded: DecodedRow = {};
-    for (const column of readable) decoded[column.name] = decodeValue(spec, column, row[column.name], row, i);
+    let malformed: string | null = null;
+    // Columns in the baseline's order; the first problem decides, so a malformed row
+    // is not read further.
+    for (const column of readable) {
+      decoded[column.name] = decodeValue(spec, column, row[column.name], row, i);
+      if (column.type === "text" && holdsNul(row, column.name)) {
+        malformed = column.name;
+        break;
+      }
+    }
+    if (malformed !== null) {
+      warnings.push(malformedRow(spec, malformed, row, i));
+      continue;
+    }
     for (const column of absent) decoded[column.name] = (column.fallback ?? null) as DecodedRow[string];
-    out[i] = decoded;
+    out.push(decoded);
   }
   return out;
+}
+
+// ── malformed rows: a NUL byte in a text column (§4) ────────────────────────────
+
+const nulAlias = (name: string): string => `nul:${name}`;
+
+/**
+ * 1 when the column holds a TEXT value with a NUL byte in it. Evaluated by SQLite
+ * on the whole value, whatever the binding then makes of the string; a BLOB or a
+ * number in the column is left to the type check.
+ */
+function nulFlag(name: string): string {
+  return `(CASE WHEN typeof(${quote(name)}) = 'text' THEN instr(${quote(name)}, char(0)) > 0 ELSE 0 END) AS ${quote(nulAlias(name))}`;
+}
+
+function holdsNul(row: Record<string, unknown>, name: string): boolean {
+  return toNumber(row[nulAlias(name)]) === 1;
+}
+
+/**
+ * The row is malformed: the warning that skips it, or, for a table that must
+ * hold exactly one row, the refusal (thrown here).
+ */
+function malformedRow(spec: TableSpec, column: string, row: Record<string, unknown>, index: number): LoadWarning {
+  const label = rowLabel(spec, row, index);
+  const problem = `table ${spec.name}, row ${label}: ${column} holds a NUL byte (U+0000)`;
+  if (spec.malformedRow !== "skip") {
+    throw new CartridgeError(spec.malformedRow, `${problem}; the row is malformed, and a cartridge has exactly one`, { table: spec.name, row: label });
+  }
+  const id = spec.idColumn === null ? null : toNumber(row[spec.idColumn]);
+  return id === null
+    ? { code: "value.malformed", table: spec.name, column, message: `${problem}; the row is malformed and ignored` }
+    : { code: "value.malformed", table: spec.name, column, rowId: id, message: `${problem}; the row is malformed and ignored` };
 }
 
 function decodeValue(spec: TableSpec, column: ColumnSpec, value: unknown, row: Record<string, unknown>, index: number): DecodedRow[string] {

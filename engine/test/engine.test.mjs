@@ -179,6 +179,53 @@ test("setting the preview clock is a jump, and the rotation keeps its cursor", a
   ]);
 });
 
+/** The base fixture with its day, schedule and directives moved to 1969-09-15: venue time is negative Unix ms. */
+const before1970 = () => {
+  const shift = at("2026-09-15T00:00:00-07:00") - at("1969-09-15T00:00:00-07:00");
+  return variant("base", `
+    UPDATE project_days SET day = '1969-09-15', start_time = start_time - ${shift}, end_time = end_time - ${shift};
+    UPDATE surface_schedule_entry SET timestamp = timestamp - ${shift};
+    UPDATE directive SET timestamp = timestamp - ${shift}`);
+};
+
+test("marker 0 forces the next loop whatever the show time: before 1970 a preview renders, skips and jumps", async () => {
+  const clock = previewClock();
+  clock.set(at("1969-09-15T08:00:00-07:00"));
+  // Entry 2 fails to load (a skip forces the marker); at second 15 the clock is set back (a jump forces it).
+  const { trace, engine } = await run(before1970(), {
+    start: "2026-09-01T12:00:00-07:00",
+    seconds: 26,
+    clock,
+    fail: [2],
+    events: { 15: () => clock.set(at("1969-09-15T08:00:05-07:00")) },
+  });
+  assert.ok(engine.showNow < 0, "the show time is before 1970");
+  assert.deepEqual(brief(trace), [
+    { t: t("1969-09-15T08:00:00-07:00"), kind: "render", code: "rotation.start", entry: 1, set: "standard", file: 101 },
+    { t: t("1969-09-15T08:00:10-07:00"), kind: "skip", code: "media.load_failed", entry: 2 },
+    { t: t("1969-09-15T08:00:10-07:00"), kind: "render", code: "rotation.next", entry: 3, set: "standard", file: 103 },
+    { t: t("1969-09-15T08:00:05-07:00"), kind: "jump", code: "jump.backward" },
+    { t: t("1969-09-15T08:00:05-07:00"), kind: "render", code: "rotation.next", entry: 4, set: "standard", file: 104 },
+    { t: t("1969-09-15T08:00:15-07:00"), kind: "render", code: "rotation.wrap", entry: 1, set: "standard", file: 101 },
+  ]);
+});
+
+test("a Day 1 before 1970 plays on the Surface clock, and a preview set before 1970 holds where nothing is scheduled", async () => {
+  // Outside the event, the Surface clock projects onto Day 1 at the venue's time of day: here, into 1969.
+  const projected = await run(before1970(), { start: "2026-09-01T08:00:00-07:00", seconds: 11 });
+  assert.ok(projected.engine.showNow < 0);
+  assert.deepEqual(brief(projected.trace), [
+    { t: t("1969-09-15T08:00:00-07:00"), kind: "render", code: "rotation.start", entry: 1, set: "standard", file: 101 },
+    { t: t("1969-09-15T08:00:10-07:00"), kind: "render", code: "rotation.next", entry: 2, set: "standard", file: 102 },
+  ]);
+  // The unshifted fixture has nothing scheduled in 1969: the first tick evaluates and records the hold.
+  const clock = previewClock();
+  clock.set(at("1969-12-31T23:59:59Z"));
+  const held = await run(fixture("base"), { start: "2026-09-01T08:00:00-07:00", seconds: 1, clock });
+  assert.deepEqual(brief(held.trace), [{ t: t("1969-12-31T23:59:59Z"), kind: "hold", code: "set.empty" }]);
+  assert.equal(held.engine.inspect().markerReason, "retry");
+});
+
 test("an orientation changed and changed back before a tick is no change", async () => {
   const { trace } = await run(fixture("base"), {
     start: "2026-09-15T08:00:00-07:00",

@@ -168,6 +168,10 @@ erDiagram
 
 DDL below is the v25.0.1 wire format. Comments are normative.
 
+Text columns hold UTF-8 without U+0000; a Loader treats a row containing one as malformed —
+skipped with a warning where a row with an unknown enumerated value is skipped (§10.4), refused
+in the tables that hold exactly one row (`cartridge_meta`, `project`, `surface_config`).
+
 ### 4.1 `cartridge_meta` — both artifacts, exactly one row
 
 ```sql
@@ -634,9 +638,10 @@ end — the next takeover activation (below) is substituted for the duration. On
 passed the day and orientation gates count, so a takeover authored for the other orientation
 never interrupts. A standard item otherwise always finishes its time.
 
-**Setting the marker to 0 forces the next render loop to evaluate.** Use it for a show-clock jump,
-a video completing its window, a skip after a load failure, a change of active playlist, a mode
-change, and a newly committed cartridge.
+**Setting the marker to 0 forces the next render loop to evaluate,** whatever the show time,
+including before 1970 (negative milliseconds). Use it for a show-clock jump, a video completing its
+window, a skip after a load failure, a change of active playlist, a mode change, and a newly
+committed cartridge.
 
 For video, the hint is a watchdog — the window's duration when the window has an end, else
 `intrinsic_duration` (the clip's full length, even when trimmed at the start), else 300 s, plus
@@ -1105,13 +1110,15 @@ node conformance/run.mjs --engine engine/dist/node.js
 - [ ] Decodes post-baseline columns as optional-with-default.
 - [ ] Reports a table that failed to decode differently from a table that is empty.
 - [ ] Ignores unknown tables, columns, and enumerated values.
+- [ ] Treats a row with a NUL byte (U+0000) in a text column as malformed: skipped with a warning,
+      or refused in a table that holds exactly one row (§4).
 
 **Time**
 
 - [ ] Makes every content decision on the show clock, in the venue timezone, and never uses the
       device timezone.
 - [ ] Outside the event, simulates Day 1 at the venue's current time of day.
-- [ ] Keeps one render marker on synthetic time, armed at first frame from the render item's hint; `≥` evaluates the next content; 0 forces the next loop.
+- [ ] Keeps one render marker on synthetic time, armed at first frame from the render item's hint; `≥` evaluates the next content; 0 forces the next loop, whatever the show time, including before 1970 (negative milliseconds).
 - [ ] Sets the marker to 0 on every show-clock jump.
 
 **What is on screen**

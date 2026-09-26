@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { CartridgeError, loadCartridge } from "../dist/node.js";
+import { CartridgeError, loadCartridge, nodeSqliteOpener, readCartridge } from "../dist/node.js";
 import { fixture, variant } from "./helpers.mjs";
 
 async function refusal(bytes, options) {
@@ -150,6 +150,72 @@ test("a project cartridge loads as a project snapshot", async () => {
   assert.equal(s.meta.surfaceId, null);
   assert.equal(s.days.length, 1);
   assert.deepEqual(s.warnings, []);
+});
+
+test("a NUL byte in a text column is a malformed row: skipped with a warning naming the column", async () => {
+  const s = await loadCartridge(variant("base", `
+    PRAGMA ignore_check_constraints = ON;
+    UPDATE media_item SET name = 'Item' || char(0) || '1' WHERE id = 1;
+    UPDATE directive SET type = char(0) || 'takeover' WHERE id = 5`));
+  // The Loader drops the rows before the enumerated values are read, so directive 5 is
+  // malformed, not unknown; entry 1's item is then a dangling reference.
+  assert.deepEqual(s.warnings.map((w) => [w.code, w.table, w.column, w.rowId]), [
+    ["value.malformed", "directive", "type", 5],
+    ["value.malformed", "media_item", "name", 1],
+    ["reference.dangling", "playlist_entry", "media_item_id", 1],
+  ]);
+  assert.equal(s.warnings[1].message, "table media_item, row id=1: name holds a NUL byte (U+0000); the row is malformed and ignored");
+  assert.equal(s.mediaItems.has(1), false);
+  assert.deepEqual(s.directives.get(2).takeover.map((d) => d.onScreen), [false]);
+  assert.equal(s.playlists.get(1).entries.length, 4);
+});
+
+test("a NUL byte in cartridge_meta, project or surface_config refuses the cartridge with that table's code", async () => {
+  const meta = await refusal(variant("base", "UPDATE cartridge_meta SET timezone = 'America/Los_Angeles' || char(0)"));
+  assert.equal(meta.code, "meta_invalid");
+  assert.equal(meta.table, "cartridge_meta");
+  assert.equal(meta.row, "#1");
+  assert.equal(meta.message, "table cartridge_meta, row #1: timezone holds a NUL byte (U+0000); the row is malformed, and a cartridge has exactly one");
+  const project = await refusal(variant("base", "UPDATE project SET name = char(0) || 'Show 26'"));
+  assert.equal(project.code, "structure_invalid");
+  assert.equal(project.table, "project");
+  assert.equal(project.row, "id=1");
+  assert.equal(project.message, "table project, row id=1: name holds a NUL byte (U+0000); the row is malformed, and a cartridge has exactly one");
+  const config = await refusal(variant("base", "UPDATE surface_config SET name = 'Lobby 3' || char(0) || 'x'"));
+  assert.equal(config.code, "structure_invalid");
+  assert.equal(config.table, "surface_config");
+  assert.equal(config.row, "id=1");
+});
+
+test("the identity row's own columns are checked for a NUL byte before they are read", async () => {
+  for (const sql of [
+    "UPDATE cartridge_meta SET cartridge_kind = 'surface' || char(0) || 'x'",
+    "UPDATE cartridge_meta SET format_version = '25.0.1' || char(0)",
+    "UPDATE cartridge_meta SET surface_id = char(0)",
+  ]) {
+    const error = await refusal(variant("base", sql));
+    assert.equal(error.code, "meta_invalid", sql);
+    assert.match(error.message, /^table cartridge_meta, row #1: \w+ holds a NUL byte \(U\+0000\)/, sql);
+  }
+});
+
+test("the NUL byte is found in SQL, so a binding that ends the string at it says the same", async () => {
+  // sql.js, and node:sqlite before Node 24, return 'Item' for 'Item\0 1'. Play that binding.
+  const inner = nodeSqliteOpener(variant("base", "UPDATE media_item SET name = 'Item' || char(0) || ' 1' WHERE id = 1"));
+  const cut = (v) => (typeof v === "string" ? v.split("\u0000")[0] : v);
+  const truncating = {
+    all: (sql) => inner.all(sql).map((row) => Object.fromEntries(Object.entries(row).map(([k, v]) => [k, cut(v)]))),
+    close: () => inner.close(),
+  };
+  try {
+    const s = readCartridge(truncating, "surface");
+    assert.deepEqual(s.warnings.map((w) => [w.code, w.table, w.column, w.rowId]), [
+      ["value.malformed", "media_item", "name", 1],
+      ["reference.dangling", "playlist_entry", "media_item_id", 1],
+    ]);
+  } finally {
+    truncating.close();
+  }
 });
 
 test("an invalid venue timezone loads with a warning (the clock degrades to real time)", async () => {

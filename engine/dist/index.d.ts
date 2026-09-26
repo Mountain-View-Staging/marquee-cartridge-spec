@@ -22,7 +22,7 @@ export type * from "./trace.js";
 export { CartridgeError, type CartridgeErrorCode } from "./errors.js";
 export { isSqlite, loadCartridgeWith, readCartridge, type DatabaseAdapter, type LoadOptions, type Opener } from "./loader.js";
 export { buildSnapshot, type DecodedRow, type RawTables } from "./snapshot.js";
-export { BASELINE, FORMAT_MAJOR, type ColumnSpec, type ColumnType, type TableSpec } from "./schema.js";
+export { BASELINE, FORMAT_MAJOR, type ColumnSpec, type ColumnType, type MalformedRowPolicy, type TableSpec } from "./schema.js";
 export { sqlJsOpener, type SqlJsModule } from "./sqljs.js";
 export { createEngine, SurfaceEngine, EMPTY_RETRY_MS, FIRST_FRAME_TIMEOUT_MS, JUMP_TOLERANCE_MS, type EngineOptions, type EntryInspection, type Inspection, type MarkerReason, type TickOutput, type WorkingSetKind, } from "./engine.js";
 export { previewClock, surfaceClock, type PreviewClock, type ShowClock } from "./clock.js";

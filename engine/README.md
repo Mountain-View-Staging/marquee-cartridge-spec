@@ -134,12 +134,18 @@ Unknown tables and columns, and rows with an unknown enumerated value, load with
 **warning** in `snapshot.warnings` and are ignored (§10.4). So do dangling references,
 malformed JSON columns, an unknown timezone, and a cartridge with no days.
 
+A row holding a NUL byte (U+0000) in a text column is malformed (§4): skipped with a
+`value.malformed` warning that names the column, or refused with the table's own code in
+`cartridge_meta` (`meta_invalid`), `project` and `surface_config` (`structure_invalid`).
+SQLite itself finds the byte, so every binding answers alike — including sql.js and
+node:sqlite before Node 24, which end the string at it.
+
 ### Engine
 
 | Export | |
 |---|---|
 | `createEngine({ snapshot, slot, orientation, clock, boardResolver? })` | One engine per lane. A Surface passes its orientation as both `slot` and `orientation`. |
-| `engine.tick(wallMs, monoMs) → { showNow, projected, renderItem, trace }` | |
+| `engine.tick(wallMs, monoMs) → { showNow, projected, renderItem, trace }` | Evaluates the next content when the marker is forced (0) or `showNow ≥ marker`. A forced marker is a state of its own, not an instant compared with the show time, so a show time before 1970 (negative milliseconds, reachable from a preview clock) evaluates at the next tick like any other (§5.9). |
 | `engine.onFirstFrame(token)`, `onMediaCompleted(token)`, `onLoadFailed(token, reason)` | Each returns the trace events it caused. |
 | `engine.setOrientation(o)`, `engine.commit(snapshot)` | Applied at the next tick. The lane follows the orientation when it was the orientation's own. |
 | `engine.inspect()` | What the engine sees at its last tick — the day, the schedule entry, every entry's gate and directive states, the working set, cursors, marker. For status views; allocates. |

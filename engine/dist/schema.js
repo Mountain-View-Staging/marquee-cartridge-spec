@@ -21,8 +21,8 @@ function col(name, type) {
     const nullable = type.endsWith("?");
     return { name, type: (nullable ? type.slice(0, -1) : type), nullable, read: true };
 }
-function table(name, idColumn, inArtifacts, columns) {
-    return { name, idColumn, in: inArtifacts, columns: columns.map(([n, t]) => col(n, t)) };
+function table(name, idColumn, inArtifacts, columns, malformedRow = "skip") {
+    return { name, idColumn, in: inArtifacts, columns: columns.map(([n, t]) => col(n, t)), malformedRow };
 }
 const BOTH = ["project", "surface"];
 const SURFACE = ["surface"];
@@ -35,7 +35,7 @@ export const BASELINE = [
         ["published_revision", "int"],
         ["timezone", "text"],
         ["generated_at", "int"],
-    ]),
+    ], "meta_invalid"),
     table("media_manifest", "media_file_id", BOTH, [
         ["media_file_id", "int"],
         ["deliverable_file_name", "text"],
@@ -56,7 +56,7 @@ export const BASELINE = [
         ["brand_style_item_id", "int?"],
         ["created", "-"],
         ["updated", "-"],
-    ]),
+    ], "structure_invalid"),
     table("project_days", "id", BOTH, [
         ["id", "int"],
         ["day", "text"],
@@ -73,7 +73,7 @@ export const BASELINE = [
         ["published_at", "int"],
         ["created", "-"],
         ["updated", "-"],
-    ]),
+    ], "structure_invalid"),
     table("surface_location", "id", SURFACE, [
         ["id", "int"],
         ["config_id", "int"],

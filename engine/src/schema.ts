@@ -30,6 +30,14 @@ export interface ColumnSpec {
   readonly fallback?: unknown;
 }
 
+/**
+ * What the Loader does with a malformed row — one holding a NUL byte (U+0000) in a
+ * text column (§4): `skip` drops it with a `value.malformed` warning naming the
+ * column, as a row with an unknown enumerated value is dropped (§10.4); a table that
+ * must hold exactly one row refuses the cartridge with that table's own code.
+ */
+export type MalformedRowPolicy = "skip" | "meta_invalid" | "structure_invalid";
+
 export interface TableSpec {
   readonly name: string;
   /** The column that names a row in an error, or null to use its ordinal. */
@@ -37,6 +45,7 @@ export interface TableSpec {
   /** The artifacts that carry this table (§3). */
   readonly in: readonly ("project" | "surface")[];
   readonly columns: readonly ColumnSpec[];
+  readonly malformedRow: MalformedRowPolicy;
 }
 
 function col(name: string, type: string): ColumnSpec {
@@ -50,8 +59,9 @@ function table(
   idColumn: string | null,
   inArtifacts: readonly ("project" | "surface")[],
   columns: readonly [string, string][],
+  malformedRow: MalformedRowPolicy = "skip",
 ): TableSpec {
-  return { name, idColumn, in: inArtifacts, columns: columns.map(([n, t]) => col(n, t)) };
+  return { name, idColumn, in: inArtifacts, columns: columns.map(([n, t]) => col(n, t)), malformedRow };
 }
 
 const BOTH = ["project", "surface"] as const;
@@ -66,7 +76,7 @@ export const BASELINE: readonly TableSpec[] = [
     ["published_revision", "int"],
     ["timezone", "text"],
     ["generated_at", "int"],
-  ]),
+  ], "meta_invalid"),
   table("media_manifest", "media_file_id", BOTH, [
     ["media_file_id", "int"],
     ["deliverable_file_name", "text"],
@@ -87,7 +97,7 @@ export const BASELINE: readonly TableSpec[] = [
     ["brand_style_item_id", "int?"],
     ["created", "-"],
     ["updated", "-"],
-  ]),
+  ], "structure_invalid"),
   table("project_days", "id", BOTH, [
     ["id", "int"],
     ["day", "text"],
@@ -104,7 +114,7 @@ export const BASELINE: readonly TableSpec[] = [
     ["published_at", "int"],
     ["created", "-"],
     ["updated", "-"],
-  ]),
+  ], "structure_invalid"),
   table("surface_location", "id", SURFACE, [
     ["id", "int"],
     ["config_id", "int"],
