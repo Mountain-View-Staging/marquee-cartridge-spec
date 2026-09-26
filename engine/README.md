@@ -178,7 +178,8 @@ makes the same ones and so each can be settled in the specification.
 | The preview clock before its first command | Reads what a Surface would show now, and runs. |
 | Day 1 on a daylight-saving date | A skipped local time becomes the moment the clocks change; a repeated one, the earlier instant. |
 | No orientation from the host | The gate is skipped (§5.1) and each entry plays the lane's slot, else the other one. |
-| Day 1 clamp | Outside Day 1 after projection, the show clock is Day 1's start. Unreachable while days are whole days. |
+| Day 1 clamp | A projection that lands outside Day 1 becomes Day 1's start. §8.2 says "clamp into" Day 1, which would give its end for a late time; the two differ only for a Day 1 that is not a whole day, which Studio does not produce. |
+| Boundaries on the `demo_station` lane | Not the engine's: it resolves one playlist lane and has no mode. A host with a DemoStation mode watches that lane itself (§5.11). |
 
 ## Build and test
 
@@ -197,14 +198,15 @@ CI builds `dist/` and fails if it differs from what is committed.
 
 ## Performance
 
-`npm run bench` on an Apple M-series laptop, Node 24:
+`npm run bench` on an Apple M-series laptop with Node 24, and the same cartridges loaded in
+Chromium 152 through sql.js 1.10.3:
 
-| | Measured | Target |
-|---|---|---|
-| A tick with no transition | 0.03 µs in the event, 0.07 µs outside it (synthetic Day 1) | < 100 µs |
-| Allocation by an idle tick | 0 bytes over 1,000,000 ticks beyond the host's own call | none |
-| `renderNext`, 500-entry playlist | median 15 µs, p99 61 µs | < 2 ms |
-| Loading a ~12,000-row cartridge (node:sqlite) | median 28 ms | < 500 ms in a browser |
+| | Node 24 | Chromium, sql.js | Target |
+|---|---|---|---|
+| A tick with no transition | 0.03 µs in the event, 0.07 µs outside it (synthetic Day 1) | 0.01 µs | < 100 µs |
+| Allocation by an idle tick | 0 bytes over 1,000,000 ticks beyond the host's own call | — | none |
+| `renderNext` | 500 entries: median 15 µs, p99 61 µs | 1,004 entries: mean 8 µs | < 2 ms for 500 |
+| Loading a ~12,000-row cartridge | median 28 ms (node:sqlite) | median 22 ms | < 500 ms in a browser |
 
 Outside the event, the venue's UTC offset is re-read from the platform once per quarter
 hour; every other tick is arithmetic on numbers already held.
