@@ -166,9 +166,9 @@ set's sessions in start order, each marked past, now, next or later.
 
 ## Where the specification leaves a choice
 
-The rules the specification states are implemented as stated. Where it is silent, the
-engine had to do something; these are the choices, listed so a second implementation
-makes the same ones and so each can be settled in the specification.
+The rules the specification states are implemented as stated. Where it was silent, the
+engine had to do something; these are the choices. The specification now lists them in its
+§5.14, so a second implementation makes the same ones.
 
 | Situation | What this engine does |
 |---|---|
@@ -180,9 +180,9 @@ makes the same ones and so each can be settled in the specification.
 | Which failures count toward `set.all_failed` | Load failures (before or after the first frame), missing first frames, and entries that are not image or video media. The streak ends when an item finishes its time: naturally, at its watchdog, when it completes, or when a takeover cuts it. |
 | A takeover due while the next item is still loading, or before a late first frame's natural end | It still cuts at its time (§5.9: only a takeover preempts a standard item, and it does so at its activation). The loading item is abandoned; a late item's marker is armed at the takeover instead. |
 | The preview clock before its first command | Reads what a Surface would show now, and runs. |
-| Day 1 on a daylight-saving date | §8.2's "next valid instant", read literally: a skipped local time becomes the moment the clocks change, and a repeated one the earlier instant. So on the days around a show whose Day 1 springs forward, the show clock stands at that moment for the hour the clocks skip (whatever is on screen waits), which §8.3's "never holds still" does not foresee. Shifting a skipped time by the length of the gap would keep the clock moving, at the price of one backward jump a day. This one needs the specification to decide. |
+| Day 1 on a daylight-saving date | §8.2's "next valid instant", read literally: a skipped local time becomes the moment the clocks change, and a repeated one the earlier instant. So on the days around a show whose Day 1 springs forward, the show clock stands at that moment for the hour the clocks skip, and whatever is on screen waits. The specification keeps this reading and says so in §8.2; shifting by the length of the gap was rejected because it adds one backward jump a day. |
 | No orientation from the host | The gate is skipped (§5.1) and each entry plays the lane's slot, else the other one. |
-| Day 1 clamp | A projection that lands outside Day 1 becomes Day 1's start. §8.2 says "clamp into" Day 1, which would give its end for a late time; the two differ only for a Day 1 that is not a whole day, which Studio does not produce. |
+| Day 1 clamp | A projection that lands outside Day 1 becomes Day 1's start, as §8.2 now states. The alternative reading, its end for a late time, differed only for a Day 1 that is not a whole day, which Studio does not produce. |
 | Boundaries on the `demo_station` lane | Not the engine's: it resolves one playlist lane and has no mode. A host with a DemoStation mode watches that lane itself (§5.11). |
 
 ## Build and test

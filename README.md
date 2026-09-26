@@ -741,6 +741,25 @@ Surface that does not implement demo mode ignores the slot entirely.
 
 ---
 
+### 5.14 Where the rules leave a choice
+
+The rules above are complete for what they state. Where they are silent, the reference engine
+had to choose. A conforming client makes the same choices, because the conformance traces
+(§11) depend on them.
+
+| Situation | Rule |
+|---|---|
+| Two directives, schedule entries or playlist entries share a timestamp or position | The higher `id` is later. Rotation cursors compare (position, id). |
+| No schedule entry for the lane has started yet | Hold, as for an empty working set (`set.empty`), and play from the first changeover. |
+| What an interruption records | One event per cause. A jump records `jump` only, and a playlist change it causes resets the cursors silently. A `cut` is recorded only when an entry is on screen, and names it. |
+| An authored blank | Re-evaluated every 2 s like a hold, without repeating the `blank` event. |
+| An orientation change; a new cartridge | Applied at the next tick; the `cut` carries that tick's show time. |
+| Which failures count toward `set.all_failed` | Load failures before or after the first frame, missing first frames, and entries that are not image or video media. The streak ends when an item finishes its time: naturally, at its watchdog, on completion, or when a takeover cuts it. |
+| A takeover due while the next item is still loading, or before a late first frame's natural end | It still cuts at its time (§5.9). The loading item is abandoned; a late item's marker is armed at the takeover instead. |
+| The preview clock before its first command | Reads what a Surface would show now, and runs. |
+| No orientation from the host | The gate is skipped (§5.1), and each entry plays the lane's slot, else the other one. |
+| Boundaries on the `demo_station` lane | Not the engine's: it resolves one playlist lane and has no mode. A host with a DemoStation mode watches that lane itself (§5.11). |
+
 ## 6. Provisioning
 
 A surface cartridge describes one or more **installations** of the same surface config: its
@@ -879,7 +898,8 @@ showNow(realNow):
   # outside the event: synthetic time
   tod       = time-of-day of realNow in the venue timezone
   synthetic = Day 1's date at tod, in the venue timezone
-  clamp synthetic into [Day 1 start_time, Day 1 end_time]
+  if synthetic is outside [Day 1 start_time, Day 1 end_time]:
+      synthetic = Day 1 start_time
   return synthetic
 ```
 
@@ -887,7 +907,9 @@ showNow(realNow):
   Surface in New York powered up the week before a Los Angeles Show shows, at 12:00 ET, what the
   sign will show at 09:00 PT on Day 1.
 - Because days are whole venue-local days, the clamp is a guard, not a normal path.
-- A local time that does not exist (daylight-saving gap) resolves to the next valid instant.
+- A local time that does not exist (daylight-saving gap) resolves to the next valid instant. On a
+  Day 1 that springs forward, the show clock therefore holds at that instant for the skipped hour.
+  That can only happen outside the event window, and it is the intended reading of the rule.
 - **This is required behavior.** Viewing any other moment of the Show is a Studio preview
   function; a Surface has no preview mode.
 
@@ -1104,6 +1126,7 @@ node conformance/run.mjs --engine engine/dist/node.js
 - [ ] Composites backing, content, and overlay, with one duration per composite.
 - [ ] Renders session boards.
 - [ ] Never disarms: every evaluation leaves the marker armed.
+- [ ] Makes the choices in §5.14 the same way (ties by `id`; a lane with no entry yet holds; one trace event per cause).
 
 **Provisioning**
 
