@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Marquee Cartridge — Reference Client</title>
+<title>Marquee Cartridge — Explorer</title>
 <style>
   :root {
     --bg: #0d1117; --panel: #161b22; --line: #30363d;
@@ -16,88 +16,106 @@
     margin: 0; background: var(--bg); color: var(--text);
     font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   }
-  header { padding: 20px 16px 8px; max-width: 1180px; margin: 0 auto; }
+  header { padding: 20px 16px 8px; max-width: 1240px; margin: 0 auto; }
   h1 { font-size: 1.15rem; margin: 0 0 4px; }
   header p { margin: 0; color: var(--muted); font-size: .9rem; }
-  header a { color: var(--accent); }
+  a { color: var(--accent); }
   main {
-    max-width: 1180px; margin: 0 auto; padding: 16px;
+    max-width: 1240px; margin: 0 auto; padding: 16px;
     display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
-  @media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); } }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
-  .panel h2 { font-size: .78rem; text-transform: uppercase; letter-spacing: .07em;
-              color: var(--muted); margin: 0 0 12px; font-weight: 600; }
-  .stage { display: grid; place-items: center; background: #000;
-           border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-  .stage.landscape { aspect-ratio: 16 / 9; }
-  .stage.portrait  { aspect-ratio: 9 / 16; max-height: 62vh; margin: 0 auto; }
-  .stage img { width: 100%; height: 100%; object-fit: contain; display: block; }
-  .stage .empty { color: var(--muted); font: 13px var(--mono); padding: 24px; text-align: center; }
-  .caption { margin-top: 10px; font: 13px var(--mono); color: var(--muted); }
-  .caption b { color: var(--text); font-weight: 600; }
+  @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; }
+  .panel h2 { font-size: .78rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+  .wide { grid-column: 1 / -1; }
+  #stage { width: 100%; border: 1px solid var(--line); border-radius: 6px; }
+  #stage.landscape { aspect-ratio: 16 / 9; }
+  #stage.portrait { aspect-ratio: 9 / 16; height: min(64vh, 720px); width: auto; margin: 0 auto; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
   button {
     background: #21262d; color: var(--text); border: 1px solid var(--line);
-    border-radius: 6px; padding: 6px 11px; font-size: .85rem; cursor: pointer;
+    border-radius: 6px; padding: 6px 11px; font-size: .85rem; cursor: pointer; font-family: inherit;
   }
   button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #0d1117; font-weight: 600; }
   button:hover:not([aria-pressed="true"]) { border-color: var(--muted); }
   input[type=range] { width: 100%; accent-color: var(--accent); }
-  .clock { font: 13px var(--mono); color: var(--text); margin: 6px 0 2px; }
-  .clock .tz { color: var(--muted); }
+  .clock { font: 600 1.35rem var(--mono); font-variant-numeric: tabular-nums; }
+  .clock small { font: 13px var(--mono); color: var(--muted); font-weight: 400; }
+  .caption { margin-top: 10px; font: 13px var(--mono); color: var(--muted); min-height: 1.5em; }
+  .caption b { color: var(--text); font-weight: 600; }
   table { width: 100%; border-collapse: collapse; font: 12.5px var(--mono); }
   td { padding: 3px 0; vertical-align: top; }
-  td:first-child { color: var(--muted); width: 42%; padding-right: 10px; }
-  .rot { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip { font: 12px var(--mono); padding: 3px 8px; border-radius: 999px;
-          border: 1px solid var(--line); color: var(--muted); }
-  .chip.on { border-color: var(--ok); color: var(--ok); }
-  .chip.now { background: var(--ok); border-color: var(--ok); color: #0d1117; font-weight: 600; }
-  .chip.takeover { border-color: var(--alert); color: var(--alert); }
-  .chip.takeover.now { background: var(--alert); border-color: var(--alert); color: #fff; }
+  td:first-child { color: var(--muted); width: 30%; padding-right: 10px; }
+  .presets { display: grid; gap: 6px; margin-top: 12px; }
+  .presets button { text-align: left; font-size: .82rem; }
+  .presets button b { color: var(--accent); font-family: var(--mono); font-weight: 600; margin-right: 6px; }
+  .entries { margin-top: 12px; display: grid; gap: 4px; font: 12.5px var(--mono); }
+  .entry { display: grid; grid-template-columns: 2.4rem 1fr auto; gap: 8px; padding: 4px 8px; border-radius: 5px; border: 1px solid var(--line); }
+  .entry .pos { color: var(--muted); }
+  .entry .why { color: var(--muted); }
+  .entry.out { opacity: .5; }
+  .entry.standard { border-color: var(--ok); }
+  .entry.takeover { border-color: var(--alert); }
+  .entry.suppressed { border-style: dashed; }
+  .entry.now { background: rgba(88, 166, 255, .16); }
+  #trace { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow: auto; font: 12.5px var(--mono); }
+  #trace li { padding: 4px 0; border-bottom: 1px solid #21262d; display: grid; grid-template-columns: 5.2rem 11rem 1fr; gap: 8px; }
+  #trace .t { color: var(--muted); }
+  #trace .code { color: var(--accent); }
+  #trace .skip .code, #trace .warning .code, #trace .hold .code { color: var(--warn); }
+  #trace .cut .code, #trace .jump .code, #trace .blank .code { color: var(--alert); }
   .note { margin-top: 12px; font-size: .82rem; color: var(--muted); border-left: 2px solid var(--line); padding-left: 10px; }
+  .note.warn { border-left-color: var(--warn); color: var(--text); }
   .note.alert { border-left-color: var(--alert); color: var(--text); }
-  .note.warn { border-left-color: var(--warn); }
   code { font-family: var(--mono); font-size: .92em; }
-  footer { max-width: 1180px; margin: 0 auto; padding: 0 16px 40px; color: var(--muted); font-size: .84rem; }
-  footer a { color: var(--accent); }
+  footer { max-width: 1240px; margin: 0 auto; padding: 0 16px 40px; color: var(--muted); font-size: .84rem; }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Marquee Cartridge — Reference Client</h1>
-  <p>A complete player in one file, reading real cartridges served from this site.
-     <a href="https://github.com/Mountain-View-Staging/marquee-cartridge-spec">Specification&nbsp;↗</a></p>
+  <h1>Marquee Cartridge — Explorer</h1>
+  <p>The demo show, played by the <a href="../engine/">reference engine</a> on a preview clock: pick any moment of the
+     show and watch what a Surface would do, and why. <a href="https://github.com/Mountain-View-Staging/marquee-cartridge-spec">Specification&nbsp;↗</a></p>
 </header>
 
 <main>
   <section class="panel">
-    <h2>Screen</h2>
+    <h2>Surface</h2>
     <div class="controls">
       <button id="btn-landscape" aria-pressed="true">Landscape</button>
       <button id="btn-portrait" aria-pressed="false">Portrait</button>
-      <button id="btn-advance">Advance ▸</button>
+      <button id="btn-mute" aria-pressed="false">Mute</button>
     </div>
-    <div id="stage" class="stage landscape"><div class="empty">loading…</div></div>
-    <div class="caption" id="caption">&nbsp;</div>
-    <div class="note" id="orientation-note"></div>
+    <div id="stage" class="landscape"></div>
+    <div class="caption" id="caption">loading…</div>
+    <div class="note" id="notice" hidden></div>
   </section>
 
   <section class="panel">
-    <h2>Resolution</h2>
-    <div class="clock" id="clock">&nbsp;</div>
-    <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Show time">
+    <h2>Show clock</h2>
+    <div class="clock" id="clock">—</div>
+    <div class="controls" style="margin-top:8px" id="days"></div>
+    <input type="range" id="scrub" min="0" max="86399" value="0" aria-label="Time of day">
     <div class="controls" style="margin-top:8px">
-      <button id="btn-now" aria-pressed="true">Now (synthetic)</button>
+      <button id="btn-play" aria-pressed="true">Playing</button>
+      <button id="btn-now">Now, as a Surface sees it</button>
     </div>
-    <table id="trace"></table>
-    <div class="rot" id="rotation"></div>
-    <div class="note" id="takeover-note"></div>
+    <div class="presets" id="presets"></div>
   </section>
 
-  <section class="panel" style="grid-column: 1 / -1">
+  <section class="panel">
+    <h2>What the engine sees</h2>
+    <table id="resolution"></table>
+    <div class="entries" id="entries"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Trace</h2>
+    <ol id="trace"></ol>
+  </section>
+
+  <section class="panel wide">
     <h2>Cartridge</h2>
     <table id="meta"></table>
     <div class="note" id="integrity"></div>
@@ -105,337 +123,207 @@
 </main>
 
 <footer>
-  This page implements §5 (resolution), §6 (provisioning), §7.3 (integrity) and §8.2
-  (synthetic time) of the specification. It does <em>not</em> implement video, the demo-station
-  slot, session boards, or the trim and playback-state columns — the specification marks each
-  of those, and so does this client, rather than pretending they are live.
-  <br><br>View source on this page: the resolution functions are named for the spec sections
-  they implement.
+  Everything on this page is decided by <code>engine/</code>: the stage is drawn by the same host as the
+  <a href="../player/">reference player</a>, and the tables come from <code>engine.inspect()</code> and the engine's trace.
+  The clock here is a preview clock (§8): setting it is a show-clock jump, and pausing it holds everything on screen.
 </footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
-<script>
-"use strict";
+<script type="module">
+import { CartridgeError, createEngine, isSqlite, loadCartridge, previewClock, sqlJsOpener } from "../engine/dist/index.js";
+import { BrowserHost } from "../player/host.js";
+import { MediaStore } from "../player/media.js";
 
-// Where this client looks for content. The spec's URL shape is
-// <base>/<projectCode>/<file>, and this page IS the base — the demo show sits
-// beside it, so a static site is a complete Marquee origin with no server.
-const BASE = ".";
-const PROJECT_CODE = "SHOW26";
-const SCREEN_CODE = "DEMO1";
+// This page IS the media base: the demo show sits beside it (§7.1).
+const SOURCE = { base: ".", projectCode: "SHOW26", surfaceCode: "DEMO1" };
 
 const $ = (id) => document.getElementById(id);
-const state = {
-  cartridge: null, project: null,
-  orientation: "landscape",     // the rendered slot (§5.1)
-  locationId: null,
-  followNow: true,
-  scrubTime: null,
-  lastRenderedEntryId: null,
-};
+const escape = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-// ---------------------------------------------------------------------------
-// Loading
-// ---------------------------------------------------------------------------
-
-async function openDb(SQL, url) {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  // §8.4: never trust a 200. A captive portal answers one with HTML, and a
-  // zero-byte file is a VALID empty database — so check the magic, not "it opens".
-  const magic = "SQLite format 3\0";
-  for (let i = 0; i < magic.length; i++) {
-    if (bytes[i] !== magic.charCodeAt(i)) throw new Error(`${url} is not a SQLite database`);
-  }
-  return new SQL.Database(bytes);
+async function fetchCartridge(name) {
+  const url = `${SOURCE.base}/${SOURCE.projectCode}/${name}`;
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (!isSqlite(bytes)) throw new Error(`${url} is not a SQLite database`);
+  return bytes;
 }
-
-const rows = (db, sql, params = []) => {
-  const out = [];
-  const stmt = db.prepare(sql);
-  stmt.bind(params);
-  while (stmt.step()) out.push(stmt.getAsObject());
-  stmt.free();
-  return out;
-};
-const one = (db, sql, params = []) => rows(db, sql, params)[0] ?? null;
-
-// §9.2 — decode against the columns that are ACTUALLY there. A cartridge
-// published before a column existed simply lacks it, and a client that assumes
-// otherwise reads an empty table and shows a black screen.
-const columnsOf = (db, table) => new Set(rows(db, `PRAGMA table_info(${table})`).map((r) => r.name));
-
-// ---------------------------------------------------------------------------
-// §8.2 — synthetic time. Outside the show window, project the viewer's
-// wall-clock H:M:S onto Day 1 so the demo is meaningful whenever it is opened.
-// ---------------------------------------------------------------------------
-
-function syntheticNow(days, timezone) {
-  const real = Date.now();
-  if (!days.length) return { real, synthetic: real, projected: false };
-  const start = days[0].start_time, end = days[days.length - 1].end_time;
-  if (real >= start && real <= end) return { real, synthetic: real, projected: false };
-
-  const now = new Date(real);
-  const dayOne = new Date(start);
-  const ymd = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(dayOne);
-  // The operator's own wall clock, placed on Day 1's date in the venue's zone.
-  const clock = `${String(now.getHours()).padStart(2, "0")}:` +
-                `${String(now.getMinutes()).padStart(2, "0")}:` +
-                `${String(now.getSeconds()).padStart(2, "0")}`;
-  const offset = offsetFor(dayOne, timezone);
-  let synthetic = Date.parse(`${ymd}T${clock}${offset}`);
-  if (!Number.isFinite(synthetic) || synthetic < start || synthetic > end) synthetic = start;
-  return { real, synthetic, projected: true };
-}
-
-function offsetFor(date, timeZone) {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" })
-    .formatToParts(date).find((p) => p.type === "timeZoneName")?.value ?? "GMT+00:00";
-  return parts.replace("GMT", "") || "+00:00";
-}
-
-const fmtTime = (ms, timeZone) => new Intl.DateTimeFormat("en-GB", {
-  timeZone, weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false,
-}).format(new Date(ms));
-
-// ---------------------------------------------------------------------------
-// §5 — resolution
-// ---------------------------------------------------------------------------
-
-// §5.2 — within MY slot, the most recent entry whose timestamp <= now.
-function scheduleEntryFor(db, configId, slot, now) {
-  return one(db,
-    `SELECT * FROM screen_schedule_entry
-      WHERE config_id = ? AND slot = ? AND timestamp <= ?
-      ORDER BY timestamp DESC LIMIT 1`, [configId, slot, now]);
-}
-
-// §5.4 — the governing directive for one entry and one type, day-scoped.
-// The day window is what stops yesterday's takeover leaking into today.
-function governingDirective(db, entryId, type, now, days) {
-  const window = days.find((d) => now >= d.start_time && now <= d.end_time);
-  const scoped = window
-    ? `AND timestamp BETWEEN ${window.start_time} AND ${window.end_time}`
-    : "";
-  return one(db,
-    `SELECT * FROM directive
-      WHERE entry_id = ? AND type = ? AND timestamp <= ? ${scoped}
-      ORDER BY timestamp DESC LIMIT 1`, [entryId, type, now]);
-}
-
-// §5.6 — requested orientation's file, falling back to the other.
-function resolveFile(db, item, orientation) {
-  const id = orientation === "portrait"
-    ? (item.portrait_file_id ?? item.landscape_file_id)
-    : (item.landscape_file_id ?? item.portrait_file_id);
-  return id ? one(db, "SELECT * FROM media_file WHERE id = ?", [id]) : null;
-}
-
-// §5.3–5.5 — the working list, and which of the two rotations produced it.
-function workingList(db, playlistId, now, days, orientation) {
-  if (!playlistId) return { takeovers: [], standard: [], list: [], source: "none" };
-  const cols = columnsOf(db, "playlist_entry");
-  const entries = rows(db,
-    "SELECT * FROM playlist_entry WHERE playlist_id = ? ORDER BY position", [playlistId]);
-
-  const takeovers = [], standard = [];
-  for (const entry of entries) {
-    // §9.2 in practice: `disabled` only exists in v4+ cartridges. Absent means
-    // the default, never an error.
-    if (cols.has("disabled") && entry.disabled) continue;
-
-    if (entry.resource_type === "session_set") continue;   // §4.7 — not rendered here
-    const item = one(db, "SELECT * FROM media_item WHERE id = ?", [entry.media_item_id]);
-    if (!item || !resolveFile(db, item, orientation)) continue;   // §5.3
-
-    const takeover = governingDirective(db, entry.id, "takeover", now, days);
-    const standardD = governingDirective(db, entry.id, "standard", now, days);
-    if (takeover && takeover.on_screen) takeovers.push({ entry, item });
-    if (standardD && standardD.on_screen) standard.push({ entry, item });
-  }
-  // §5.5 — a non-empty takeover set IS the rotation. Standard is suppressed
-  // entirely: not appended, not interleaved.
-  const list = takeovers.length ? takeovers : standard;
-  return { takeovers, standard, list, source: takeovers.length ? "takeover" : "standard" };
-}
-
-// §5.5 — advance by locating the last-rendered entry IN THE CURRENT LIST.
-// A stored index would skip items whenever the list's composition changes.
-function advance(list, lastRenderedEntryId) {
-  if (!list.length) return null;
-  const previous = list.findIndex((x) => x.entry.id === lastRenderedEntryId);
-  return list[previous === -1 ? 0 : (previous + 1) % list.length];
-}
-
-// ---------------------------------------------------------------------------
-// Render
-// ---------------------------------------------------------------------------
-
-function render(step) {
-  const { cartridge: db, project } = state;
-  const days = rows(db, "SELECT * FROM project_days ORDER BY start_time");
-  const meta = one(db, "SELECT * FROM cartridge_meta");
-  const tz = meta.timezone ?? "UTC";
-
-  const clock = syntheticNow(days, tz);
-  const now = state.followNow ? clock.synthetic : state.scrubTime;
-
-  const config = one(db, "SELECT * FROM screen_config LIMIT 1");
-  const scheduled = scheduleEntryFor(db, config.id, state.orientation, now);
-  const playlist = scheduled?.playlist_id
-    ? one(db, "SELECT * FROM playlist WHERE id = ?", [scheduled.playlist_id]) : null;
-  const { takeovers, standard, list, source } =
-    workingList(db, scheduled?.playlist_id, now, days, state.orientation);
-
-  if (step) state.lastRenderedEntryId = advance(list, state.lastRenderedEntryId)?.entry.id ?? null;
-  let current = list.find((x) => x.entry.id === state.lastRenderedEntryId) ?? list[0] ?? null;
-  state.lastRenderedEntryId = current?.entry.id ?? null;
-
-  // ---- stage ----
-  const stage = $("stage");
-  stage.className = `stage ${state.orientation}`;
-  if (current) {
-    const file = resolveFile(db, current.item, state.orientation);
-    // §4.6 — the deliverable is what the MANIFEST names. Re-deriving it from
-    // media_file would be a second implementation of one rule.
-    const manifest = one(db, "SELECT * FROM media_manifest WHERE media_file_id = ?", [file.id]);
-    const name = manifest?.deliverable_file_name ?? file.source_file_name;
-    stage.innerHTML = `<img alt="${current.item.name}" src="${BASE}/${PROJECT_CODE}/${name}">`;
-    const usedFallback = (state.orientation === "portrait" && !current.item.portrait_file_id)
-                      || (state.orientation === "landscape" && !current.item.landscape_file_id);
-    $("caption").innerHTML =
-      `<b>${current.item.name}</b> · entry ${current.entry.id} · ${file.width}×${file.height}` +
-      (usedFallback ? ` · <span style="color:var(--warn)">other orientation (§5.6 fallback)</span>` : "");
-  } else {
-    stage.innerHTML = `<div class="empty">nothing scheduled for the <b>${state.orientation}</b> slot at this time</div>`;
-    $("caption").innerHTML = "&nbsp;";
-  }
-
-  // ---- clock + trace ----
-  $("clock").innerHTML = `${fmtTime(now, tz)} <span class="tz">${tz}</span>` +
-    (state.followNow && clock.projected
-      ? ` <span style="color:var(--warn)">· projected onto Day 1 (§8.2)</span>` : "");
-
-  $("trace").innerHTML = [
-    ["location / orientation", `${state.locationId ?? "—"} → ${state.orientation}`],
-    ["schedule entry", scheduled ? `#${scheduled.id} @ ${fmtTime(scheduled.timestamp, tz)}` : "none ≤ now"],
-    ["playlist", playlist ? `${playlist.name} (#${playlist.id})` : "NULL → show nothing"],
-    ["takeover / standard", `${takeovers.length} / ${standard.length}`],
-    ["working list", `${list.length} from ${source}`],
-  ].map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
-
-  $("rotation").innerHTML = list.map((x) => {
-    const isNow = x.entry.id === state.lastRenderedEntryId;
-    return `<span class="chip ${source === "takeover" ? "takeover " : ""}${isNow ? "now" : "on"}">${x.item.name}</span>`;
-  }).join("") || `<span class="chip">empty</span>`;
-
-  $("takeover-note").className = takeovers.length ? "note alert" : "note";
-  $("takeover-note").innerHTML = takeovers.length
-    ? `<b>Takeover active.</b> ${standard.length} standard ${standard.length === 1 ? "entry is" : "entries are"}
-       suppressed entirely — not appended, not interleaved (§5.5). Scrub past 14:00 on Day 1 to watch it end.`
-    : `Scrub to <b>12:00–14:00 on Day 1</b> to see a takeover replace the whole rotation.`;
-
-  $("orientation-note").innerHTML = state.locationId
-    ? `Provisioned to <code>${state.locationId}</code>; its <code>orientation</code> is the rendered slot (§6).
-       Switching above overrides it, the way a tech would on site.`
-    : `<b>No screen_location in this cartridge.</b> Falling back to the device default — the failure in §6.1.`;
-}
-
-// ---------------------------------------------------------------------------
-// Boot
-// ---------------------------------------------------------------------------
 
 (async function boot() {
+  let snapshot, project;
   try {
-    const SQL = await initSqlJs({
-      locateFile: (f) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}`,
-    });
-    // §1 — a client with a screen code pulls BOTH artifacts.
-    state.project = await openDb(SQL, `${BASE}/${PROJECT_CODE}/project.db`);
-    state.cartridge = await openDb(SQL, `${BASE}/${PROJECT_CODE}/${SCREEN_CODE}.db`);
-    const db = state.cartridge;
-
-    // §6 — provisioning. Pick a location; adopt its orientation.
-    const location = one(db, "SELECT * FROM screen_location ORDER BY id LIMIT 1");
-    if (location) {
-      state.locationId = location.location_id;
-      state.orientation = location.orientation === "portrait" ? "portrait" : "landscape";
-    }
-
-    const meta = one(db, "SELECT * FROM cartridge_meta");
-    const days = rows(db, "SELECT * FROM project_days ORDER BY start_time");
-    const manifest = rows(db, "SELECT * FROM media_manifest");
-    const migrations = rows(db, "SELECT identifier FROM grdb_migrations").map((r) => r.identifier);
-
-    $("meta").innerHTML = [
-      ["screen / project", `${meta.screen_id} · ${meta.project_code}`],
-      ["published_revision", meta.published_revision],
-      ["timezone", meta.timezone],
-      ["show days", days.map((d) => d.day).join(", ")],
-      ["media_manifest", `${manifest.length} files`],
-      ["grdb_migrations", migrations.join(", ")],
-      ["playlist_entry columns", columnsOf(db, "playlist_entry").size],
-    ].map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
-
-    // §7.3 — the hash is optional; the size is what you have. Say so out loud.
-    const unhashed = manifest.filter((m) => !m.content_hash).length;
-    const unsized = manifest.filter((m) => m.file_size == null).length;
-    $("integrity").className = unhashed ? "note warn" : "note";
-    $("integrity").innerHTML = unhashed
-      ? `<b>${unhashed} of ${manifest.length} manifest rows carry no <code>content_hash</code></b> — normal for a
-         legacy publisher, and not corruption (§7.3). Those files are admitted and counted as unverified rather
-         than rejected; rejecting them would reject the whole show. ${unsized
-           ? `${unsized} also carry no <code>file_size</code>, so they get no check at all.`
-           : `Every row does carry a <code>file_size</code>, so a truncated download is still caught.`}`
-      : `Every manifest row carries a hash; all media is verified.`;
-
-    // Scrubber spans the whole show.
-    const scrub = $("scrub");
-    scrub.min = days[0].start_time;
-    scrub.max = days[days.length - 1].end_time;
-    scrub.step = 60_000;
-    scrub.value = syntheticNow(days, meta.timezone).synthetic;
-    state.scrubTime = Number(scrub.value);
-
-    scrub.addEventListener("input", () => {
-      state.followNow = false;
-      $("btn-now").setAttribute("aria-pressed", "false");
-      state.scrubTime = Number(scrub.value);
-      render(false);
-    });
-    $("btn-now").addEventListener("click", () => {
-      state.followNow = true;
-      $("btn-now").setAttribute("aria-pressed", "true");
-      scrub.value = syntheticNow(days, meta.timezone).synthetic;
-      render(false);
-    });
-    for (const o of ["landscape", "portrait"]) {
-      $(`btn-${o}`).addEventListener("click", () => {
-        state.orientation = o;
-        $("btn-landscape").setAttribute("aria-pressed", String(o === "landscape"));
-        $("btn-portrait").setAttribute("aria-pressed", String(o === "portrait"));
-        state.lastRenderedEntryId = null;   // the list is a different list now
-        render(false);
-      });
-    }
-    $("btn-advance").addEventListener("click", () => render(true));
-    $("btn-landscape").setAttribute("aria-pressed", String(state.orientation === "landscape"));
-    $("btn-portrait").setAttribute("aria-pressed", String(state.orientation === "portrait"));
-
-    render(false);
-    // Step the rotation every 8 s, the default still hold (§5.7). The explorer
-    // shows what resolves; it does not time entries. player/ does.
-    setInterval(() => render(true), 8000);
-  } catch (err) {
-    $("stage").innerHTML = `<div class="empty">${err.message}<br><br>
-      Serve this directory over HTTP — <code>fetch</code> cannot read <code>file://</code>.<br>
-      <code>python3 -m http.server</code></div>`;
-    console.error(err);
+    const SQL = await initSqlJs({ locateFile: (f) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}` });
+    const open = sqlJsOpener(SQL);
+    project = await loadCartridge(await fetchCartridge("project.db"), { open, kind: "project" });
+    snapshot = await loadCartridge(await fetchCartridge(`${SOURCE.surfaceCode}.db`), { open });
+  } catch (error) {
+    const why = error instanceof CartridgeError ? `${escape(error.message)} (${error.code})` : escape(error.message);
+    $("caption").innerHTML = `${why}<br>Serve the repository over HTTP: <code>python3 -m http.server</code>`;
+    console.error(error);
+    return;
   }
+
+  const media = new MediaStore({ base: SOURCE.base, projectCode: SOURCE.projectCode });
+  $("caption").textContent = "fetching and verifying media…";
+  const synced = await media.sync(snapshot);
+
+  let orientation = snapshot.locations[0]?.orientation ?? "landscape";
+  const clock = previewClock();
+  const engine = createEngine({ snapshot, slot: orientation, orientation, clock });
+  const calendar = engine.venueCalendar;
+  const at = (ms) => calendar.format(ms);
+  const days = snapshot.days;
+
+  const trace = [];
+  let lastRender = null;
+  const host = new BrowserHost({
+    engine,
+    stage: $("stage"),
+    media,
+    onTrace: (event) => {
+      if (event.kind === "render" || event.kind === "blank") lastRender = event;
+      trace.unshift(event);
+      if (trace.length > 200) trace.length = 200;
+      paintTrace();
+    },
+    onNotice: (text) => {
+      $("notice").hidden = !text;
+      $("notice").textContent = text ?? "";
+      $("notice").className = "note warn";
+    },
+  });
+  host.start();
+
+  // ── clock controls ──────────────────────────────────────────────────────────
+  let showNow = 0;
+  let dragging = false;
+  const dayIndexOf = (ms) => {
+    const i = calendar.dayIndexAt(ms);
+    return i >= 0 ? i : 0;
+  };
+  const setShow = (ms) => { clock.set(ms); };
+  $("days").innerHTML = days.map((d, i) => `<button data-day="${i}">Day ${i + 1} · ${d.day}</button>`).join("");
+  $("days").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+    const d = days[Number(b.dataset.day)];
+    const tod = showNow - days[dayIndexOf(showNow)].startTime;
+    setShow(d.startTime + Math.max(0, Math.min(tod, 86_399_000)));
+  }));
+  $("scrub").addEventListener("pointerdown", () => { dragging = true; });
+  addEventListener("pointerup", () => { dragging = false; });
+  $("scrub").addEventListener("input", () => {
+    setShow(days[dayIndexOf(showNow)].startTime + Number($("scrub").value) * 1000);
+  });
+  $("btn-play").addEventListener("click", () => {
+    if (clock.playing) clock.pause(); else clock.play();
+  });
+  $("btn-now").addEventListener("click", () => {
+    setShow(calendar.surfaceNow(Date.now()));
+    clock.play();
+  });
+
+  // Moments where the rules are easiest to see. Times are the venue's (§8).
+  const moment = (day, hms) => days[day] ? days[day].startTime + hms.split(":").reduce((a, n) => a * 60 + Number(n), 0) * 1000 : null;
+  const presets = [
+    [0, "11:59:50", "SAFETY NOTICE takes over at 12:00:00 and cuts whatever is on screen: the takeover set is the whole rotation."],
+    [0, "13:59:50", "The takeover turns off at 14:00: the notice finishes its time, then the standard rotation resumes after the entry it cut."],
+    [0, "16:59:55", "RECEPTION's standard directive turns on at 17:00 and joins the rotation at the next pass; nothing is cut."],
+    [1, "11:59:50", "Day 2 at noon: no takeover. Day 1's directives govern Day 1 only."],
+    [1, "17:00:00", "Day 2 at 17:00: RECEPTION is not on. Its ON was authored on Day 1 and has no OFF, and it stays in Day 1."],
+    [1, "17:59:52", "Day 2 at 18:00 both lanes are scheduled with no playlist: an authored blank clears the screen."],
+  ];
+  $("presets").innerHTML = presets.map(([d, hms, what], i) => `<button data-i="${i}"><b>Day ${d + 1} ${hms}</b>${escape(what)}</button>`).join("");
+  $("presets").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+    const [d, hms] = presets[Number(b.dataset.i)];
+    setShow(moment(d, hms));
+    clock.play();
+  }));
+
+  // ── orientation and sound ───────────────────────────────────────────────────
+  for (const o of ["landscape", "portrait"]) {
+    $(`btn-${o}`).addEventListener("click", () => {
+      if (o === orientation) return;
+      orientation = o;
+      engine.setOrientation(o);          // §5.1: the lane follows; re-resolved at the next tick
+      $("stage").classList.remove("landscape", "portrait");
+      $("stage").classList.add(o);
+      $("btn-landscape").setAttribute("aria-pressed", String(o === "landscape"));
+      $("btn-portrait").setAttribute("aria-pressed", String(o === "portrait"));
+    });
+  }
+  $("stage").classList.remove("landscape", "portrait");
+  $("stage").classList.add(orientation);
+  $("btn-landscape").setAttribute("aria-pressed", String(orientation === "landscape"));
+  $("btn-portrait").setAttribute("aria-pressed", String(orientation === "portrait"));
+  $("btn-mute").addEventListener("click", () => {
+    host.setMuted(!host.muted);
+    $("btn-mute").setAttribute("aria-pressed", String(host.muted));
+  });
+
+  // ── painting ────────────────────────────────────────────────────────────────
+  function paintTrace() {
+    $("trace").innerHTML = trace.map((e) =>
+      `<li class="${e.kind}"><span class="t">${at(e.showTime).slice(11)}</span><span class="code">${e.kind} ${e.code}</span><span>${escape(e.message)}</span></li>`).join("");
+  }
+
+  host.onTick = (now) => { showNow = now; };
+  function paint() {
+    const v = engine.inspect();
+    if (!Number.isFinite(v.showNow)) return;   // before the first tick
+    showNow = v.showNow;
+    const dayIndex = calendar.dayIndexAt(showNow);
+    $("clock").innerHTML = `${at(showNow)} <small>${escape(calendar.timeZone)} · ${dayIndex >= 0 ? `Day ${dayIndex + 1}` : "outside the show's days"}</small>`;
+    if (!dragging) $("scrub").value = String(Math.floor((showNow - days[dayIndexOf(showNow)].startTime) / 1000));
+    $("btn-play").textContent = clock.playing ? "Playing" : "Paused";
+    $("btn-play").setAttribute("aria-pressed", String(clock.playing));
+    $("days").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.day) === dayIndex)));
+
+    const setLabel = { standard: "standard", takeover: `<span style="color:var(--alert)">takeover</span>`, empty: `<span style="color:var(--warn)">empty — the last frame stays</span>`, blank: `<span style="color:var(--alert)">authored blank</span>`, none: "nothing scheduled" }[v.workingSet];
+    $("resolution").innerHTML = [
+      ["day", v.day ? `${v.day.day} (directives scoped to it)` : "none: the whole timeline participates"],
+      ["lane / orientation", `${v.slot} / ${v.orientation ?? "missing"}`],
+      ["schedule entry", v.scheduleEntry ? `${v.scheduleEntry.id}, from ${at(v.scheduleEntry.timestamp)}` : "none yet"],
+      ["playlist", v.playlist ? escape(v.playlist.name) : v.workingSet === "blank" ? "NULL: show nothing" : "—"],
+      ["working set", `${setLabel}${v.suppressed.length ? ` · ${v.suppressed.length} standard suppressed` : ""}`],
+      ["cursors", `standard ${v.cursors.standard ?? "—"} · takeover ${v.cursors.takeover ?? "—"} (positions)`],
+      ["render marker", v.marker === 0 ? "0: evaluate at the next tick" : `${at(v.marker)} (${v.markerReason})`],
+      ["next interrupt", v.interruptAt ? `takeover at ${at(v.interruptAt)}` : "none"],
+      ["next boundary", v.nextBoundary ? at(v.nextBoundary) : "none"],
+    ].map(([k, val]) => `<tr><td>${k}</td><td>${val}</td></tr>`).join("");
+
+    const on = v.current && v.current.kind !== "blank" ? v.current.entryId : null;
+    const inRotation = new Set(v.rotation);
+    const suppressed = new Set(v.suppressed);
+    $("entries").innerHTML = v.entries.map((e) => {
+      const states = [];
+      if (e.excluded) states.push(escape(e.excluded));
+      else {
+        states.push(`standard ${e.standard}`, `takeover ${e.takeover}`);
+        if (e.takeoverOnAt) states.push(`takeover on at ${at(e.takeoverOnAt).slice(11)}`);
+      }
+      const cls = ["entry", e.excluded ? "out" : "", inRotation.has(e.entryId) ? v.workingSet : "", suppressed.has(e.entryId) ? "suppressed" : "", e.entryId === on ? "now" : ""].join(" ");
+      return `<div class="${cls}"><span class="pos">${e.position}</span><span>${escape(e.name)}${e.mediaFileId ? ` <span class="why">· file ${e.mediaFileId}</span>` : ""}</span><span class="why">${states.join(" · ")}</span></div>`;
+    }).join("");
+
+    $("caption").innerHTML = lastRender ? `<b>${escape(lastRender.message)}</b>` : "&nbsp;";
+  }
+  setInterval(paint, 200);
+
+  // ── the cartridge ───────────────────────────────────────────────────────────
+  const m = snapshot.meta;
+  $("meta").innerHTML = [
+    ["artifacts", `project.db (${project.meta.cartridgeKind}) · ${SOURCE.surfaceCode}.db (${m.cartridgeKind})`],
+    ["format", m.formatVersion],
+    ["show / surface", `${m.projectCode} / ${m.surfaceId} · revision ${m.publishedRevision}`],
+    ["venue timezone", m.timezone],
+    ["days", days.map((d) => d.day).join(", ")],
+    ["installations", snapshot.locations.map((l) => `${l.locationId} (${l.orientation}) — ${escape(l.label ?? "")}`).join("<br>")],
+    ["load warnings", snapshot.warnings.length ? snapshot.warnings.map((w) => escape(w.message)).join("<br>") : "none"],
+  ].map(([k, val]) => `<tr><td>${k}</td><td>${val}</td></tr>`).join("");
+  const rejected = [...media.failures.values()];
+  $("integrity").className = rejected.length ? "note alert" : "note";
+  $("integrity").innerHTML = rejected.length
+    ? `<b>${rejected.length} file${rejected.length === 1 ? "" : "s"} rejected</b> (§7.2): ${rejected.map((f) => `${escape(f.name)}: ${escape(f.reason)}`).join("; ")}. An entry whose file is not held is skipped when its turn comes.`
+    : `All ${synced.held} media files were fetched and verified against their size and SHA-256 before use (§7.2).`;
 })();
 </script>
 </body>

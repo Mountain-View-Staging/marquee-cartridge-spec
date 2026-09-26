@@ -1,92 +1,67 @@
 # Reference player
 
-A Marquee player in plain JavaScript. No framework, no build step, no
-dependencies beyond a SQLite binding.
+A Marquee Surface in a browser: the [engine](../engine/) decides what is on screen and
+when, and this folder draws it. Plain JavaScript, no framework, no build step; sql.js is
+the only thing it loads.
 
 **Live:** https://mountain-view-staging.github.io/marquee-cartridge-spec/player/
 
-Images and video. One hard-coded cartridge, the way an installed player's
-address effectively is — change three values at the top of `index.html` and it
-plays a different screen.
+It plays one hard-coded surface, the way an installed player's address effectively is.
+Change three values at the top of `index.html` and it plays another:
 
 ```js
-const SOURCE = { base: "../example", projectCode: "SHOW26", screenCode: "DEMO1" };
+const SOURCE = { base: "../example", projectCode: "SHOW26", surfaceCode: "DEMO1" };
 ```
 
-## The split, and why it is the point
+## The split
 
 | | |
 | --- | --- |
-| [`player.js`](player.js) | The resolution core. Takes an open cartridge and a moment in time, returns what should be on screen. **Touches no DOM.** |
-| [`index.html`](index.html) | The shell. Fetching, `<img>`/`<video>`, timers, keys. |
+| [`../engine/`](../engine/) | Every rule: the show clock, the schedule, directives, takeovers, rotation, durations, the trace. Touches no DOM. |
+| [`host.js`](host.js) | The browser host: calls the engine each frame, draws what it returns, reports first frames, completions and failures. Shared with the [explorer](../example/). |
+| [`media.js`](media.js) | Media: chooses a rendition per file, fetches it, verifies size and SHA-256, and holds it. |
+| [`index.html`](index.html) | The surface: loading, provisioning, keys, the status overlay. |
 
-`player.js` is the part worth porting. Every function is one section of the
-[specification](../README.md), it is ordinary synchronous code with no
-reactivity library, and `resolve()` is pure — same cartridge and same inputs,
-same answer. That makes it testable with no screen attached, and it translates
-directly into Kotlin, Swift, C++ or anything else with a SQLite binding.
+## What it does
+
+- **Loads both artifacts** (§1) through the engine's Loader, which checks the SQLite magic, the
+  artifact's kind and its format version, and refuses anything else with a reason.
+- **Provisions** (§6). With one installation it takes it; with several it asks which one this
+  is and remembers the answer while the cartridge still lists it. The answer is stored per
+  show and surface code, so changing the address forgets it.
+- **Fetches and verifies media** (§7) before the first frame: the browser's rendition order
+  (`webOptimized` first; HEVC only if the browser says it can play it), then size, then
+  SHA-256, each failure reported in its own words. A file that fails is not held, and the
+  engine skips its entry when its turn comes.
+- **Runs the engine** from `requestAnimationFrame` on the Surface show clock (§8.2): real
+  venue time during the show, and Day 1 at the venue's time of day before and after it.
+- **Follows the host frame rules** (§5.8): the next item is prepared out of sight and shown
+  only when its first frame is ready, so nothing flashes to black; the stage clears only for
+  an authored blank; a trimmed video stops on the last frame before its out-point; video
+  plays with sound unless muted.
 
 ## Keys
 
-`O` orientation · `N` next · `S` overlay · `F` fullscreen
+`O` orientation (the operator's override, §6) · `M` mute · `S` status overlay ·
+`F` fullscreen · `L` choose the installation again
 
-The status overlay reports what was resolved and why, including entries that
-were **skipped and the reason**. A silently dropped asset is an empty slot every
-rotation with nothing in any log, and it is the most expensive failure mode in
-this system — so this player never drops one quietly.
+The overlay reads the engine's own account of itself (`engine.inspect()`) and its trace: the
+schedule entry and playlist, the working set and what a takeover suppresses, entries
+excluded and why, the next change, what is on screen and for how long, and the last few
+decisions with their reason codes. The full trace goes to the console.
 
-## Timing: start and duration, as Studio resolves them
+## Sound
 
-Every entry resolves to a **start** and a **duration**
-([specification §5.7](../README.md#57-start-and-duration)). They are the numbers
-Studio's editor shows as a row's Start and running time.
-
-- **start:** the entry's window start for this orientation, else 0.
-- **duration:**
-  - `end − start` when the window has an end — for a still too, where the end is the
-    dwell override;
-  - a video with no end plays to its end;
-  - a still with no end holds `media_item.display_duration`, else 8 s.
-
-The overlay's *holds for* line names the number it used: `window`, `display_duration`,
-`default`, or *to the end*.
-
-**Apple client builds before 2026-09-23 hold every still for 8 s and play every clip
-in full.** The macOS client follows this rule from that build, and the iOS client from
-its next release. On a show that sets these fields, a screen on an older build times
-entries differently from this player.
-
-## Session boards
-
-This player draws none. An entry with `resource_type = 'session_set'` is dropped, as
-[§5.3](../README.md#53-expand-the-playlist) allows, and the overlay's *skipped* line
-names it.
-
-A client that draws its own board can still use this file's rotation:
-`resolve(db, { at, slot, cursorId, sessionBoards: true })` keeps board entries in the
-list as `{ entry, sessionSet }`. They follow the same directive timeline as media, so a
-board can be a takeover. What a board looks like is the client's decision
-([§4.7](../README.md#47-session-session_set-session_set_entry)).
-
-## On state management
-
-There is none, and that is a choice rather than an omission.
-
-The TC39 [Signals proposal](https://github.com/tc39/proposal-signals) is a
-natural fit for this shape — the resolution chain is a dependency graph, and
-`Signal.Computed` with a custom `equals` would stop a once-a-second clock tick
-from repainting the screen. It is **Stage 1** and has not shipped in any engine;
-`globalThis.Signal` is undefined in current Chrome, Safari and Firefox, so using
-it here would mean shipping a polyfill in a reference implementation.
-
-The same problem is four lines without one: resolve, take a
-[`signatureOf()`](player.js), and repaint only when it changes. That is what
-`tick()` does, and it is why the video does not restart every second.
+Video plays with its sound (§5.8). A browser may refuse sound until someone interacts with
+the page; when it does, the player plays the video muted, says so on screen, and restores
+sound at the first click or key press. `M` is the device's own mute and is remembered.
+A kiosk browser can be started with its autoplay restriction lifted. A backing video is
+kept silent by this player: the content's sound is the one that matters.
 
 ## Running it locally
 
-`fetch` cannot read `file://`, so serve the repository root — the player reads
-the demo show from `../example/`:
+`fetch` cannot read `file://`, and SHA-256 in the browser needs a secure context
+(`localhost` counts), so serve the repository root:
 
 ```bash
 python3 -m http.server 8000
