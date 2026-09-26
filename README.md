@@ -638,7 +638,8 @@ never interrupts. A standard item otherwise always finishes its time.
 a video completing its window, a skip after a load failure, a change of active playlist, a mode
 change, and a newly committed cartridge.
 
-For video, the hint is a watchdog — the duration, else `intrinsic_duration`, else 300 s, plus
+For video, the hint is a watchdog — the window's duration when the window has an end, else
+`intrinsic_duration` (the clip's full length, even when trimmed at the start), else 300 s, plus
 10 s grace — or the interrupt time, whichever is earlier; the media completing its window sets
 the marker to 0. One clip that never completes cannot park the rotation.
 
@@ -891,8 +892,8 @@ A Surface always behaves as if it is **at the venue**.
 
 ```
 showNow(realNow):
-  eventStart = first project_days.start_time
-  eventEnd   = last  project_days.end_time
+  eventStart = the earliest project_days.start_time
+  eventEnd   = the latest   project_days.end_time
   if eventStart ≤ realNow ≤ eventEnd:
       return realNow                                   # real venue time
   # outside the event: synthetic time
