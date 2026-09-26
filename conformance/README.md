@@ -116,7 +116,7 @@ Codes are the stable contract; any human-readable text an engine attaches is fre
 | skip | `media.load_failed` | The host reported a load failure |
 | skip | `media.no_first_frame` | No first frame within 10 s of monotonic time |
 | skip | `media.watchdog` | A video did not complete within its duration + 10 s |
-| skip | `media.not_playable` | A brand asset or other non-playable item in a playlist |
+| skip | `media.not_playable` | The entry's item is not decodable image or video media (a typeface, a style book) |
 | warning | `orientation.missing` | No orientation supplied; the orientation gate was skipped |
 
 **Holds are recorded on entry, not on retry.** A `hold` is recorded unless the previous

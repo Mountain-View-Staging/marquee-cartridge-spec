@@ -94,7 +94,7 @@ CREATE TABLE surface_schedule_entry (
   config_id          INTEGER NOT NULL REFERENCES surface_config(id),
   slot               TEXT    NOT NULL,   -- 'portrait' | 'landscape' | 'demo_station'
   timestamp          INTEGER NOT NULL,   -- most-recent <= now wins, per slot
-  playlist_id        INTEGER REFERENCES playlist(id),
+  playlist_id        INTEGER REFERENCES playlist(id),     -- NULL on demo_station entries
   background_item_id INTEGER REFERENCES media_item(id),   -- demo branding (behind)
   overlay_item_id    INTEGER REFERENCES media_item(id),   -- demo branding (front)
   created            INTEGER NOT NULL,
@@ -104,6 +104,7 @@ CREATE TABLE surface_schedule_entry (
         AND background_item_id IS NULL AND overlay_item_id IS NULL )
     OR
     ( slot = 'demo_station'
+        AND playlist_id IS NULL
         AND ( background_item_id IS NOT NULL OR overlay_item_id IS NULL ) )
   )
 );

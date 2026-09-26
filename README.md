@@ -262,7 +262,7 @@ CREATE TABLE surface_schedule_entry (
   config_id          INTEGER NOT NULL REFERENCES surface_config(id),
   slot               TEXT    NOT NULL,   -- 'portrait' | 'landscape' | 'demo_station'
   timestamp          INTEGER NOT NULL,   -- most-recent <= now wins, per slot
-  playlist_id        INTEGER REFERENCES playlist(id),
+  playlist_id        INTEGER REFERENCES playlist(id),     -- NULL on demo_station entries
   background_item_id INTEGER REFERENCES media_item(id),   -- demo branding (behind)
   overlay_item_id    INTEGER REFERENCES media_item(id),   -- demo branding (front)
   created            INTEGER NOT NULL,
@@ -272,6 +272,7 @@ CREATE TABLE surface_schedule_entry (
         AND background_item_id IS NULL AND overlay_item_id IS NULL )
     OR
     ( slot = 'demo_station'
+        AND playlist_id IS NULL
         AND ( background_item_id IS NOT NULL OR overlay_item_id IS NULL ) )
   )
 );
@@ -693,14 +694,19 @@ a `media_item`, resolved to a file by orientation (§5.7), and may be a still or
 
 ### 5.11 The `demo_station` slot
 
-`demo_station` is resolved the same "latest ≤ now" way, in parallel with the rendered slot. Its
-`CHECK` constraint encodes the rules:
+A Surface's schedule has two kinds of entry: **playlist** entries (`portrait` and `landscape`
+slots) and **DemoStation** entries (`demo_station` slot). `demo_station` is resolved the same
+"latest ≤ now" way, in parallel with the rendered slot, and the active kind alone tells a Surface
+which mode it is in. The `CHECK` constraint encodes the rules:
 
-- `portrait` / `landscape` entries carry **only** a playlist — never branding.
-- `demo_station` entries carry branding (`background_item_id`, optional `overlay_item_id`) and
-  **may** carry a `playlist_id` — picture-in-picture content, rendered at the **opposite**
-  orientation to the host, under the rules of this section unchanged.
-- An all-NULL `demo_station` entry means **demo off**.
+- `portrait` / `landscape` entries carry **only** a playlist (or NULL, an authored blank) — never
+  branding.
+- `demo_station` entries carry **branding only**: `background_item_id` and an optional
+  `overlay_item_id`. They never carry a playlist.
+- A `demo_station` entry with a background means **demo on**; an all-NULL entry means **demo off**.
+- A DemoStation's **picture-in-picture shows the playlist scheduled for the opposite orientation
+  at that moment** — a portrait DemoStation plays the `landscape` slot's playlist — under the rules
+  of this section unchanged.
 
 Identify a demo entry by its `slot`. Demo presentation is a Surface implementation choice; a
 Surface that does not implement demo mode ignores the slot entirely.
@@ -723,7 +729,9 @@ Surface that does not implement demo mode ignores the slot entirely.
   entry, skip it, re-arm.
 - **Downscale oversize assets; never skip them.** Keep a hard texture ceiling (the reference
   client uses 3840 px on the long edge) and say so at notice level when you scale.
-- Brand assets in a playlist are an authoring error: skip them loudly.
+- **Skip an entry whose item is not decodable image or video media** (a typeface, a style book) —
+  loudly, as `media.not_playable`. Being a brand member never makes an item unplayable: a brand
+  logo image in a playlist is legitimate content.
 - **Never let the render path wait on a database or the network.** Snapshot the cartridge into
   memory, with its indexes, when it is committed.
 
@@ -803,7 +811,8 @@ larger than your renderer can texture are legitimate: downscale them (§5.13).
 
 Typefaces and the style book are delivered through the manifest like media, but they are **not
 decoded as media** and never choose among renditions. Take them exactly as the manifest names
-them. Their use is specified in §9.
+them. Their use is specified in §9. A brand member that **is** an image or a video (a logo, say)
+is ordinary media: it has renditions and can play.
 
 ### 7.6 Choosing a rendition
 
@@ -987,10 +996,10 @@ Everywhere else, the project's style book, then the built-in default.
 
 ### 9.4 Rules for a Surface
 
-- Fetch and verify brand files like any file (§7.2). Never decode them as media and never choose
-  renditions for them (§7.5).
-- A `brand_member` item is never playable and never viable. One found in a playlist is skipped
-  loudly (§5.13).
+- Fetch and verify brand files like any file (§7.2). Never decode typefaces or the style book as
+  media and never choose renditions for them (§7.5).
+- `brand_member` does not affect viability. A typeface or style book found in a playlist is skipped
+  loudly as not playable (§5.13); a brand image or video plays like any other item.
 - If a referenced style book fails to load, fall back to the next step of §9.2 and say so; never
   render nothing.
 
@@ -1101,7 +1110,8 @@ timeout; late callbacks from replaced items; and same-playlist boundaries and au
 - [ ] Chooses renditions on `codec`, verifies each against its own hash and size, and renders and
       prunes from the same decision.
 - [ ] A browser Surface takes and ranks `webOptimized` first.
-- [ ] Takes brand assets exactly as the manifest names them.
+- [ ] Takes typefaces and the style book exactly as the manifest names them; plays brand images and
+      videos like any media.
 
 ---
 
@@ -1199,5 +1209,7 @@ directive        3 rows, all on entry 5 (position 3):
 | Interrupts | Not specified | Closed set; standard → takeover cuts immediately |
 | Synthetic time | Optional; operator's wall clock projected onto Day 1 | Required; venue time of day on Day 1 |
 | Session boards | Optional | Required |
+| DemoStation entries | May carry a PIP playlist | Branding only; the PIP plays the opposite orientation's scheduled playlist |
+| Brand members | Never playable | Playable when image or video; only non-media items are skipped |
 | Composition | Backing and overlay on playlists and media items | Project default backing (`project.backing_item_id`, new), session board override; playlist and item backing/overlay removed |
 | Branding | v5/v6 columns, undocumented | Brand delivery specified (§9) |
