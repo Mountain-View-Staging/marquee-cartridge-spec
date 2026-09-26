@@ -27,6 +27,13 @@ export interface ColumnSpec {
     /** The value when a post-baseline column is absent. */
     readonly fallback?: unknown;
 }
+/**
+ * What the Loader does with a malformed row — one holding a NUL byte (U+0000) in a
+ * text column (§4): `skip` drops it with a `value.malformed` warning naming the
+ * column, as a row with an unknown enumerated value is dropped (§10.4); a table that
+ * must hold exactly one row refuses the cartridge with that table's own code.
+ */
+export type MalformedRowPolicy = "skip" | "meta_invalid" | "structure_invalid";
 export interface TableSpec {
     readonly name: string;
     /** The column that names a row in an error, or null to use its ordinal. */
@@ -34,6 +41,7 @@ export interface TableSpec {
     /** The artifacts that carry this table (§3). */
     readonly in: readonly ("project" | "surface")[];
     readonly columns: readonly ColumnSpec[];
+    readonly malformedRow: MalformedRowPolicy;
 }
 export declare const BASELINE: readonly TableSpec[];
 /** The major version this engine reads (§2.1). */

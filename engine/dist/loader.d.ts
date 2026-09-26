@@ -24,6 +24,14 @@
  *
  * What it accepts with a warning (§10.4): unknown tables, unknown columns, and
  * rows carrying an unknown enumerated value, which are skipped.
+ *
+ * A row holding a NUL byte (U+0000) in a text column is malformed (§4). Where a
+ * row with an unknown enumerated value is skipped, it is skipped with a warning
+ * naming the column; in the tables that hold exactly one row it is refused with
+ * that table's code (meta_invalid, structure_invalid). The byte is found in SQL,
+ * not in the string the binding returns: sql.js, and node:sqlite before Node 24,
+ * end the string at the first NUL, and the Loader must say the same on every
+ * binding.
  */
 import type { CartridgeKind, ProjectSnapshot, Snapshot } from "./model.js";
 /** The one capability the Loader needs from a SQLite binding. */

@@ -13,7 +13,7 @@
  *     a jump?  → marker = 0                       §8.3
  *     showNow ≥ next schedule boundary → resolve  §5.2; a new playlist cuts
  *     waiting for a first frame?  10 s of monotonic time → skip; else return
- *     showNow ≥ marker → renderNext               §5.9: the only place content changes
+ *     marker forced, or showNow ≥ marker → renderNext   §5.9: the only place content changes
  *
  *   renderNext:
  *     viability pass → working set → next entry after the cursor → RenderItem
@@ -93,8 +93,13 @@ export class SurfaceEngine {
     lastSet = NONE;
     /** Entries that failed since an item last finished its time: when it covers the working set, hold. */
     failed = new Set();
-    // The one render marker (§5.9).
+    // The one render marker (§5.9). "Marker 0" — the next tick evaluates — is a state
+    // of its own, not a timestamp: a comparison with the show time would wait while
+    // the show time is before 1970 (negative milliseconds, reachable from a preview
+    // clock). It is never disarmed: every path out of an evaluation either forces it
+    // or arms it at an instant.
     marker = 0;
+    markerForced = true;
     markerReason = FORCED;
     currentItem = null;
     since = Number.NaN;
@@ -203,8 +208,7 @@ export class SurfaceEngine {
                 // A takeover is due while the next item is still loading: that item never
                 // showed, and the takeover cuts what is on screen now (§5.9).
                 this.pendingItem = null;
-                this.marker = 0;
-                this.markerReason = INTERRUPT;
+                this.forceMarker(INTERRUPT);
             }
             else if (monoMs - this.pendingMono < this.firstFrameTimeoutMs) {
                 return this.output(show, wallMs);
@@ -215,7 +219,7 @@ export class SurfaceEngine {
                 this.skip(late, "media.no_first_frame", show, `no first frame within ${this.firstFrameTimeoutMs / 1000} s`);
             }
         }
-        if (show >= this.marker)
+        if (this.markerForced || show >= this.marker)
             this.evaluate(show, monoMs);
         return this.output(show, wallMs);
     }
@@ -231,20 +235,17 @@ export class SurfaceEngine {
         this.currentLive = true;
         this.since = show;
         if (item.hint.kind === "time") {
-            this.marker = item.hint.at;
-            this.markerReason = INTERRUPT;
+            this.armMarker(item.hint.at, INTERRUPT);
         }
         else {
             const end = show + Math.round(item.hint.seconds * 1000);
             if (this.pendingInterruptAt < end) {
                 // The first frame came late enough that a known takeover now falls
                 // before the item's end: the takeover still cuts at its time.
-                this.marker = this.pendingInterruptAt;
-                this.markerReason = INTERRUPT;
+                this.armMarker(this.pendingInterruptAt, INTERRUPT);
             }
             else {
-                this.marker = end;
-                this.markerReason = item.kind === "media" && item.media.isVideo ? WATCHDOG : NATURAL;
+                this.armMarker(end, item.kind === "media" && item.media.isVideo ? WATCHDOG : NATURAL);
             }
         }
         (item.set === "takeover" ? this.takeoverCursor : this.standardCursor).set(item.position, item.entryId);
@@ -269,8 +270,7 @@ export class SurfaceEngine {
         this.events = null;
         const item = this.currentItem;
         if (item !== null && item.kind !== "blank" && item.token === token && this.currentLive) {
-            this.marker = 0;
-            this.markerReason = COMPLETED;
+            this.forceMarker(COMPLETED);
         }
         return NO_EVENTS;
     }
@@ -364,8 +364,7 @@ export class SurfaceEngine {
         this.nextBoundary = Number.POSITIVE_INFINITY;
         this.mustResolve = true;
         this.resolveCause = "commit";
-        this.marker = 0;
-        this.markerReason = FORCED;
+        this.forceMarker(FORCED);
         this.lastStateKind = null;
         this.lastStateCode = null;
     }
@@ -385,8 +384,7 @@ export class SurfaceEngine {
         this.mustResolve = true;
         if (this.resolveCause === "boundary")
             this.resolveCause = "orientation";
-        this.marker = 0;
-        this.markerReason = FORCED;
+        this.forceMarker(FORCED);
         if (this.orientationValue !== null)
             this.orientationWarned = false;
     }
@@ -401,8 +399,7 @@ export class SurfaceEngine {
                 ? `the show clock moved back from ${from} to ${to}; everything is evaluated again`
                 : `the show clock moved from ${from} to ${to}, further than real time did; everything is evaluated again`,
         });
-        this.marker = 0;
-        this.markerReason = FORCED;
+        this.forceMarker(FORCED);
         this.currentLive = false;
         this.pendingItem = null;
         this.mustResolve = true;
@@ -453,8 +450,7 @@ export class SurfaceEngine {
         this.clearFailures();
         this.currentLive = false;
         this.pendingItem = null;
-        this.marker = 0;
-        this.markerReason = FORCED;
+        this.forceMarker(FORCED);
     }
     /** The marker is reached: the current content ends, and the next is chosen. */
     evaluate(show, mono) {
@@ -709,8 +705,19 @@ export class SurfaceEngine {
     }
     /** §5.5 — nothing new is produced: the last frame stays, and the marker is armed 2 s out. */
     rearm(show) {
-        this.marker = show + this.emptyRetryMs;
-        this.markerReason = RETRY;
+        this.armMarker(show + this.emptyRetryMs, RETRY);
+    }
+    /** §5.9 — marker 0: the next tick evaluates, whatever the show time's value or sign. */
+    forceMarker(reason) {
+        this.marker = 0;
+        this.markerForced = true;
+        this.markerReason = reason;
+    }
+    /** Arm the marker at a show instant; any tick at or after it evaluates. */
+    armMarker(at, reason) {
+        this.marker = at;
+        this.markerForced = false;
+        this.markerReason = reason;
     }
     /** Whether this hold is already recorded: holds are recorded on entry, not on each retry. */
     holding(code) {
@@ -738,8 +745,7 @@ export class SurfaceEngine {
         this.emit({ showTime: show, kind: "skip", code, entryId: item.entryId, message: `entry ${item.entryId} "${item.name}": ${why}` });
         (item.set === "takeover" ? this.takeoverCursor : this.standardCursor).set(item.position, item.entryId);
         this.failed.add(item.entryId);
-        this.marker = 0;
-        this.markerReason = SKIPPED;
+        this.forceMarker(SKIPPED);
     }
     /** An entry the engine itself cannot put on screen, found while choosing. */
     skipPlan(plan, cursor, code, show, why) {
