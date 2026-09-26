@@ -92,7 +92,7 @@ export interface TickOutput {
 }
 
 export type WorkingSetKind = "none" | "standard" | "takeover" | "empty" | "blank";
-export type MarkerReason = "forced" | "natural" | "watchdog" | "interrupt" | "retry" | "completed";
+export type MarkerReason = "forced" | "natural" | "watchdog" | "interrupt" | "retry" | "completed" | "skipped";
 
 export interface EntryInspection {
   readonly entryId: number;
@@ -134,9 +134,9 @@ export interface Inspection {
 
 // Working-set kinds, marker reasons and schedule states, as small integers.
 const NONE = 0, STANDARD = 1, TAKEOVER = 2, EMPTY = 3;
-const FORCED = 0, NATURAL = 1, WATCHDOG = 2, INTERRUPT = 3, RETRY = 4, COMPLETED = 5;
+const FORCED = 0, NATURAL = 1, WATCHDOG = 2, INTERRUPT = 3, RETRY = 4, COMPLETED = 5, SKIPPED = 6;
 const UNRESOLVED = 0, NOTHING = 1, BLANK = 2, PLAYLIST = 3;
-const MARKER_REASONS: readonly MarkerReason[] = ["forced", "natural", "watchdog", "interrupt", "retry", "completed"];
+const MARKER_REASONS: readonly MarkerReason[] = ["forced", "natural", "watchdog", "interrupt", "retry", "completed", "skipped"];
 
 type ResolveCause = "boot" | "boundary" | "jump" | "orientation" | "commit";
 
@@ -196,6 +196,8 @@ export class SurfaceEngine {
   private readonly firstFrameTimeoutMs: number;
   private readonly emptyRetryMs: number;
   private laneSlot: Orientation;
+  /** Whether the lane follows the orientation (it does whenever the two start out the same). */
+  private readonly laneFollows: boolean;
   private orientationValue: Orientation | null;
   private readonly tokenPrefix: string;
   private tokenCount = 0;
@@ -218,7 +220,7 @@ export class SurfaceEngine {
   private readonly standardCursor = new Cursor();
   private readonly takeoverCursor = new Cursor();
   private lastSet = NONE;
-  /** Entries that failed since the last first frame: when it covers the working set, hold. */
+  /** Entries that failed since an item last finished its time: when it covers the working set, hold. */
   private readonly failed = new Set<number>();
 
   // The one render marker (§5.9).
@@ -227,10 +229,12 @@ export class SurfaceEngine {
 
   private currentItem: RenderItem | null = null;
   private since = Number.NaN;
+  /** Whether the current item's reports still count: from its first frame until its time is over or it is cut. */
+  private currentLive = false;
   private pendingItem: PlayableRenderItem | null = null;
   private pendingMono = Number.NaN;
-  /** The last item skipped, so a repeated report for it is not a second skip. */
-  private skippedToken: string | null = null;
+  /** The takeover activation known when the pending item was chosen (standard items only). */
+  private pendingInterruptAt = Number.POSITIVE_INFINITY;
   private issued: RenderItem | null = null;
 
   private events: TraceEvent[] | null = null;
@@ -268,6 +272,7 @@ export class SurfaceEngine {
     this.laneSlot = slot;
     this.lane = snapshot.scheduleBySlot[slot];
     this.orientationValue = asOrientation(options.orientation);
+    this.laneFollows = this.orientationValue === null || this.orientationValue === slot;
     this.clock = clock;
     this.boardResolver = options.boardResolver ?? minimalBoardResolver;
     this.firstFrameTimeoutMs = options.firstFrameTimeoutMs ?? FIRST_FRAME_TIMEOUT_MS;
@@ -327,10 +332,19 @@ export class SurfaceEngine {
     if (this.mustResolve || show >= this.nextBoundary || show < this.activeFrom) this.resolveSchedule(show);
 
     if (this.pendingItem !== null) {
-      if (monoMs - this.pendingMono < this.firstFrameTimeoutMs) return this.output(show, wallMs);
-      const late = this.pendingItem;
-      this.pendingItem = null;
-      this.skip(late, "media.no_first_frame", show, `no first frame within ${this.firstFrameTimeoutMs / 1000} s`);
+      if (show >= this.pendingInterruptAt) {
+        // A takeover is due while the next item is still loading: that item never
+        // showed, and the takeover cuts what is on screen now (§5.9).
+        this.pendingItem = null;
+        this.marker = 0;
+        this.markerReason = INTERRUPT;
+      } else if (monoMs - this.pendingMono < this.firstFrameTimeoutMs) {
+        return this.output(show, wallMs);
+      } else {
+        const late = this.pendingItem;
+        this.pendingItem = null;
+        this.skip(late, "media.no_first_frame", show, `no first frame within ${this.firstFrameTimeoutMs / 1000} s`);
+      }
     }
 
     if (show >= this.marker) this.evaluate(show, monoMs);
@@ -345,25 +359,34 @@ export class SurfaceEngine {
     this.pendingItem = null;
     const show = this.show;
     this.currentItem = item;
+    this.currentLive = true;
     this.since = show;
     if (item.hint.kind === "time") {
       this.marker = item.hint.at;
       this.markerReason = INTERRUPT;
     } else {
-      this.marker = show + Math.round(item.hint.seconds * 1000);
-      this.markerReason = item.kind === "media" && item.media.isVideo ? WATCHDOG : NATURAL;
+      const end = show + Math.round(item.hint.seconds * 1000);
+      if (this.pendingInterruptAt < end) {
+        // The first frame came late enough that a known takeover now falls
+        // before the item's end: the takeover still cuts at its time.
+        this.marker = this.pendingInterruptAt;
+        this.markerReason = INTERRUPT;
+      } else {
+        this.marker = end;
+        this.markerReason = item.kind === "media" && item.media.isVideo ? WATCHDOG : NATURAL;
+      }
     }
     (item.set === "takeover" ? this.takeoverCursor : this.standardCursor).set(item.position, item.entryId);
-    this.failed.clear();
-    const hint = item.hint.kind === "time"
-      ? `until ${this.calendar.format(item.hint.at)}, when a takeover starts`
+    const dwell = item.hint.kind === "duration" ? item.hint.seconds : 0;
+    const hint = this.markerReason === INTERRUPT
+      ? `until ${this.calendar.format(this.marker)}, when a takeover starts`
       : item.kind === "media" && item.media.isVideo
         ? item.media.duration === null
           ? "to the end of the clip"
           : `for ${seconds(item.media.duration)} (${item.media.durationSource})`
         : item.kind === "media"
-          ? `for ${seconds(item.hint.seconds)} (${item.media.durationSource})`
-          : `for ${seconds(item.hint.seconds)} (${item.board.pageCount} × ${seconds(item.board.pageDuration)})`;
+          ? `for ${seconds(dwell)} (${item.media.durationSource})`
+          : `for ${seconds(dwell)} (${item.board.pageCount} × ${seconds(item.board.pageDuration)})`;
     const what = item.kind === "media" ? `file ${item.media.mediaFileId}` : `the session board of set ${item.board.sessionSetId}`;
     this.emit(item.kind === "media"
       ? { showTime: show, kind: "render", code: item.code, entryId: item.entryId, set: item.set, mediaFileId: item.media.mediaFileId, message: `entry ${item.entryId} "${item.name}": ${what}, ${item.set} rotation, ${hint}` }
@@ -375,7 +398,7 @@ export class SurfaceEngine {
   onMediaCompleted(token: string): readonly TraceEvent[] {
     this.events = null;
     const item = this.currentItem;
-    if (item !== null && item.kind !== "blank" && item.token === token) {
+    if (item !== null && item.kind !== "blank" && item.token === token && this.currentLive) {
       this.marker = 0;
       this.markerReason = COMPLETED;
     }
@@ -390,7 +413,8 @@ export class SurfaceEngine {
       const item = this.pendingItem;
       this.pendingItem = null;
       this.skip(item, "media.load_failed", this.show, why);
-    } else if (this.currentItem !== null && this.currentItem.kind !== "blank" && this.currentItem.token === token && token !== this.skippedToken) {
+    } else if (this.currentItem !== null && this.currentItem.kind !== "blank" && this.currentItem.token === token && this.currentLive) {
+      this.currentLive = false;
       this.skip(this.currentItem, "media.load_failed", this.show, why);
     }
     return this.events ?? NO_EVENTS;
@@ -398,15 +422,15 @@ export class SurfaceEngine {
 
   /**
    * The host's orientation changed (§5.1, §6): cut and re-resolve at the next
-   * tick. The lane follows the orientation when it was the orientation's own.
+   * tick. The lane follows the orientation when the engine was created with
+   * the two the same (or with no orientation); a missing orientation keeps the lane.
    */
   setOrientation(orientation: Orientation | null | undefined): readonly TraceEvent[] {
     this.events = null;
     const next = asOrientation(orientation);
     if (next === this.orientationValue) return NO_EVENTS;
-    const previous = this.orientationValue;
-    if (next !== null && previous !== null && this.laneSlot === previous) this.laneSlot = next;
-    if (!this.orientationChanged) this.previousOrientation = previous;
+    if (next !== null && this.laneFollows) this.laneSlot = next;
+    if (!this.orientationChanged) this.previousOrientation = this.orientationValue;
     this.orientationValue = next;
     this.orientationChanged = true;
     return NO_EVENTS;
@@ -459,12 +483,13 @@ export class SurfaceEngine {
       this.emit({ showTime: show, kind: "cut", code: "cartridge.commit", entryId: on.entryId, message: `revision ${this.snap.meta.publishedRevision} of the cartridge is committed; everything restarts` });
     }
     this.currentItem = null;
+    this.currentLive = false;
     this.since = Number.NaN;
     this.pendingItem = null;
     this.standardCursor.clear();
     this.takeoverCursor.clear();
     this.lastSet = NONE;
-    this.failed.clear();
+    this.clearFailures();
     this.activeEntry = null;
     this.activeState = UNRESOLVED;
     this.activePlaylistId = null;
@@ -480,14 +505,16 @@ export class SurfaceEngine {
 
   private afterOrientationChange(show: number): void {
     this.orientationChanged = false;
-    if (this.orientationValue === this.previousOrientation) return; // changed and changed back before a tick
+    const lane = this.snap.scheduleBySlot[this.laneSlot];
+    if (this.orientationValue === this.previousOrientation && lane === this.lane) return; // changed and changed back before a tick
     const on = this.currentItem;
     if (on !== null && on.kind !== "blank") {
       this.emit({ showTime: show, kind: "cut", code: "orientation.change", entryId: on.entryId, message: `orientation ${this.previousOrientation ?? "missing"} → ${this.orientationValue ?? "missing"}` });
     }
+    this.currentLive = false;
     this.pendingItem = null;
-    this.failed.clear();
-    this.lane = this.snap.scheduleBySlot[this.laneSlot];
+    this.clearFailures();
+    this.lane = lane;
     this.mustResolve = true;
     if (this.resolveCause === "boundary") this.resolveCause = "orientation";
     this.marker = 0;
@@ -508,6 +535,7 @@ export class SurfaceEngine {
     });
     this.marker = 0;
     this.markerReason = FORCED;
+    this.currentLive = false;
     this.pendingItem = null;
     this.mustResolve = true;
     if (this.resolveCause === "boundary") this.resolveCause = "jump";
@@ -553,7 +581,8 @@ export class SurfaceEngine {
     this.standardCursor.clear();
     this.takeoverCursor.clear();
     this.lastSet = NONE;
-    this.failed.clear();
+    this.clearFailures();
+    this.currentLive = false;
     this.pendingItem = null;
     this.marker = 0;
     this.markerReason = FORCED;
@@ -563,9 +592,12 @@ export class SurfaceEngine {
   private evaluate(show: number, mono: number): void {
     const reason = this.markerReason;
     const on = this.currentItem;
-    if (reason === WATCHDOG && on !== null && on.kind === "media") {
+    if (reason === WATCHDOG && on !== null && on.kind === "media" && this.currentLive) {
       this.emit({ showTime: show, kind: "skip", code: "media.watchdog", entryId: on.entryId, message: `entry ${on.entryId}: the video did not report its end within ${seconds(on.hint.kind === "duration" ? on.hint.seconds : 0)}` });
     }
+    this.currentLive = false;
+    // An item that finished its time, or was cut by a takeover, ends a streak of failures.
+    if (reason === NATURAL || reason === WATCHDOG || reason === INTERRUPT || reason === COMPLETED) this.clearFailures();
     this.renderNext(show, mono, reason);
   }
 
@@ -581,7 +613,8 @@ export class SurfaceEngine {
     const plans = this.activeState === PLAYLIST ? this.plans.get(this.activePlaylistId!) : undefined;
     if (plans === undefined) {
       this.lastSet = EMPTY;
-      this.hold("set.empty", show, this.activeState === PLAYLIST
+      if (this.holding("set.empty")) this.rearm(show);
+      else this.hold("set.empty", show, this.activeState === PLAYLIST
         ? `playlist ${this.activePlaylistId} is not in the cartridge; the last frame stays`
         : `nothing is scheduled on the ${this.laneSlot} lane at ${this.calendar.format(show)}; the last frame stays`);
       return;
@@ -596,8 +629,9 @@ export class SurfaceEngine {
     }
     this.lastSet = kind;
     if (kind === EMPTY) {
-      this.failed.clear();
-      this.hold("set.empty", show, `no entry of playlist ${this.activePlaylistId} is viable at ${this.calendar.format(show)}; the last frame stays`);
+      this.clearFailures();
+      if (this.holding("set.empty")) this.rearm(show);
+      else this.hold("set.empty", show, `no entry of playlist ${this.activePlaylistId} is viable at ${this.calendar.format(show)}; the last frame stays`);
       return;
     }
 
@@ -605,8 +639,9 @@ export class SurfaceEngine {
     const cursor = kind === TAKEOVER ? this.takeoverCursor : this.standardCursor;
     for (;;) {
       if (this.allFailed(list)) {
-        this.failed.clear();
-        this.hold("set.all_failed", show, `every entry of the ${kind === TAKEOVER ? "takeover" : "standard"} set failed in a row; trying again in ${seconds(this.emptyRetryMs / 1000)}`);
+        this.clearFailures();
+        if (this.holding("set.all_failed")) this.rearm(show);
+        else this.hold("set.all_failed", show, `every entry of the ${kind === TAKEOVER ? "takeover" : "standard"} set failed in a row; trying again in ${seconds(this.emptyRetryMs / 1000)}`);
         return;
       }
       const plan = list[this.choose(list, cursor)]!;
@@ -614,6 +649,7 @@ export class SurfaceEngine {
       if (item === null) continue; // skipped; the skip moved the cursor
       this.pendingItem = item;
       this.pendingMono = mono;
+      this.pendingInterruptAt = kind === STANDARD ? this.interruptAt : Number.POSITIVE_INFINITY;
       this.issued = item;
       return;
     }
@@ -677,6 +713,11 @@ export class SurfaceEngine {
     }
     this.chosenCode = "rotation.wrap";
     return 0;
+  }
+
+  /** Set.prototype.clear allocates a new table even when empty: keep the idle paths allocation-free. */
+  private clearFailures(): void {
+    if (this.failed.size > 0) this.failed.clear();
   }
 
   private allFailed(list: readonly EntryPlan[]): boolean {
@@ -788,17 +829,24 @@ export class SurfaceEngine {
   }
 
   /** §5.5 — nothing new is produced: the last frame stays, and the marker is armed 2 s out. */
-  private hold(code: HoldCode, show: number, message: string): void {
+  private rearm(show: number): void {
     this.marker = show + this.emptyRetryMs;
     this.markerReason = RETRY;
-    if (this.lastStateKind === "hold" && this.lastStateCode === code) return; // recorded on entry, not on retry
+  }
+
+  /** Whether this hold is already recorded: holds are recorded on entry, not on each retry. */
+  private holding(code: HoldCode): boolean {
+    return this.lastStateKind === "hold" && this.lastStateCode === code;
+  }
+
+  private hold(code: HoldCode, show: number, message: string): void {
+    this.rearm(show);
     this.emit({ showTime: show, kind: "hold", code, message });
   }
 
   /** §5.2 — an authored blank: clear the screen, once. */
   private blank(show: number): void {
-    this.marker = show + this.emptyRetryMs;
-    this.markerReason = RETRY;
+    this.rearm(show);
     if (this.currentItem !== null && this.currentItem.kind === "blank") return;
     const entry = this.activeEntry!;
     const item: BlankRenderItem = Object.freeze({ kind: "blank", token: this.token(), entryId: null, scheduleEntryId: entry.id });
@@ -811,12 +859,11 @@ export class SurfaceEngine {
 
   /** A host-reported failure of an issued item: trace it, move the cursor past it, force the next content. */
   private skip(item: PlayableRenderItem, code: SkipCode, show: number, why: string): void {
-    this.skippedToken = item.token;
     this.emit({ showTime: show, kind: "skip", code, entryId: item.entryId, message: `entry ${item.entryId} "${item.name}": ${why}` });
     (item.set === "takeover" ? this.takeoverCursor : this.standardCursor).set(item.position, item.entryId);
     this.failed.add(item.entryId);
     this.marker = 0;
-    this.markerReason = FORCED;
+    this.markerReason = SKIPPED;
   }
 
   /** An entry the engine itself cannot put on screen, found while choosing. */

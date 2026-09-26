@@ -19,6 +19,8 @@
  *                       names the table and the row (§10.3: never let a read
  *                       failure look like an empty table)
  *   structure_invalid   a table that must have exactly one row does not
+ *   damaged             SQLite cannot read the file although it starts with
+ *                       the magic: a truncated or corrupted copy
  *
  * What it accepts with a warning (§10.4): unknown tables, unknown columns, and
  * rows carrying an unknown enumerated value, which are skipped.
@@ -66,12 +68,26 @@ export function loadCartridgeWith(bytes: Uint8Array, open: Opener, kind: Cartrid
 export function loadCartridgeWith(bytes: Uint8Array, open: Opener, kind: CartridgeKind): Snapshot | ProjectSnapshot {
   if (!(bytes instanceof Uint8Array)) throw new CartridgeError("not_sqlite", "a cartridge is bytes (a Uint8Array)");
   if (!isSqlite(bytes)) throw new CartridgeError("not_sqlite", "not a SQLite database: the first 16 bytes are not the SQLite magic");
-  const db = open(bytes);
+  let db: DatabaseAdapter | null = null;
   try {
+    db = open(bytes);
     return readCartridge(db, kind);
+  } catch (error) {
+    throw asCartridgeError(error);
   } finally {
-    db.close?.();
+    try {
+      db?.close?.();
+    } catch {
+      // a damaged database may not close cleanly; the error that matters is already thrown
+    }
   }
+}
+
+/** Anything SQLite throws while reading is a damaged file, never an empty one (§10.3). */
+function asCartridgeError(error: unknown): CartridgeError {
+  if (error instanceof CartridgeError) return error;
+  const message = error instanceof Error ? error.message : String(error);
+  return new CartridgeError("damaged", `the file starts like a SQLite database but cannot be read (${message}): a truncated or corrupted copy`);
 }
 
 /** Reads an open database as a cartridge of the expected kind. */
@@ -79,6 +95,14 @@ export function readCartridge(db: DatabaseAdapter, kind: "surface"): Snapshot;
 export function readCartridge(db: DatabaseAdapter, kind: "project"): ProjectSnapshot;
 export function readCartridge(db: DatabaseAdapter, kind: CartridgeKind): Snapshot | ProjectSnapshot;
 export function readCartridge(db: DatabaseAdapter, kind: CartridgeKind): Snapshot | ProjectSnapshot {
+  try {
+    return read(db, kind);
+  } catch (error) {
+    throw asCartridgeError(error);
+  }
+}
+
+function read(db: DatabaseAdapter, kind: CartridgeKind): Snapshot | ProjectSnapshot {
   const warnings: LoadWarning[] = [];
   const tables = new Set<string>();
   for (const row of db.all("SELECT name FROM sqlite_master WHERE type = 'table'")) tables.add(String(row["name"]));

@@ -19,6 +19,8 @@
  *                       names the table and the row (§10.3: never let a read
  *                       failure look like an empty table)
  *   structure_invalid   a table that must have exactly one row does not
+ *   damaged             SQLite cannot read the file although it starts with
+ *                       the magic: a truncated or corrupted copy
  *
  * What it accepts with a warning (§10.4): unknown tables, unknown columns, and
  * rows carrying an unknown enumerated value, which are skipped.

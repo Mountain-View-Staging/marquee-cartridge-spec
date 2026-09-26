@@ -200,6 +200,107 @@ test("a failure reported twice for the item on screen skips it once", async () =
   assert.equal(next.renderItem.entryId, 2);
 });
 
+test("a late first frame does not push a known takeover back", async () => {
+  const snapshot = await loadCartridge(fixture("base"));
+  const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+  const start = at("2026-09-15T11:29:50-07:00");
+  const trace = [];
+  let late = null; // each first frame is reported a second after its item is issued
+  for (let s = 0; s < 12; s++) {
+    const out = engine.tick(start + s * 1000, s * 1000);
+    trace.push(...out.trace);
+    if (late) trace.push(...engine.onFirstFrame(late.token));
+    late = out.renderItem;
+  }
+  assert.deepEqual(brief(trace), [
+    { t: t("2026-09-15T11:29:51-07:00"), kind: "render", code: "rotation.start", entry: 1, set: "standard", file: 101 },
+    { t: t("2026-09-15T11:30:00-07:00"), kind: "cut", code: "takeover.activate", entry: 1 },
+    { t: t("2026-09-15T11:30:01-07:00"), kind: "render", code: "rotation.start", entry: 2, set: "takeover", file: 102 },
+  ]);
+});
+
+test("a takeover due while the next item is still loading cuts on time", async () => {
+  const snapshot = await loadCartridge(fixture("base"));
+  const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+  const start = at("2026-09-15T11:29:46-07:00");
+  const trace = [];
+  for (let s = 0; s < 16; s++) {
+    const out = engine.tick(start + s * 1000, s * 1000);
+    trace.push(...out.trace);
+    const item = out.renderItem;
+    // The host never shows the standard item issued at 11:29:56.
+    if (item && !(item.entryId === 2 && item.set === "standard")) trace.push(...engine.onFirstFrame(item.token));
+  }
+  assert.deepEqual(brief(trace), [
+    { t: t("2026-09-15T11:29:46-07:00"), kind: "render", code: "rotation.start", entry: 1, set: "standard", file: 101 },
+    { t: t("2026-09-15T11:30:00-07:00"), kind: "cut", code: "takeover.activate", entry: 1 },
+    { t: t("2026-09-15T11:30:00-07:00"), kind: "render", code: "rotation.start", entry: 2, set: "takeover", file: 102 },
+  ]);
+});
+
+test("items that fail right after their first frame still end in set.all_failed", async () => {
+  const snapshot = await loadCartridge(fixture("base"));
+  const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+  const start = at("2026-09-15T08:00:00-07:00");
+  const trace = [];
+  for (let i = 0; i < 16; i++) {
+    const out = engine.tick(start, 0);
+    trace.push(...out.trace);
+    if (!out.renderItem) break;
+    trace.push(...engine.onFirstFrame(out.renderItem.token));
+    trace.push(...engine.onLoadFailed(out.renderItem.token, "decoder gave up"));
+  }
+  assert.deepEqual(brief(trace).map((e) => `${e.kind} ${e.code} ${e.entry ?? ""}`.trim()), [
+    "render rotation.start 1", "skip media.load_failed 1",
+    "render rotation.next 2", "skip media.load_failed 2",
+    "render rotation.next 3", "skip media.load_failed 3",
+    "render rotation.next 4", "skip media.load_failed 4",
+    "hold set.all_failed",
+  ]);
+});
+
+test("a repeated failure report cannot cut short the all-failed hold", async () => {
+  const snapshot = await loadCartridge(fixture("base"));
+  const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+  const start = at("2026-09-15T08:00:00-07:00");
+  const first = engine.tick(start, 0).renderItem;
+  engine.onFirstFrame(first.token);
+  engine.onLoadFailed(first.token, "decoder gave up");
+  for (let i = 0; i < 8; i++) {
+    const item = engine.tick(start, 0).renderItem;
+    if (!item) break;
+    engine.onLoadFailed(item.token, "not held");
+  }
+  assert.equal(engine.inspect().markerReason, "retry");
+  assert.deepEqual(engine.onLoadFailed(first.token, "decoder gave up again"), []);
+  const later = engine.tick(start + 200, 200);
+  assert.equal(later.renderItem, null);
+  assert.equal(later.trace.length, 0);
+});
+
+test("a failure reported for an item that was cut does not move the new playlist's cursor", async () => {
+  const snapshot = await loadCartridge(fixture("schedule-change"));
+  const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+  const start = at("2026-09-15T08:00:20-07:00");
+  const third = engine.tick(start, 0).renderItem;
+  engine.onFirstFrame(third.token);
+  const cut = engine.tick(start + 5000, 5000); // 08:00:25: playlist 2 takes over the lane
+  assert.equal(cut.trace[0].code, "schedule.change");
+  assert.deepEqual(engine.onLoadFailed(third.token, "decoder gave up"), []);
+  assert.equal(engine.onFirstFrame(cut.renderItem.token)[0].code, "rotation.start");
+  assert.equal(engine.inspect().cursors.standard, 1);
+});
+
+test("the lane keeps following the orientation through a missing one", async () => {
+  const { engine, trace } = await run(fixture("base"), {
+    start: "2026-09-15T08:00:00-07:00",
+    seconds: 3,
+    events: { 1: (e) => e.setOrientation(null), 2: (e) => e.setOrientation("landscape") },
+  });
+  assert.equal(engine.slot, "landscape");
+  assert.deepEqual(brief(trace).filter((e) => e.kind === "render").map((e) => e.file), [101, 102, 203]);
+});
+
 test("a first frame reported for a superseded item is ignored", async () => {
   const snapshot = await loadCartridge(fixture("base"));
   const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });

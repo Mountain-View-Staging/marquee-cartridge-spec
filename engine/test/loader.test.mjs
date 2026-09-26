@@ -111,6 +111,20 @@ test("rows with unknown enumerated values are skipped with a warning, not fatal"
   assert.equal(s.directives.get(1).standard.length, 1);
 });
 
+test("a damaged file that still starts with the SQLite magic is refused as damaged", async () => {
+  const bytes = fixture("base");
+  const truncated = bytes.slice(0, 4096);
+  const garbage = bytes.slice();
+  for (let i = 4096; i < garbage.length; i++) garbage[i] = (i * 131) & 0xff;
+  const header = bytes.slice();
+  for (let i = 16; i < 100; i++) header[i] = 0xa5;
+  for (const damaged of [truncated, garbage, header]) {
+    const error = await refusal(damaged);
+    assert.ok(["damaged", "table_unreadable"].includes(error.code), `${error.code}: ${error.message}`);
+  }
+  assert.equal((await refusal(header)).code, "damaged");
+});
+
 test("a missing baseline table or column is refused", async () => {
   const table = await refusal(variant("base", "DROP TABLE session_set_entry"));
   assert.equal(table.code, "table_missing");

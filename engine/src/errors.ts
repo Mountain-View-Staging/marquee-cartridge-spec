@@ -14,6 +14,7 @@ export type CartridgeErrorCode =
   | "table_unreadable"
   | "row_undecodable"
   | "structure_invalid"
+  | "damaged"
   | "no_sqlite_binding";
 
 export class CartridgeError extends Error {

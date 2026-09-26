@@ -85,10 +85,12 @@ When `renderItem` is not null, put it on screen and report back with its `token`
 | `onMediaCompleted(token)` | A video reached the end of its window (the out-point, or the end of the clip). |
 | `onLoadFailed(token, reason)` | It cannot be shown: not held, not decodable, not fetched. The engine skips it. |
 
-Reports carrying any other token are ignored, so a late callback from an item that has
-been replaced cannot move the rotation. A new render item supersedes any earlier one
-that has not reported its first frame. With no first frame within 10 s of monotonic
-time, the item counts as a load failure.
+Only reports for the item on screen, from its first frame until its time is over or it is
+cut, and for the item awaiting its first frame, are acted on; anything else is ignored, so a
+late or repeated callback cannot move the rotation. A new render item supersedes any
+earlier one that has not reported its first frame. With no first frame within 10 s of
+monotonic time, the item counts as a load failure. A takeover that falls due while an item
+is still loading, or before a late first frame's natural end, still cuts at its time.
 
 Render items come in three kinds:
 
@@ -124,7 +126,8 @@ next tick, which cuts and re-evaluates.
 `CartridgeError.code`: `not_sqlite`, `not_v25` (no `cartridge_meta`), `format_unsupported`
 (first version component not 25), `kind_mismatch`, `meta_invalid`, `table_missing`,
 `column_missing`, `table_unreadable`, `row_undecodable` (names the table and the row;
-§10.3), `structure_invalid` (not exactly one `project` or `surface_config` row),
+§10.3), `structure_invalid` (not exactly one `project` or `surface_config` row), `damaged`
+(the magic is there but SQLite cannot read the file: a truncated or corrupted copy),
 `no_sqlite_binding`.
 
 Unknown tables and columns, and rows with an unknown enumerated value, load with a
@@ -174,9 +177,10 @@ makes the same ones and so each can be settled in the specification.
 | Which `cut` an interruption records | One event per cause: a jump records `jump` only; a playlist change it causes resets the cursors silently. A cut is recorded only when an entry is on screen, naming it. |
 | An authored blank | Re-evaluated every 2 s like a hold, without repeating the `blank` event. |
 | Orientation change, new cartridge | Applied at the next tick; the `cut` carries that tick's show time. |
-| Which failures count toward `set.all_failed` | Load failures, missing first frames and entries that are not image or video media. A watchdog skip does not: the item did render. |
+| Which failures count toward `set.all_failed` | Load failures (before or after the first frame), missing first frames, and entries that are not image or video media. The streak ends when an item finishes its time: naturally, at its watchdog, when it completes, or when a takeover cuts it. |
+| A takeover due while the next item is still loading, or before a late first frame's natural end | It still cuts at its time (§5.9: only a takeover preempts a standard item, and it does so at its activation). The loading item is abandoned; a late item's marker is armed at the takeover instead. |
 | The preview clock before its first command | Reads what a Surface would show now, and runs. |
-| Day 1 on a daylight-saving date | A skipped local time becomes the moment the clocks change; a repeated one, the earlier instant. |
+| Day 1 on a daylight-saving date | §8.2's "next valid instant", read literally: a skipped local time becomes the moment the clocks change, and a repeated one the earlier instant. So on the days around a show whose Day 1 springs forward, the show clock stands at that moment for the hour the clocks skip (whatever is on screen waits), which §8.3's "never holds still" does not foresee. Shifting a skipped time by the length of the gap would keep the clock moving, at the price of one backward jump a day. This one needs the specification to decide. |
 | No orientation from the host | The gate is skipped (§5.1) and each entry plays the lane's slot, else the other one. |
 | Day 1 clamp | A projection that lands outside Day 1 becomes Day 1's start. §8.2 says "clamp into" Day 1, which would give its end for a late time; the two differ only for a Day 1 that is not a whole day, which Studio does not produce. |
 | Boundaries on the `demo_station` lane | Not the engine's: it resolves one playlist lane and has no mode. A host with a DemoStation mode watches that lane itself (§5.11). |
@@ -203,10 +207,16 @@ Chromium 152 through sql.js 1.10.3:
 
 | | Node 24 | Chromium, sql.js | Target |
 |---|---|---|---|
-| A tick with no transition | 0.03 µs in the event, 0.07 µs outside it (synthetic Day 1) | 0.01 µs | < 100 µs |
+| A tick with no transition | 0.02 µs in the event, 0.04 µs outside it (synthetic Day 1) | 0.01 µs | < 100 µs |
 | Allocation by an idle tick | 0 bytes over 1,000,000 ticks beyond the host's own call | — | none |
-| `renderNext` | 500 entries: median 15 µs, p99 61 µs | 1,004 entries: mean 8 µs | < 2 ms for 500 |
-| Loading a ~12,000-row cartridge | median 28 ms (node:sqlite) | median 22 ms | < 500 ms in a browser |
+| `renderNext` | 500 entries: median 9 µs, p99 15 µs | 1,004 entries: mean 8 µs | < 2 ms for 500 |
+| Loading a ~12,000-row cartridge | median 14 ms (node:sqlite) | median 22 ms | < 500 ms in a browser |
+
+During a hold the engine evaluates the playlist again every 2 s of show time. That pass
+builds no strings unless the hold is being recorded, but it runs too rarely for the
+JavaScript engine to optimize, so its arithmetic allocates boxed numbers: about 110 bytes
+per pass with the four-entry fixture (56 KB over 1,000,000 ticks, 500 passes). The ticks
+between passes allocate nothing.
 
 Outside the event, the venue's UTC offset is re-read from the platform once per quarter
 hour; every other tick is arithmetic on numbers already held.

@@ -60,7 +60,7 @@ export interface TickOutput {
     readonly trace: readonly TraceEvent[];
 }
 export type WorkingSetKind = "none" | "standard" | "takeover" | "empty" | "blank";
-export type MarkerReason = "forced" | "natural" | "watchdog" | "interrupt" | "retry" | "completed";
+export type MarkerReason = "forced" | "natural" | "watchdog" | "interrupt" | "retry" | "completed" | "skipped";
 export interface EntryInspection {
     readonly entryId: number;
     readonly position: number;
@@ -115,6 +115,8 @@ export declare class SurfaceEngine {
     private readonly firstFrameTimeoutMs;
     private readonly emptyRetryMs;
     private laneSlot;
+    /** Whether the lane follows the orientation (it does whenever the two start out the same). */
+    private readonly laneFollows;
     private orientationValue;
     private readonly tokenPrefix;
     private tokenCount;
@@ -131,16 +133,18 @@ export declare class SurfaceEngine {
     private readonly standardCursor;
     private readonly takeoverCursor;
     private lastSet;
-    /** Entries that failed since the last first frame: when it covers the working set, hold. */
+    /** Entries that failed since an item last finished its time: when it covers the working set, hold. */
     private readonly failed;
     private marker;
     private markerReason;
     private currentItem;
     private since;
+    /** Whether the current item's reports still count: from its first frame until its time is over or it is cut. */
+    private currentLive;
     private pendingItem;
     private pendingMono;
-    /** The last item skipped, so a repeated report for it is not a second skip. */
-    private skippedToken;
+    /** The takeover activation known when the pending item was chosen (standard items only). */
+    private pendingInterruptAt;
     private issued;
     private events;
     private lastStateKind;
@@ -177,7 +181,8 @@ export declare class SurfaceEngine {
     onLoadFailed(token: string, reason?: string): readonly TraceEvent[];
     /**
      * The host's orientation changed (§5.1, §6): cut and re-resolve at the next
-     * tick. The lane follows the orientation when it was the orientation's own.
+     * tick. The lane follows the orientation when the engine was created with
+     * the two the same (or with no orientation); a missing orientation keeps the lane.
      */
     setOrientation(orientation: Orientation | null | undefined): readonly TraceEvent[];
     /** A new cartridge is committed: reset all state and cut at the next tick (§5.9). */
@@ -209,6 +214,8 @@ export declare class SurfaceEngine {
     private playOrientation;
     /** §5.6 — the first entry after the cursor, wrapping; the first entry with no cursor. */
     private choose;
+    /** Set.prototype.clear allocates a new table even when empty: keep the idle paths allocation-free. */
+    private clearFailures;
     private allFailed;
     /** The RenderItem for a chosen entry, or null when the entry is skipped on the spot. */
     private build;
@@ -220,6 +227,9 @@ export declare class SurfaceEngine {
     /** §5.10 — a backing media item, resolved by orientation with no fallback. */
     private backing;
     /** §5.5 — nothing new is produced: the last frame stays, and the marker is armed 2 s out. */
+    private rearm;
+    /** Whether this hold is already recorded: holds are recorded on entry, not on each retry. */
+    private holding;
     private hold;
     /** §5.2 — an authored blank: clear the screen, once. */
     private blank;

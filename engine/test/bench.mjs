@@ -45,7 +45,8 @@ async function idleTicks(label, start) {
   const snapshot = await loadCartridge(variant("base", "UPDATE media_item SET display_duration = 3600"));
   const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
   const t0 = at(start);
-  engine.onFirstFrame(engine.tick(t0, 0).renderItem.token);
+  const first = engine.tick(t0, 0).renderItem;
+  if (first) engine.onFirstFrame(first.token); // else: a hold, re-evaluated every 2 s of show time
   let from = 1;
   for (let k = 0; k < 30; k++, from += 20_000) { // warm up both loops until optimized
     drive(engine, t0, from, 20_000);
@@ -156,6 +157,8 @@ console.log(`node ${process.version}, ${process.arch}\n`);
 await idleTicks("tick with no transition, inside the event (real venue time)", "2026-09-15T08:00:00-07:00");
 console.log();
 await idleTicks("tick with no transition, outside the event (synthetic Day 1)", "2026-09-08T08:00:00-07:00");
+console.log();
+await idleTicks("tick during a hold (nothing viable yet; re-evaluated every 2 s)", "2026-09-15T07:00:00-07:00");
 console.log();
 await renderNext();
 console.log();
