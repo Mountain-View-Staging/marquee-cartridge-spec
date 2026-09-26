@@ -279,7 +279,7 @@ CARTRIDGES = {
     # MCS-10
     "board": base(
         items=[still(1), still(3)],
-        session_sets=[dict(id=1, duration=8)],
+        session_sets=[dict(id=1, duration=8, sessions=13)],  # 13 on Day 1: three pages at five rows a page
         playlists={1: [1, ("board", 1), 3]},
         directives=std((1, 2)) + [(3, "takeover", "2026-09-15 08:00:20", 1),
                                   (3, "takeover", "2026-09-15 08:00:25", 0)]),
@@ -362,7 +362,9 @@ def build(name, c):
     for s in c["session_sets"]:
         x("INSERT INTO session_set (id,name,render_modes,duration,created,updated) VALUES (?,?,'[\"simple\"]',?,?,?)",
           (s["id"], f"Room {s['id']}", s["duration"], NOW, NOW))
-        for k in range(1, 4):
+        # As many Day 1 sessions as the set asks for (default three), so a production
+        # resolver at five rows a page yields the page count the scenario shares.
+        for k in range(1, s.get("sessions", 3) + 1):
             x("INSERT INTO session VALUES (?,?,NULL,'[]','[]',NULL,NULL,NULL,?,?)",
               (k, f"Session {k}", NOW, NOW))
             x("INSERT INTO session_set_entry VALUES (?,?,?,NULL,?,?,NULL,?,?,?)",
