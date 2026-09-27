@@ -54,6 +54,7 @@ export {
   type MinimalBoardSession,
   type SessionState,
 } from "./board.js";
+export { filesForLanes, type LaneSelection } from "./lanes.js";
 export {
   DEFAULT_STILL_SECONDS,
   DirectiveSeries,

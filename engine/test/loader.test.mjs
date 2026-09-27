@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { CartridgeError, loadCartridge, nodeSqliteOpener, readCartridge } from "../dist/node.js";
+import { CartridgeError, buildSnapshot, loadCartridge, nodeSqliteOpener, readCartridge } from "../dist/node.js";
 import { fixture, variant } from "./helpers.mjs";
 
 async function refusal(bytes, options) {
@@ -26,7 +26,8 @@ test("loads a v25.0.1 surface cartridge into an indexed snapshot", async () => {
   assert.equal(s.meta.surfaceId, "LOBBY3");
   assert.equal(s.days.length, 1);
   assert.equal(s.surfaceConfig.surfaceId, "LOBBY3");
-  assert.deepEqual(s.locations.map((l) => [l.locationId, l.orientation]), [["LOBBY3-A", "portrait"]]);
+  assert.deepEqual(s.locations.map((l) => [l.locationId, l.label]), [["LOBBY3-A", "Lobby 3 — north wall"]]);
+  assert.equal("orientation" in s.locations[0], false, "a location carries no orientation (§6)");
   assert.deepEqual(s.playlists.get(1).entries.map((e) => e.position), [1, 2, 3, 4]);
   assert.deepEqual(s.directives.get(2).takeover.map((d) => d.onScreen), [true, false]);
   assert.equal(s.scheduleBySlot.portrait.length, 1);
@@ -95,6 +96,37 @@ test("an unknown column is a warning, and the rest of the table still decodes", 
   const s = await loadCartridge(variant("base", "ALTER TABLE playlist ADD COLUMN mood TEXT"));
   assert.deepEqual(s.warnings.map((w) => [w.code, w.table, w.column]), [["column.unknown", "playlist", "mood"]]);
   assert.equal(s.playlists.get(1).name, "Playlist A");
+});
+
+test("a retired column — an earlier draft's surface_location.orientation — loads with no warning and is never read", async () => {
+  // As an earlier draft of v25.0.1 wrote it: the mount, NOT NULL.
+  const earlier = variant("base", "ALTER TABLE surface_location ADD COLUMN orientation TEXT NOT NULL DEFAULT 'portrait'");
+  const s = await loadCartridge(earlier);
+  assert.deepEqual(s.warnings, []);
+  assert.deepEqual(s.locations.map((l) => Object.keys(l).sort()), [["configId", "id", "label", "locationId"]]);
+  // Never read, so nothing it holds is judged: an unknown value, a NUL byte, a number.
+  for (const value of ["'sideways'", "'portrait' || char(0)", "7"]) {
+    const odd = await loadCartridge(variant("base", `ALTER TABLE surface_location ADD COLUMN orientation TEXT; UPDATE surface_location SET orientation = ${value}`));
+    assert.deepEqual(odd.warnings, [], value);
+    assert.equal(odd.locations.length, 1, value);
+  }
+  // The retired name is retired in its own table only.
+  const elsewhere = await loadCartridge(variant("base", "ALTER TABLE playlist ADD COLUMN orientation TEXT"));
+  assert.deepEqual(elsewhere.warnings.map((w) => [w.code, w.table, w.column]), [["column.unknown", "playlist", "orientation"]]);
+});
+
+test("buildSnapshot ignores a retired column a tool still supplies", async () => {
+  const s = await loadCartridge(fixture("base"));
+  const rows = {
+    cartridge_meta: [{ cartridge_kind: "surface", format_version: "25.0.1", project_code: "SHOW26", surface_id: "LOBBY3", published_revision: 1, timezone: "America/Los_Angeles", generated_at: 0 }],
+    project: [{ id: 1, cloud_uid: "u", name: "Show 26", project_code: "SHOW26", timezone: "America/Los_Angeles", show_wallpaper_item_id: null, desktop_wallpaper_item_id: null, backing_item_id: null, brand_style: null, brand_style_item_id: null }],
+    project_days: s.days.map((d) => ({ id: d.id, day: d.day, start_time: d.startTime, end_time: d.endTime })),
+    surface_config: [{ id: 1, name: "Lobby 3", surface_id: "LOBBY3", published_revision: 1, published_at: 0 }],
+    surface_location: [{ id: 1, config_id: 1, location_id: "LOBBY3-A", orientation: "landscape", label: null }],
+  };
+  const built = buildSnapshot("surface", rows, []);
+  assert.deepEqual(built.warnings, []);
+  assert.deepEqual(built.locations, [{ id: 1, configId: 1, locationId: "LOBBY3-A", label: null }]);
 });
 
 test("rows with unknown enumerated values are skipped with a warning, not fatal", async () => {

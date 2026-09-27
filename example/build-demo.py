@@ -130,7 +130,6 @@ DDL = {
   id          INTEGER PRIMARY KEY,
   config_id   INTEGER NOT NULL REFERENCES surface_config(id),
   location_id TEXT    NOT NULL UNIQUE,
-  orientation TEXT    NOT NULL,
   label       TEXT,
   created     INTEGER NOT NULL,
   updated     INTEGER NOT NULL
@@ -547,10 +546,11 @@ def build():
                (str(uuid.uuid5(NAMES, SHOW)), SHOW, TZ, GENERATED_AT, GENERATED_AT))
     db.execute("INSERT INTO surface_config VALUES (1, 'Demo', ?, 1, ?, ?, ?)",
                (SURFACE, GENERATED_AT, GENERATED_AT, GENERATED_AT))
-    # Two installations of one config: a Surface picks one and adopts its orientation (§6).
-    db.execute("INSERT INTO surface_location VALUES (1, 1, 'DEMO1-A', 'landscape', 'Main hall — north wall', ?, ?)",
+    # Two installations of one config: a Surface picks one by its label (§6). Each device
+    # renders its own orientation; the location says where it is, not which way up.
+    db.execute("INSERT INTO surface_location VALUES (1, 1, 'DEMO1-A', 'Main hall — north wall', ?, ?)",
                (GENERATED_AT, GENERATED_AT))
-    db.execute("INSERT INTO surface_location VALUES (2, 1, 'DEMO1-B', 'portrait', 'Main hall — pillar', ?, ?)",
+    db.execute("INSERT INTO surface_location VALUES (2, 1, 'DEMO1-B', 'Main hall — pillar', ?, ?)",
                (GENERATED_AT, GENERATED_AT))
 
     # The session board and its sessions.

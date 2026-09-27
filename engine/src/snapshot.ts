@@ -29,7 +29,6 @@ import type {
   MediaFile,
   MediaFileVariant,
   MediaItem,
-  Orientation,
   Playlist,
   PlaylistEntry,
   Project,
@@ -215,25 +214,19 @@ export function buildSnapshot(kind: CartridgeKind, raw: RawTables, warnings: Loa
     publishedAt: num(c, "published_at"),
   });
 
+  // A row's retired `orientation`, when a tool still supplies one, is never read (§6).
   const locations: SurfaceLocation[] = [];
   for (const r of rows("surface_location")) {
-    const id = num(r, "id");
-    const orientation = str(r, "orientation");
-    if (!KNOWN.orientation.has(orientation)) {
-      warn({ code: "value.unknown", table: "surface_location", column: "orientation", rowId: id, message: `location ${id} has orientation '${orientation}'; ignored` });
-      continue;
-    }
     locations.push(Object.freeze({
-      id,
+      id: num(r, "id"),
       configId: num(r, "config_id"),
       locationId: str(r, "location_id"),
-      orientation: orientation as Orientation,
       label: strOrNull(r, "label"),
     }));
   }
   locations.sort((a, b) => a.id - b.id);
   if (locations.length === 0) {
-    warn({ code: "locations.empty", table: "surface_location", message: "the cartridge lists no installation; a host must supply the orientation itself" });
+    warn({ code: "locations.empty", table: "surface_location", message: "the cartridge lists no installation; a device has no location to choose" });
   }
 
   const playlistRows = rows("playlist");

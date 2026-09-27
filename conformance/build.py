@@ -83,7 +83,6 @@ CREATE TABLE surface_location (
   id          INTEGER PRIMARY KEY,
   config_id   INTEGER NOT NULL REFERENCES surface_config(id),
   location_id TEXT    NOT NULL UNIQUE,   -- globally unique real-world id
-  orientation TEXT    NOT NULL,          -- 'portrait' | 'landscape' (the mount)
   label       TEXT,
   created     INTEGER NOT NULL,
   updated     INTEGER NOT NULL
@@ -332,7 +331,7 @@ def build(name, c):
     for n, (d, s, e) in enumerate(days, 1):
         x("INSERT INTO project_days VALUES (?,?,?,?,?,?)", (n, d, s, e, NOW, NOW))
     x("INSERT INTO surface_config VALUES (1,'Lobby 3','LOBBY3',1,?,?,?)", (NOW, NOW, NOW))
-    x("INSERT INTO surface_location VALUES (1,1,'LOBBY3-A','portrait','Lobby 3 — north wall',?,?)", (NOW, NOW))
+    x("INSERT INTO surface_location VALUES (1,1,'LOBBY3-A','Lobby 3 — north wall',?,?)", (NOW, NOW))
 
     files = {}
     for it in c["items"]:

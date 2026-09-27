@@ -28,8 +28,10 @@ No dependencies: `python3` 3.9+ and Node 22.13+ (built-in `node:sqlite`).
 
 All cartridges describe one fictional show: `SHOW26` / `LOBBY3`, venue timezone
 `America/Los_Angeles`, Day 1 = 2026-09-15 (a whole venue-local day; `two-days` adds 2026-09-16).
-One location, `LOBBY3-A`, portrait. There are no media bytes — an engine never reads them — so
-manifest hashes are derived from file names.
+One location, `LOBBY3-A`. A location carries no orientation (specification §6): each scenario
+gives the engine its orientation in `scenario.json`, as a host passes the orientation its device
+renders. There are no media bytes — an engine never reads them — so manifest hashes are derived
+from file names.
 
 IDs are systematic so a trace reads on its own:
 
