@@ -167,7 +167,8 @@ async function fetchCartridge(name) {
   $("caption").textContent = "fetching and verifying media…";
   const synced = await media.sync(snapshot);
 
-  let orientation = snapshot.locations[0]?.orientation ?? "landscape";
+  // A device's orientation is its own (§6); the explorer starts landscape and switches below.
+  let orientation = "landscape";
   const clock = previewClock();
   const engine = createEngine({ snapshot, slot: orientation, orientation, clock });
   const calendar = engine.venueCalendar;
@@ -316,7 +317,7 @@ async function fetchCartridge(name) {
     ["show / surface", `${m.projectCode} / ${m.surfaceId} · revision ${m.publishedRevision}`],
     ["venue timezone", m.timezone],
     ["days", days.map((d) => d.day).join(", ")],
-    ["installations", snapshot.locations.map((l) => `${l.locationId} (${l.orientation}) — ${escape(l.label ?? "")}`).join("<br>")],
+    ["installations", snapshot.locations.map((l) => `${escape(l.locationId)} — ${escape(l.label ?? "")}`).join("<br>")],
     ["load warnings", snapshot.warnings.length ? snapshot.warnings.map((w) => escape(w.message)).join("<br>") : "none"],
   ].map(([k, val]) => `<tr><td>${k}</td><td>${val}</td></tr>`).join("");
   const rejected = [...media.failures.values()];

@@ -85,17 +85,20 @@ export class MediaStore {
   }
 
   /**
-   * Fetch and verify every image and video the cartridge names. Brand files
-   * (typefaces, style books) are not media, and this player draws no styled
-   * text, so it leaves them alone.
+   * Fetch and verify every image and video the cartridge names — or, given
+   * `files` (a set of media file ids, e.g. `filesForLanes`), only those: a
+   * Surface may fetch by lane (§7.7). What is already held is not fetched
+   * again. Brand files (typefaces, style books) are not media, and this player
+   * draws no styled text, so it leaves them alone.
    */
-  async sync(snapshot, { onProgress, concurrency = 4 } = {}) {
+  async sync(snapshot, { files, onProgress, concurrency = 4 } = {}) {
     const wanted = [];
     for (const [fileId, file] of snapshot.mediaFiles) {
+      if (files && !files.has(fileId)) continue;
       if (/^(image|video)\//i.test(file.contentType)) wanted.push(fileId);
     }
-    let done = 0;
-    const queue = wanted.slice();
+    const queue = wanted.filter((fileId) => !this.held.has(fileId));
+    let done = wanted.length - queue.length;
     const worker = async () => {
       while (queue.length) {
         const fileId = queue.shift();
@@ -103,8 +106,8 @@ export class MediaStore {
         onProgress?.(++done, wanted.length);
       }
     };
-    await Promise.all(Array.from({ length: Math.min(concurrency, wanted.length) }, worker));
-    return { held: this.held.size, wanted: wanted.length, failures: [...this.failures.values()] };
+    await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker));
+    return { held: wanted.filter((fileId) => this.held.has(fileId)).length, wanted: wanted.length, failures: [...this.failures.values()] };
   }
 
   async fetchOne(snapshot, fileId) {

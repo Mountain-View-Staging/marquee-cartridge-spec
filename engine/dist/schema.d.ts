@@ -6,6 +6,11 @@
  * column added after the baseline would be declared here with `since` and a
  * default, and decoded as optional-with-default (§10.2). There are none yet.
  *
+ * A column an earlier draft of v25.0.1 carried and the format has since
+ * dropped is listed in its table's `retired`: a cartridge that still carries
+ * it loads, and the column is ignored without a warning (§10.4). There is one,
+ * `surface_location.orientation` — a device's orientation is its own (§6).
+ *
  * Column types:
  *   int    an INTEGER that must be a whole number
  *   real   a REAL that must be a finite number
@@ -42,6 +47,8 @@ export interface TableSpec {
     readonly in: readonly ("project" | "surface")[];
     readonly columns: readonly ColumnSpec[];
     readonly malformedRow: MalformedRowPolicy;
+    /** Columns retired from the format: never read, never warned about when present. */
+    readonly retired: readonly string[];
 }
 export declare const BASELINE: readonly TableSpec[];
 /** The major version this engine reads (§2.1). */
@@ -49,7 +56,6 @@ export declare const FORMAT_MAJOR = 25;
 /** Known values of the enumerated columns (§10.4 says to skip anything else). */
 export declare const KNOWN: {
     readonly slot: Set<string>;
-    readonly orientation: Set<string>;
     readonly resourceType: Set<string>;
     readonly directiveType: Set<string>;
     readonly variantKind: Set<string>;

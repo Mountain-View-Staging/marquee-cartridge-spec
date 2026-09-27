@@ -6,6 +6,11 @@
  * column added after the baseline would be declared here with `since` and a
  * default, and decoded as optional-with-default (§10.2). There are none yet.
  *
+ * A column an earlier draft of v25.0.1 carried and the format has since
+ * dropped is listed in its table's `retired`: a cartridge that still carries
+ * it loads, and the column is ignored without a warning (§10.4). There is one,
+ * `surface_location.orientation` — a device's orientation is its own (§6).
+ *
  * Column types:
  *   int    an INTEGER that must be a whole number
  *   real   a REAL that must be a finite number
@@ -21,8 +26,8 @@ function col(name, type) {
     const nullable = type.endsWith("?");
     return { name, type: (nullable ? type.slice(0, -1) : type), nullable, read: true };
 }
-function table(name, idColumn, inArtifacts, columns, malformedRow = "skip") {
-    return { name, idColumn, in: inArtifacts, columns: columns.map(([n, t]) => col(n, t)), malformedRow };
+function table(name, idColumn, inArtifacts, columns, malformedRow = "skip", retired = []) {
+    return { name, idColumn, in: inArtifacts, columns: columns.map(([n, t]) => col(n, t)), malformedRow, retired };
 }
 const BOTH = ["project", "surface"];
 const SURFACE = ["surface"];
@@ -78,11 +83,10 @@ export const BASELINE = [
         ["id", "int"],
         ["config_id", "int"],
         ["location_id", "text"],
-        ["orientation", "text"],
         ["label", "text?"],
         ["created", "-"],
         ["updated", "-"],
-    ]),
+    ], "skip", ["orientation"]),
     table("surface_schedule_entry", "id", SURFACE, [
         ["id", "int"],
         ["config_id", "int"],
@@ -205,7 +209,6 @@ export const FORMAT_MAJOR = 25;
 /** Known values of the enumerated columns (§10.4 says to skip anything else). */
 export const KNOWN = {
     slot: new Set(["portrait", "landscape", "demo_station"]),
-    orientation: new Set(["portrait", "landscape"]),
     resourceType: new Set(["media_item", "session_set"]),
     directiveType: new Set(["standard", "takeover"]),
     variantKind: new Set(["original", "optimized", "webOptimized", "wifiOptimized"]),

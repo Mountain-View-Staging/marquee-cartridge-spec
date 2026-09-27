@@ -23,7 +23,8 @@
  *                       the magic: a truncated or corrupted copy
  *
  * What it accepts with a warning (§10.4): unknown tables, unknown columns, and
- * rows carrying an unknown enumerated value, which are skipped.
+ * rows carrying an unknown enumerated value, which are skipped. A column the
+ * format has retired (schema.ts, `retired`) is ignored without one.
  *
  * A row holding a NUL byte (U+0000) in a text column is malformed (§4). Where a
  * row with an unknown enumerated value is skipped, it is skipped with a warning

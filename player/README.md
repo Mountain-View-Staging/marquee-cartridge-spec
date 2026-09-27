@@ -27,12 +27,17 @@ const SOURCE = { base: "../example", projectCode: "SHOW26", surfaceCode: "DEMO1"
 - **Loads both artifacts** (§1) through the engine's Loader, which checks the SQLite magic, the
   artifact's kind and its format version, and refuses anything else with a reason.
 - **Provisions** (§6). With one installation it takes it; with several it asks which one this
-  is and remembers the answer while the cartridge still lists it. The answer is stored per
-  show and surface code, so changing the address forgets it.
-- **Fetches and verifies media** (§7) before the first frame: the browser's rendition order
+  is, by label, and remembers the answer while the cartridge still lists it. The answer is
+  stored per show and surface code, so changing the address forgets it.
+- **Renders its own orientation** (§6): automatic — the shape of the window it fills — unless
+  `O` sets landscape or portrait on this device. A change applies at once, a resize too while
+  automatic, and a publish never changes it.
+- **Fetches and verifies media by lane** (§7.7) before the first frame: only the files the
+  orientation it renders can show (`filesForLanes`), in the browser's rendition order
   (`webOptimized` first; HEVC only if the browser says it can play it), then size, then
-  SHA-256, each failure reported in its own words. A file that fails is not held, and the
-  engine skips its entry when its turn comes.
+  SHA-256, each failure reported in its own words. After an orientation change it fetches the
+  new lane's files. A file that fails, or has not arrived yet, is not held, and the engine
+  skips its entry when its turn comes.
 - **Runs the engine** from `requestAnimationFrame` on the Surface show clock (§8.2): real
   venue time during the show, and Day 1 at the venue's time of day before and after it.
 - **Follows the host frame rules** (§5.8): the next item is prepared out of sight and shown
@@ -42,8 +47,8 @@ const SOURCE = { base: "../example", projectCode: "SHOW26", surfaceCode: "DEMO1"
 
 ## Keys
 
-`O` orientation (the operator's override, §6) · `M` mute · `S` status overlay ·
-`F` fullscreen · `L` choose the installation again
+`O` orientation — automatic, landscape, portrait (the device's own, §6) · `M` mute ·
+`S` status overlay · `F` fullscreen · `L` choose the installation again
 
 The overlay reads the engine's own account of itself (`engine.inspect()`) and its trace: the
 schedule entry and playlist, the working set and what a takeover suppresses, entries

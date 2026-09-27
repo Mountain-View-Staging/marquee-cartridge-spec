@@ -28,6 +28,7 @@ export { createEngine, SurfaceEngine, EMPTY_RETRY_MS, FIRST_FRAME_TIMEOUT_MS, JU
 export { previewClock, surfaceClock, type PreviewClock, type ShowClock } from "./clock.js";
 export { Calendar, DayOne, VenueZone, isValidTimeZone } from "./venue-time.js";
 export { boardPageAt, minimalBoardResolver, type BoardContext, type BoardResolution, type BoardResolver, type MinimalBoardModel, type MinimalBoardSession, type SessionState, } from "./board.js";
+export { filesForLanes, type LaneSelection } from "./lanes.js";
 export { DEFAULT_STILL_SECONDS, DirectiveSeries, WATCHDOG_GRACE_SECONDS, WATCHDOG_UNKNOWN_SECONDS, fileIdFor, isImageType, isPlayableType, isVideoType, playbackWindow, watchdogSeconds, type DirectiveState, type DurationSource, type PlaybackWindow, } from "./rules.js";
 /**
  * The Loader (§8.5): verifies the SQLite magic, the artifact's kind and

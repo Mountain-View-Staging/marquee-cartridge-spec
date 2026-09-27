@@ -56,12 +56,14 @@ export interface SurfaceConfig {
     readonly publishedRevision: number;
     readonly publishedAt: number;
 }
-/** §4.4 — one physical installation; carries the mount orientation. */
+/**
+ * §4.4 — one physical installation, identified by its location id. It carries
+ * no orientation: a device's orientation is its own (§6).
+ */
 export interface SurfaceLocation {
     readonly id: number;
     readonly configId: number;
     readonly locationId: string;
-    readonly orientation: Orientation;
     readonly label: string | null;
 }
 /** §4.4 — a changeover on one lane's timeline. */

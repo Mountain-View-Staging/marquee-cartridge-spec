@@ -21,6 +21,7 @@ src/            TypeScript source
   venue-time.ts   venue timezone offsets, Day 1, the Surface show clock
   clock.ts        surfaceClock(), previewClock()
   rules.ts        the pure rules: file by orientation, start and duration, directives
+  lanes.ts        filesForLanes: which files a host needs for the lanes it renders (§7.7)
   engine.ts       the state machine: tick, reports, the trace
   render.ts       RenderItem
   trace.ts        TraceEvent and the reason codes
@@ -106,9 +107,31 @@ host's: hold the previous frame until the next item's first frame is ready and n
 flash to black; clear only for a `blank`; stop a trimmed video on the last frame before
 its out-point; play video with sound, muted only by a local device choice (§5.8).
 
-Tell the engine about the world with `setOrientation(o)` (the operator's override, or a
-new mount) and `commit(snapshot)` (a newly delivered cartridge). Both take effect at the
-next tick, which cuts and re-evaluates.
+Tell the engine about the world with `setOrientation(o)` (the device's orientation changed:
+the operator set it, or the driven display turned — §6) and `commit(snapshot)` (a newly
+delivered cartridge). Both take effect at the next tick, which cuts and re-evaluates.
+
+### Fetching by lane
+
+`filesForLanes(snapshot, { lanes, demo })` returns the media file ids a host rendering
+`lanes` needs (§7.7): **every file the manifest lists, except those referenced only as an
+item's slot file on a lane the host does not render.** An item's portrait file serves the
+portrait lane and its landscape file the landscape lane, however the item is used (a playlist
+entry, a backing, demo branding), since each resolves by orientation with no fallback. Brand
+files are wanted on every lane: every file of a brand member, or of an item the project or a
+session set names as its style book. A file no item references is wanted. With `demo: true`
+(a host that runs the DemoStation mode), while the `demo_station` lane has any entry with a
+background, the opposite of each lane is rendered too — the picture-in-picture plays it. The
+ids iterate ascending; a project snapshot reads the same way.
+
+```js
+const wanted = filesForLanes(snapshot, { lanes: ["portrait"], demo: false });
+const toFetch = [...snapshot.manifest.values()].filter((m) => wanted.has(m.mediaFileId));
+```
+
+Nothing on screen depends on it: an entry whose file is not held is reported with
+`onLoadFailed` and skipped, as any missing file is, until the file arrives. After an
+orientation change, fetch the new lane's files.
 
 ## API
 
@@ -132,7 +155,9 @@ next tick, which cuts and re-evaluates.
 
 Unknown tables and columns, and rows with an unknown enumerated value, load with a
 **warning** in `snapshot.warnings` and are ignored (§10.4). So do dangling references,
-malformed JSON columns, an unknown timezone, and a cartridge with no days.
+malformed JSON columns, an unknown timezone, and a cartridge with no days. A column the
+format has retired — `surface_location.orientation`, which an earlier draft wrote — is
+ignored without a warning, and never read (`TableSpec.retired`).
 
 A row holding a NUL byte (U+0000) in a text column is malformed (§4): skipped with a
 `value.malformed` warning that names the column, or refused with the table's own code in
@@ -154,6 +179,7 @@ node:sqlite before Node 24, which end the string at it.
 | `previewClock()` | An authoring tool's transport: `set(showMs)`, `play()`, `pause()`. Opens on the Surface value and runs at real-time rate on the monotonic clock. Commands apply at the next tick. |
 | `minimalBoardResolver`, `boardPageAt(board, sinceShow, showNow)` | The board contract below. |
 | `playbackWindow`, `fileIdFor`, `DirectiveSeries`, `Calendar`, … | The pure rules, for tools that want one without an engine. |
+| `filesForLanes(snapshot, { lanes, demo? })` | The media file ids a host rendering `lanes` needs (§7.7; above). |
 
 ### Trace events
 

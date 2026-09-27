@@ -25,6 +25,7 @@ export { createEngine, SurfaceEngine, EMPTY_RETRY_MS, FIRST_FRAME_TIMEOUT_MS, JU
 export { previewClock, surfaceClock } from "./clock.js";
 export { Calendar, DayOne, VenueZone, isValidTimeZone } from "./venue-time.js";
 export { boardPageAt, minimalBoardResolver, } from "./board.js";
+export { filesForLanes } from "./lanes.js";
 export { DEFAULT_STILL_SECONDS, DirectiveSeries, WATCHDOG_GRACE_SECONDS, WATCHDOG_UNKNOWN_SECONDS, fileIdFor, isImageType, isPlayableType, isVideoType, playbackWindow, watchdogSeconds, } from "./rules.js";
 export async function loadCartridge(bytes, options = {}) {
     if (!options.open) {

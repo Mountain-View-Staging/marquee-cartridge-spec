@@ -46,12 +46,12 @@
 <div id="overlay">
   <table id="status"></table>
   <ol id="trace"></ol>
-  <div class="hint">O orientation · M mute · S overlay · F fullscreen · L choose the installation again</div>
+  <div class="hint">O orientation (automatic · landscape · portrait) · M mute · S overlay · F fullscreen · L choose the installation again</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
 <script type="module">
-import { CartridgeError, createEngine, isSqlite, loadCartridge, sqlJsOpener, surfaceClock } from "../engine/dist/index.js";
+import { CartridgeError, createEngine, filesForLanes, isSqlite, loadCartridge, sqlJsOpener, surfaceClock } from "../engine/dist/index.js";
 import { BrowserHost } from "./host.js";
 import { MediaStore } from "./media.js";
 
@@ -61,8 +61,9 @@ const SOURCE = { base: "../example", projectCode: "SHOW26", surfaceCode: "DEMO1"
 
 const $ = (id) => document.getElementById(id);
 const address = `${SOURCE.projectCode}/${SOURCE.surfaceCode}`;
-// §6 — stored per address, so changing the show or surface code forgets them.
-const KEYS = { location: `marquee.location:${address}`, override: `marquee.override:${address}`, muted: "marquee.muted" };
+// §6 — the location is stored per address, so changing the show or surface code
+// forgets it; the orientation and the mute are the device's own.
+const KEYS = { location: `marquee.location:${address}`, orientation: "marquee.orientation", muted: "marquee.muted" };
 const store = {
   get: (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
   set: (k, v) => { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch {} },
@@ -95,20 +96,19 @@ function provision(snapshot) {
   if (locations.length === 0) return Promise.resolve(null);
   return new Promise((resolve) => {
     say(`<p>This surface is installed in more than one place. Which one is this?</p>${
-      locations.map((l, i) => `<button data-i="${i}">${escape(l.label ?? l.locationId)}<br><span class="hint">${escape(l.locationId)} · ${l.orientation}</span></button>`).join("<br>")}`);
+      locations.map((l, i) => `<button data-i="${i}">${escape(l.label ?? l.locationId)}<br><span class="hint">${escape(l.locationId)}</span></button>`).join("<br>")}`);
     $("message").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => resolve(locations[Number(b.dataset.i)])));
   });
 }
 
 /**
- * §6 — the operator's override applies at once and survives a republish that
- * did not change the location's orientation; a publish that did change it wins.
+ * §6 — a device's orientation is its own: automatic (the shape of the window
+ * this player fills) unless the operator chose landscape or portrait here. A
+ * publish never changes it.
  */
-function orientationFor(location) {
-  const override = store.get(KEYS.override);
-  if (override && location && override.from !== location.orientation) store.set(KEYS.override, null);
-  return store.get(KEYS.override)?.orientation ?? location?.orientation ?? "landscape";
-}
+const SETTINGS = ["automatic", "landscape", "portrait"];
+let setting = SETTINGS.includes(store.get(KEYS.orientation)) ? store.get(KEYS.orientation) : "automatic";
+const rendered = () => (setting !== "automatic" ? setting : innerHeight > innerWidth ? "portrait" : "landscape");
 
 (async function boot() {
   let SQL;
@@ -135,11 +135,13 @@ function orientationFor(location) {
 
   const location = await provision(snapshot);
   if (location) store.set(KEYS.location, location.locationId);
-  let orientation = orientationFor(location);
+  let orientation = rendered();
 
+  // §7.7 — fetch by lane: the files the orientation this device renders can show.
+  const laneFiles = () => filesForLanes(snapshot, { lanes: [orientation] });
   say("fetching and verifying media…");
   const media = new MediaStore({ base: SOURCE.base, projectCode: SOURCE.projectCode });
-  const synced = await media.sync(snapshot, { onProgress: (n, of) => say(`fetching and verifying media… ${n} / ${of}`) });
+  let synced = await media.sync(snapshot, { files: laneFiles(), onProgress: (n, of) => say(`fetching and verifying media… ${n} / ${of}`) });
   $("message").hidden = true;
 
   const engine = createEngine({ snapshot, slot: orientation, orientation, clock: surfaceClock() });
@@ -165,13 +167,24 @@ function orientationFor(location) {
   });
   host.start();
 
+  /** A change of orientation — the operator's, or the window's shape — applies at once (§5.1). */
+  function applyOrientation() {
+    const next = rendered();
+    if (next === orientation) return;
+    orientation = next;
+    engine.setOrientation(orientation);   // re-resolved at the next tick
+    // §7.7 — the new lane's files; until one is held, its entry is skipped when its turn comes.
+    media.sync(snapshot, { files: laneFiles() }).then((s) => { synced = s; });
+  }
+  addEventListener("resize", () => { if (setting === "automatic") applyOrientation(); });
+
   // ── keys ────────────────────────────────────────────────────────────────────
   addEventListener("keydown", (e) => {
     const key = e.key.toLowerCase();
     if (key === "o") {
-      orientation = orientation === "portrait" ? "landscape" : "portrait";
-      store.set(KEYS.override, { orientation, from: location?.orientation ?? null });
-      engine.setOrientation(orientation);   // §5.1: re-resolved at the next tick
+      setting = SETTINGS[(SETTINGS.indexOf(setting) + 1) % SETTINGS.length];
+      store.set(KEYS.orientation, setting);
+      applyOrientation();
     } else if (key === "m") {
       store.set(KEYS.muted, !host.muted);
       host.setMuted(!host.muted);
@@ -181,7 +194,6 @@ function orientationFor(location) {
       document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
     } else if (key === "l") {
       store.set(KEYS.location, null);
-      store.set(KEYS.override, null);
       window.location.reload();
     }
   });
@@ -191,7 +203,6 @@ function orientationFor(location) {
   function status() {
     if ($("overlay").hidden) return;
     const v = engine.inspect();
-    const overridden = location && orientation !== location.orientation;
     const rotation = v.workingSet === "takeover"
       ? `<span class="alert">takeover</span> · ${v.rotation.length} ${v.suppressed.length ? `(${v.suppressed.length} standard suppressed)` : ""}`
       : v.workingSet === "standard" ? `standard · ${v.rotation.length}`
@@ -203,13 +214,13 @@ function orientationFor(location) {
     const rows = [
       ["surface", `${escape(snapshot.meta.surfaceId)} · ${escape(snapshot.meta.projectCode)} · revision ${snapshot.meta.publishedRevision}`],
       ["installation", location ? `${escape(location.locationId)} — ${escape(location.label ?? "")}` : `<span class="alert">none in the cartridge</span>`],
-      ["orientation", `${orientation}${overridden ? ` <span class="warn">operator override (was ${location.orientation})</span>` : ""}`],
+      ["orientation", `${orientation} <span class="hint">${setting === "automatic" ? "automatic — the window's shape" : "set on this device"}</span>`],
       ["show clock", `${at(v.showNow)}${lastProjected ? ` <span class="warn">synthetic: Day 1 at the venue's time</span>` : ""}`],
       ["schedule", v.scheduleEntry ? `entry ${v.scheduleEntry.id} from ${at(v.scheduleEntry.timestamp)} → ${v.playlist ? escape(v.playlist.name) : "<span class=warn>no playlist</span>"}` : "nothing yet"],
       ["rotation", rotation],
       ["on screen", lastRender ? escape(lastRender.message) : "—"],
       ["next change", v.interruptAt ? `takeover at ${at(v.interruptAt)}` : v.nextBoundary ? `schedule at ${at(v.nextBoundary)}` : "none scheduled"],
-      ["media", `${synced.held} of ${synced.wanted} held and verified${failures}`],
+      ["media", `${synced.held} of ${synced.wanted} held and verified for the ${orientation} lane${failures}`],
       ["sound", sound],
     ];
     if (excluded.length) rows.push(["excluded", `<span class="warn">${excluded.join("<br>")}</span>`]);

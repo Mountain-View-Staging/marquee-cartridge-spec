@@ -259,7 +259,6 @@ CREATE TABLE surface_location (
   id          INTEGER PRIMARY KEY,
   config_id   INTEGER NOT NULL REFERENCES surface_config(id),
   location_id TEXT    NOT NULL UNIQUE,   -- globally unique real-world id
-  orientation TEXT    NOT NULL,          -- 'portrait' | 'landscape' (the mount)
   label       TEXT,
   created     INTEGER NOT NULL,
   updated     INTEGER NOT NULL
@@ -288,6 +287,11 @@ CREATE TABLE surface_schedule_entry (
 
 A surface cartridge carries **exactly one** `surface_config` row — its own — and **at least
 one** `surface_location` row. Every location shares the config's cartridge.
+
+A location identifies an installation. It carries **no orientation**: a device's orientation is
+its own (§6). An earlier draft of this version carried the mount as
+`surface_location.orientation`; that column is retired, and a Loader ignores it, without a
+warning, in a cartridge that still has it.
 
 ### 4.5 `playlist`, `playlist_entry`, `directive`
 
@@ -468,7 +472,7 @@ depend on a tick arriving at a particular moment: a throttled or late tick simpl
 
 ```mermaid
 flowchart TD
-    A["tick: showNow (synthetic, venue) + jump check"] --> B["slot from surface_location.orientation"]
+    A["tick: showNow (synthetic, venue) + jump check"] --> B["slot: the orientation the device renders (§6)"]
     B --> C["surface_schedule_entry for my slot:<br/>latest timestamp ≤ showNow"]
     C --> D{"playlist_id NULL?"}
     D -->|yes| E["show nothing"]
@@ -484,9 +488,9 @@ flowchart TD
 
 ### 5.1 Pick the slot
 
-The **rendered slot** is `portrait` or `landscape`, taken from the `orientation` of this
-installation's `surface_location` (§6). `demo_station` is a parallel mode slot (§5.11), never
-an alternative to these.
+The **rendered slot** is `portrait` or `landscape`: the orientation the device renders (§6),
+never a value read from the cartridge. `demo_station` is a parallel mode slot (§5.11), never an
+alternative to these.
 
 Re-resolve the schedule **immediately** whenever the rendered slot changes. A Surface always has
 an orientation; if one is ever missing, skip the orientation gate (§5.3) and log the error.
@@ -770,21 +774,27 @@ had to choose. A conforming client makes the same choices, because the conforman
 
 A surface cartridge describes one or more **installations** of the same surface config: its
 `surface_location` rows. They all play the same cartridge; each is tracked by its `location_id`.
+A location says **where** a device is — for its status reports, and for the operator choosing
+among installations — and nothing about how it is mounted.
 
 On first run:
 
 1. Read the cartridge's `surface_location` rows.
-2. Pick one — present the list (`label`, `orientation`), or take the only one.
+2. Pick one — present the list by `label` (else `location_id`), or take the only one.
 3. **Persist the chosen `location_id`.**
-4. Adopt that location's `orientation` as the rendered slot.
 
 On later runs, keep the stored `location_id` **only while the cartridge still lists it**. If it is
 gone, re-pick. Clear the stored `location_id` whenever the configured `projectCode` or
 `surfaceCode` changes.
 
-Provide a manual orientation override for the operator. It takes effect immediately (§5.1). When
-a later publish changes the adopted location's orientation, adopt the new value — but do not
-overwrite a manual override on a republish that did not change it.
+**A device's orientation is its own.** A Surface renders the orientation set on the device:
+
+- **Automatic**, the default — the shape of the display it drives: portrait when the display is
+  taller than it is wide, else landscape.
+- **Landscape** or **Portrait**, chosen by the operator on the device.
+
+A change — the operator's, or the driven display turning — takes effect immediately (§5.1). A
+publish never changes it: a client does not read an orientation from the cartridge.
 
 ---
 
@@ -802,8 +812,8 @@ immutable — a re-encode mints a new name — so **presence by name is a suffic
 it" check**. Cache on name.
 
 Prune your cache against **what you play plus what you are still fetching**: the manifests of the
-cartridges you hold, each file replaced by the rendition you chose, plus any rendition still
-downloading.
+cartridges you hold — or, fetching by lane (§7.7), the files of the lanes you render — each file
+replaced by the rendition you chose, plus any rendition still downloading.
 
 ### 7.2 Integrity
 
@@ -873,6 +883,26 @@ Rules that make the order safe:
 - **Going up a tier replaces once the new bytes are verified.** Keep playing what you hold until
   then; if the fetch fails, nothing playable is lost.
 - A held rendition counts only if you can decode it and the current cartridge still offers it.
+
+### 7.7 Fetching by lane
+
+A cartridge lists every file its surface config can play, on every lane. A Surface **may** fetch
+only the files reachable from the lanes it renders:
+
+- **Its own orientation's lane** (§5.1): the file in that orientation's slot of each item (§5.7),
+  and the backings in that orientation (§5.10). The other orientation's slot files serve a lane
+  this Surface does not render.
+- **On a Surface that runs the DemoStation mode** (§5.11), also the opposite orientation's lane
+  while the `demo_station` lane has any entry with a background — the picture-in-picture plays
+  it — and the demo branding in the orientation the Surface renders.
+- **Everything else the cartridge delivers**, whatever the lane: brand files (§9), and any file no
+  item places in an orientation's slot.
+
+After an orientation change, fetch the new lane's files. Until a file is held, an entry that needs
+it is skipped when its turn comes, like any missing file (§5.13), and plays once the file arrives.
+
+Fetching everything the manifest lists is conforming too. A server that mirrors a Show for other
+Surfaces fetches everything.
 
 ---
 
@@ -971,8 +1001,8 @@ sequenceDiagram
     Note over S: refuse if (revision, generatedAt) is older (§8.4)
     S->>C: atomic replace, then open read-write, FKs ON
 
-    S->>S: provision location + orientation (§6)
-    S->>S: choose renditions (§7.6)
+    S->>S: provision the location (§6)
+    S->>S: choose files by lane (§7.7) and renditions (§7.6)
     loop each file not held
         S->>O: GET /<project>/<file_name>
         O-->>S: bytes
@@ -1064,7 +1094,8 @@ facts and lead to opposite investigations.
 ### 10.4 Ignore what you do not understand
 
 Unknown tables, columns, and values of `resource_type`, `slot`, `type`, and `kind` are skipped,
-not treated as errors.
+not treated as errors. A column retired from the baseline (§4.4) is ignored as well, and silently:
+it is not unknown.
 
 ### 10.5 A new table must be safe to ignore
 
@@ -1109,7 +1140,8 @@ node conformance/run.mjs --engine engine/dist/node.js
 
 - [ ] Decodes post-baseline columns as optional-with-default.
 - [ ] Reports a table that failed to decode differently from a table that is empty.
-- [ ] Ignores unknown tables, columns, and enumerated values.
+- [ ] Ignores unknown tables, columns, and enumerated values, and the retired
+      `surface_location.orientation` without a warning (§4.4).
 - [ ] Treats a row with a NUL byte (U+0000) in a text column as malformed: skipped with a warning,
       or refused in a table that holds exactly one row (§4).
 
@@ -1140,11 +1172,15 @@ node conformance/run.mjs --engine engine/dist/node.js
 
 - [ ] Persists `location_id`; re-picks when it leaves the cartridge; clears it when the address
       changes.
-- [ ] Offers a manual orientation override that applies immediately.
+- [ ] Renders the orientation set on the device — automatic by the shape of the display it
+      drives, or landscape or portrait chosen there — applies a change immediately, and never
+      takes one from the cartridge.
 
 **Media**
 
 - [ ] Caches by file name and prunes to what it holds and is fetching.
+- [ ] Fetching by lane (§7.7), fetches the new lane's files after an orientation change, and
+      skips an entry whose file it does not hold yet.
 - [ ] Rejects size and hash mismatches, with different messages.
 - [ ] Downscales oversize assets instead of skipping them, and says so.
 - [ ] Degrades the media count on a missing file without failing the bootstrap.
@@ -1165,7 +1201,7 @@ cartridge_meta   cartridge_kind 'surface', format_version '25.0.1',
                  project_code SHOW26, surface_id LOBBY3,
                  timezone America/Los_Angeles
 project_days     1 row: 2026-09-15, 00:00:00.000–23:59:59.999 PT
-surface_location 1 row: LOBBY3-A, orientation 'portrait'
+surface_location 1 row: LOBBY3-A
 surface_schedule_entry  1 row: slot 'portrait', Day 1 00:00 PT → playlist "Editor parity"
 playlist_entry   12 rows
 directive        3 rows, all on entry 5 (position 3):
@@ -1178,7 +1214,8 @@ directive        3 rows, all on entry 5 (position 3):
 
 1. **Show clock** — real time is before the event, so the Surface simulates Day 1 at the venue's
    current time of day: 16:30 PT on 2026-09-15 (§8.2).
-2. **Slot** — the only location is portrait.
+2. **Slot** — the Surface drives a portrait display and is set to Automatic, so it renders
+   portrait (§6). It takes the only location, `LOBBY3-A`, for its reports.
 3. **Schedule** — the portrait entry at 00:00 is the latest ≤ 16:30 → "Editor parity".
 4. **Viability** — only entry 5 has directives. Its governing standard directive (08:00) is ON; its
    governing takeover directive (12:30) is OFF. The standard set is {entry 5}. The other 11 entries
@@ -1211,7 +1248,8 @@ directive        3 rows, all on entry 5 (position 3):
 | **surface cartridge** | `<SURFACECODE>.db` — one surface config's schedule and content |
 | **show code / `projectCode`** | The Show's public identifier and media keyspace root |
 | **surface code** | Names the surface cartridge; `PROJECT` is reserved |
-| **location** | One physical installation of a surface config; carries the mount orientation |
+| **location** | One physical installation of a surface config, by `location_id`; carries no orientation (§6) |
+| **lane** | One slot's schedule and what a Surface renders from it; a Surface renders its orientation's lane (§5.1, §7.7) |
 | **slot** | `portrait` \| `landscape` \| `demo_station` — schedule entries are scoped per slot |
 | **directive** | A timestamped on/off state change for one playlist entry, of type standard or takeover |
 | **takeover** | A directive type that, while ON for any entry, replaces the standard rotation |
@@ -1240,6 +1278,7 @@ directive        3 rows, all on entry 5 (position 3):
 | Deliverable names | In `media_file` and the manifest | In the manifest and renditions only |
 | Renditions | Optional table | Always present |
 | Locations | May be empty | At least one |
+| Location orientation | `screen_location.orientation`, the mount, adopted by a Surface | Not carried: a device renders its own orientation (§6) |
 | Studio runtime modifiers | Carried, not honoured | Not carried |
 | Server bookkeeping | `last_checked_at`, `last_pulled_revision`, `revision`, `archived` carried | Not carried |
 | Viability | Entry must have an ON directive (implicit) | Stated: an ON directive is required |
