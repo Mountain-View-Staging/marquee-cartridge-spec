@@ -4,7 +4,6 @@
   "rules": "Reference §6.6, §6.9",
   "cartridge": "video",
   "engine": {
-    "slot": "portrait",
     "orientation": "portrait"
   },
   "clock": {

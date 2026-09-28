@@ -18,6 +18,11 @@
  *     may refuse sound until someone interacts with the page; then the video
  *     plays muted and the host says so, and sound returns on the first click
  *     or key press.
+ *
+ * On a DemoStation (§5.11) the engine marks the items of the picture-in-picture
+ * (`pip`); given a `pipStage`, the host draws them there. Moving between the
+ * full screen and the picture-in-picture is the engine's (a cut and the next
+ * item); the host only puts each item in its frame and clears the other.
  */
 
 import { boardPageAt } from "../engine/dist/index.js";
@@ -71,16 +76,18 @@ export class BrowserHost {
   /**
    * @param {object} o
    * @param {object} o.engine     a Surface engine (createEngine)
-   * @param {HTMLElement} o.stage where to draw
+   * @param {HTMLElement} o.stage where to draw: the full screen
+   * @param {HTMLElement} [o.pipStage] where a DemoStation's picture-in-picture is drawn (§5.11)
    * @param {object} o.media      a MediaStore: urlFor(mediaFileId) → a held URL, or null
    * @param {(event: object) => void} [o.onTrace]            every trace event, as it happens
-   * @param {(showNow: number, projected: boolean) => void} [o.onTick]
+   * @param {(showNow: number, projected: boolean, demo: object | null) => void} [o.onTick] demo: the tick's `demo`
    * @param {(message: string | null) => void} [o.onNotice] host notices for the operator (sound)
    * @param {boolean} [o.muted]   the device's local mute choice
    */
-  constructor({ engine, stage, media, onTrace, onTick, onNotice, muted = false }) {
+  constructor({ engine, stage, pipStage = null, media, onTrace, onTick, onNotice, muted = false }) {
     this.engine = engine;
     this.stage = stage;
+    this.pipStage = pipStage;
     this.media = media;
     this.onTrace = onTrace;
     this.onTick = onTick;
@@ -99,6 +106,7 @@ export class BrowserHost {
       styled = true;
     }
     stage.classList.add("mq-stage");
+    pipStage?.classList.add("mq-stage");
     const unlock = () => {
       this.soundUnlocked = true;
       if (this.soundBlocked) {
@@ -128,14 +136,21 @@ export class BrowserHost {
     cancelAnimationFrame(this.raf);
   }
 
+  /** Play another engine from here on — a tool changing the host's configuration. Clears the stage. */
+  setEngine(engine) {
+    this.abandon();
+    this.clear();
+    this.engine = engine;
+  }
+
   /** One pass of the display loop. The engine's output object is reused: read it now. */
   tick() {
     const out = this.engine.tick(Date.now(), performance.now());
-    const { showNow, projected, renderItem } = out;
+    const { showNow, projected, renderItem, demo } = out;
     this.report(out.trace);
     if (renderItem) this.present(renderItem);
     this.paintBoard(showNow);
-    this.onTick?.(showNow, projected);
+    this.onTick?.(showNow, projected, demo);
   }
 
   setMuted(muted) {
@@ -163,7 +178,7 @@ export class BrowserHost {
     }
     const layer = document.createElement("div");
     layer.className = "mq-layer mq-loading";
-    this.stage.append(layer);
+    (item.pip && this.pipStage ? this.pipStage : this.stage).append(layer);
     const job = { item, layer, video: null, backingVideo: null, board: null, done: false, cancelled: false };
     this.loading = job;
     this.build(job).then(
@@ -303,8 +318,10 @@ export class BrowserHost {
   reveal(job) {
     this.loading = null;
     job.layer.classList.remove("mq-loading");
-    for (const el of [...this.stage.children]) {
-      if (el !== job.layer && el.classList.contains("mq-layer")) this.disposeLayer(el);
+    // The layer on screen gives way, in either frame: the item may have moved
+    // between the full screen and the picture-in-picture.
+    for (const el of this.layers()) {
+      if (el !== job.layer) this.disposeLayer(el);
     }
     if (this.shown && this.shown !== job) this.shown.done = true;
     this.shown = job;
@@ -412,8 +429,14 @@ export class BrowserHost {
   /** An authored blank: the only time the stage is cleared. */
   clear() {
     if (this.shown) this.shown.done = true;
-    for (const el of [...this.stage.children]) if (el.classList.contains("mq-layer")) this.disposeLayer(el);
+    for (const el of this.layers()) this.disposeLayer(el);
     this.shown = null;
+  }
+
+  /** Every layer this host has drawn, in both frames. */
+  layers() {
+    const stages = this.pipStage ? [this.stage, this.pipStage] : [this.stage];
+    return stages.flatMap((stage) => [...stage.children].filter((el) => el.classList.contains("mq-layer")));
   }
 
   dispose(job) {

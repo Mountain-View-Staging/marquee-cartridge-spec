@@ -4,7 +4,6 @@
   "rules": "Reference §5.3, INV-01",
   "cartridge": "base",
   "engine": {
-    "slot": "portrait",
     "orientation": "portrait"
   },
   "clock": {

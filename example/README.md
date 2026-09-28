@@ -16,16 +16,17 @@ the same host as the [reference player](../player/).
 
 | Rule | Where to look |
 | --- | --- |
-| **Per-slot schedule resolution** (§5.2) | Switch Landscape / Portrait. Each lane runs its own playlist, and the switch cuts (`orientation.change`) and resolves the other lane. |
-| **Takeover suppression and the immediate cut** (§5.5, §5.9) | Day 1, 11:59:50. At 12:00:00 SAFETY NOTICE takes over both lanes: the item on screen is cut (`takeover.activate`) and the standard rotation is suppressed entirely. |
+| **One schedule, both orientations** (§5.1) | Switch Landscape / Portrait. The same playlist plays either way, each item with that orientation's file: the switch cuts (`orientation.change`) and the rotation carries on after its cursor. WAYFINDING joins in portrait and drops out in landscape. |
+| **Takeover suppression and the immediate cut** (§5.5, §5.9) | Day 1, 11:59:50. At 12:00:00 SAFETY NOTICE takes over, in either orientation: the item on screen is cut (`takeover.activate`) and the standard rotation is suppressed entirely. |
 | **Position cursors** (§5.6) | Day 1, 13:59:50. The takeover turns off at 14:00: the notice finishes its time, then the standard rotation resumes after the entry the takeover cut, not at the top. |
 | **Day-scoped directives** (§5.4) | RECEPTION turns on at 17:00 on Day 1 and has no OFF. On Day 2 at 17:00 it is not on: Day 1's directive governs Day 1 only. The noon takeover was authored for Day 1 and does not happen on Day 2. |
-| **An empty orientation slot excludes** (§5.7) | WAYFINDING has a portrait file only: the landscape playlist lists it and never plays it; the explorer says why. |
+| **An empty orientation slot excludes** (§5.7) | WAYFINDING has a portrait file only: in landscape the playlist lists it and never plays it; the explorer says why. |
 | **A slot's file plays as authored** (§5.7) | SPONSORS' portrait slot holds its landscape file: in portrait it plays letterboxed, over the project's backing. |
 | **Composition** (§5.10) | The project's backing shows wherever content does not cover the stage; the session board has its own backing. |
 | **A trimmed video** (§5.8) | The landscape SIZZLE REEL plays 1 s to 5 s of a 6 s clip and stops on the last frame before 5 s. |
 | **A session board** (§4.7) | MAIN HALL: the room's sessions, now and next, drawn over its backing for `duration × pages`. |
-| **An authored blank** (§5.2) | Day 2, 17:59:52. At 18:00 both lanes are scheduled with no playlist, and the screen clears. |
+| **An authored blank** (§5.2) | Day 2, 17:59:52. At 18:00 the schedule has no playlist, and the screen clears. |
+| **A DemoStation's picture-in-picture** (§5.11) | Turn on DemoStation, then Day 1, 15:29:50. At 15:30 a demo starts: the rotation moves into the picture-in-picture (`mode.change`) and carries on there with the other orientation's files, framed by the demo's background and overlay. At 15:45 it moves back to the full screen, where it left off. The layout is the explorer's own. |
 | **Synthetic time** (§8.2) | "Now, as a Surface sees it": outside the show's days, Day 1 at the venue's current time of day. |
 | **Integrity** (§7.2) | Every file is checked against its size and SHA-256 before it is used. |
 

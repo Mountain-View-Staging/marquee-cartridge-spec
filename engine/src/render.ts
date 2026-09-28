@@ -27,6 +27,19 @@ export interface Backing {
   readonly contentType: string;
 }
 
+/**
+ * §5.11 — a DemoStation's demo, while it is on. The demo fills the screen,
+ * framed by this branding, and the engine's items play in the picture-in-picture.
+ */
+export interface DemoState {
+  /** The `demo_station` schedule entry whose background turned the demo on. */
+  readonly scheduleEntryId: number;
+  /** Behind everything. Resolved like a backing, in the device's own orientation: null for an empty slot. */
+  readonly background: Backing | null;
+  /** In front of everything, resolved the same way; null when the entry has none. */
+  readonly overlay: Backing | null;
+}
+
 export interface MediaContent {
   readonly mediaItemId: number;
   /** The file in this orientation's slot, played as authored whatever its shape (§5.7). */
@@ -67,6 +80,12 @@ interface PlayableBase {
   readonly name: string;
   readonly hint: Hint;
   readonly backing: Backing | null;
+  /**
+   * True when a DemoStation's demo is on (§5.11): the item plays in the
+   * picture-in-picture, in the orientation opposite the device's. False on the
+   * full screen, and always on a host without the DemoStation mode.
+   */
+  readonly pip: boolean;
 }
 
 export interface MediaRenderItem extends PlayableBase {
@@ -86,6 +105,8 @@ export interface BlankRenderItem {
   readonly entryId: null;
   /** The schedule entry whose playlist is NULL. */
   readonly scheduleEntryId: number;
+  /** True when the picture-in-picture is the frame to clear (§5.11). */
+  readonly pip: boolean;
 }
 
 export type RenderItem = MediaRenderItem | BoardRenderItem | BlankRenderItem;

@@ -5,7 +5,7 @@ committed cartridge and the passage of time, and it says what is on screen, when
 changes, and why. It draws nothing. A **host** (a browser page, a kiosk shell, an
 authoring tool's preview) calls it from its display loop and draws what it returns.
 
-- **Conformance:** passes all 19 scenarios of the [conformance suite](../conformance/README.md).
+- **Conformance:** passes all 24 scenarios of the [conformance suite](../conformance/README.md).
 - **No runtime dependencies.** The compiled ES modules in `dist/` are committed, so a
   page or a program imports them directly; there is no build step for consumers.
 - **Two parts:** the **Loader** (cartridge bytes → an immutable, indexed Snapshot, or a
@@ -44,7 +44,7 @@ const SQL = await initSqlJs({ locateFile: (f) => `https://cdnjs.cloudflare.com/a
 const bytes = new Uint8Array(await (await fetch("SHOW26/LOBBY3.db")).arrayBuffer());
 const snapshot = await loadCartridge(bytes, { open: sqlJsOpener(SQL) });
 
-const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+const engine = createEngine({ snapshot, orientation: "portrait", clock: surfaceClock() });
 
 function frame() {
   const { renderItem, trace } = engine.tick(Date.now(), performance.now());
@@ -93,7 +93,8 @@ earlier one that has not reported its first frame. With no first frame within 10
 monotonic time, the item counts as a load failure. A takeover that falls due while an item
 is still loading, or before a late first frame's natural end, still cuts at its time.
 
-Render items come in three kinds:
+Render items come in three kinds, and each says with `pip` whether it plays in a DemoStation's
+picture-in-picture (below; always `false` on a host without the mode):
 
 | `kind` | Put on screen |
 |---|---|
@@ -109,20 +110,49 @@ its out-point; play video with sound, muted only by a local device choice (§5.8
 
 Tell the engine about the world with `setOrientation(o)` (the device's orientation changed:
 the operator set it, or the driven display turned — §6) and `commit(snapshot)` (a newly
-delivered cartridge). Both take effect at the next tick, which cuts and re-evaluates.
+delivered cartridge). Both take effect at the next tick, which cuts and re-evaluates. A
+rotation keeps the schedule: the playlist is the same, so the engine keeps both rotation
+cursors and continues after them with the new orientation's files (§5.1, §5.6).
+
+### A DemoStation
+
+A host that runs the DemoStation mode (§5.11) says so: `createEngine({ …, demoStation: true })`.
+The engine then resolves the `demo_station` slot beside the one playlist schedule. While a demo
+is on:
+
+- the tick output's `demo` carries its branding — `background` and `overlay`, each resolved like
+  a backing in the device's own orientation, `null` for an empty slot. Draw the demo with it.
+  `demo` is `null` whenever no demo is on, and always on a host without the mode;
+- every render item is for the **picture-in-picture** (`pip: true`): the same playlist, with
+  the files of the orientation opposite the device's. It is the same engine, so everything —
+  takeovers, the watchdog, the reports — works there as it does full screen.
+
+When a demo starts, the rotation moves into the picture-in-picture, and when it ends, back to
+the full screen. The trace records a `cut` with `mode.change`, and the rotation continues after
+its cursors: the picture-in-picture picks up where the full-screen player was, and the other way
+round. A boundary that keeps the demo on changes only `demo`. A host without the mode leaves
+`demoStation` out, and the slot is ignored.
+
+```js
+const engine = createEngine({ snapshot, orientation: "portrait", demoStation: true, clock: surfaceClock() });
+const { renderItem, demo } = engine.tick(Date.now(), performance.now());
+layout(demo);                                              // the demo and its branding, or the full screen
+if (renderItem) show(renderItem, renderItem.pip ? pipFrame : fullFrame);
+```
 
 ### Fetching by lane
 
-`filesForLanes(snapshot, { lanes, demo })` returns the media file ids a host rendering
-`lanes` needs (§7.7): **every file the manifest lists, except those referenced only as an
-item's slot file on a lane the host does not render.** An item's portrait file serves the
-portrait lane and its landscape file the landscape lane, however the item is used (a playlist
-entry, a backing, demo branding), since each resolves by orientation with no fallback. Brand
-files are wanted on every lane: every file of a brand member, or of an item the project or a
-session set names as its style book. A file no item references is wanted. With `demo: true`
-(a host that runs the DemoStation mode), while the `demo_station` lane has any entry with a
-background, the opposite of each lane is rendered too — the picture-in-picture plays it. The
-ids iterate ascending; a project snapshot reads the same way.
+A lane is one orientation over the one schedule. `filesForLanes(snapshot, { lanes, demo })`
+returns the media file ids a host rendering `lanes` needs (§7.7): **every file the manifest
+lists, except those referenced only as an item's slot file for an orientation the host does not
+render.** An item's portrait file serves the portrait lane and its landscape file the landscape
+lane, however the item is used (a playlist entry, a backing, demo branding), since each resolves
+by orientation with no fallback. Brand files are wanted on every lane: every file of a brand
+member, or of an item the project or a session set names as its style book. A file no item
+references is wanted. With `demo: true` (a host that runs the DemoStation mode), while the
+`demo_station` slot has any entry with a background, the opposite of each lane is rendered too
+— the picture-in-picture plays the same playlist in it. The ids iterate ascending; a project
+snapshot reads the same way.
 
 ```js
 const wanted = filesForLanes(snapshot, { lanes: ["portrait"], demo: false });
@@ -157,7 +187,10 @@ Unknown tables and columns, and rows with an unknown enumerated value, load with
 **warning** in `snapshot.warnings` and are ignored (§10.4). So do dangling references,
 malformed JSON columns, an unknown timezone, and a cartridge with no days. A column the
 format has retired — `surface_location.orientation`, which an earlier draft wrote — is
-ignored without a warning, and never read (`TableSpec.retired`).
+ignored without a warning, and never read (`TableSpec.retired`). A value it has retired is
+another matter: a schedule row on the slot `portrait` or `landscape` — an earlier draft
+scheduled playlists per orientation — is malformed (§4.4), skipped with a `value.malformed`
+warning naming the column, and never read as a `playlist` entry (`RETIRED` in `schema.ts`).
 
 A row holding a NUL byte (U+0000) in a text column is malformed (§4): skipped with a
 `value.malformed` warning that names the column, or refused with the table's own code in
@@ -169,17 +202,19 @@ node:sqlite before Node 24, which end the string at it.
 
 | Export | |
 |---|---|
-| `createEngine({ snapshot, slot, orientation, clock, boardResolver? })` | One engine per lane. A Surface passes its orientation as both `slot` and `orientation`. |
-| `engine.tick(wallMs, monoMs) → { showNow, projected, renderItem, trace }` | Evaluates the next content when the marker is forced (0) or `showNow ≥ marker`. A forced marker is a state of its own, not an instant compared with the show time, so a show time before 1970 (negative milliseconds, reachable from a preview clock) evaluates at the next tick like any other (§5.9). |
+| `createEngine({ snapshot, orientation, clock, demoStation?, boardResolver? })` | One engine per device. It resolves the one schedule; `orientation` is the device's (§6), and `demoStation: true` runs the DemoStation mode (above). |
+| `engine.tick(wallMs, monoMs) → { showNow, projected, renderItem, trace, demo }` | Evaluates the next content when the marker is forced (0) or `showNow ≥ marker`. A forced marker is a state of its own, not an instant compared with the show time, so a show time before 1970 (negative milliseconds, reachable from a preview clock) evaluates at the next tick like any other (§5.9). |
 | `engine.onFirstFrame(token)`, `onMediaCompleted(token)`, `onLoadFailed(token, reason)` | Each returns the trace events it caused. |
-| `engine.setOrientation(o)`, `engine.commit(snapshot)` | Applied at the next tick. The lane follows the orientation when it was the orientation's own. |
-| `engine.inspect()` | What the engine sees at its last tick — the day, the schedule entry, every entry's gate and directive states, the working set, cursors, marker. For status views; allocates. |
+| `engine.setOrientation(o)`, `engine.commit(snapshot)` | Applied at the next tick. A rotation keeps the schedule and the cursors. |
+| `engine.orientation`, `engine.renderedOrientation`, `engine.demo` | The device's orientation; the one whose files play — the device's, or the opposite in the picture-in-picture; the demo while it is on. |
+| `engine.inspect()` | What the engine sees at its last tick — the day, the orientation rendered, the demo, the schedule entry, every entry's gate and directive states, the working set, cursors, marker. For status views; allocates. |
 | `engine.current`, `engine.currentSince`, `engine.pending`, `engine.showNow` | |
 | `surfaceClock()` | The Surface show clock (§8.2). |
 | `previewClock()` | An authoring tool's transport: `set(showMs)`, `play()`, `pause()`. Opens on the Surface value and runs at real-time rate on the monotonic clock. Commands apply at the next tick. |
 | `minimalBoardResolver`, `boardPageAt(board, sinceShow, showNow)` | The board contract below. |
 | `playbackWindow`, `fileIdFor`, `DirectiveSeries`, `Calendar`, … | The pure rules, for tools that want one without an engine. |
 | `filesForLanes(snapshot, { lanes, demo? })` | The media file ids a host rendering `lanes` needs (§7.7; above). |
+| `ORIENTATION_WHEN_MISSING` | `"landscape"`: with no orientation from the host, each entry plays this orientation's file, else the other one (§5.14). |
 
 ### Trace events
 
@@ -205,17 +240,16 @@ engine had to do something; these are the choices. The specification now lists t
 | Situation | What this engine does |
 |---|---|
 | Two directives, schedule entries or playlist entries share a timestamp or position | The higher `id` is later. Cursors compare (position, id). |
-| No schedule entry for the lane has started yet | Holds (`set.empty`), like an empty working set, and plays from the first changeover. |
-| Which `cut` an interruption records | One event per cause: a jump records `jump` only; a playlist change it causes resets the cursors silently. A cut is recorded only when an entry is on screen, naming it. |
+| No `playlist` entry has started yet | Holds (`set.empty`), like an empty working set, and plays from the first changeover. |
+| Which `cut` an interruption records | One event per cause: a jump records `jump` only, and a new cartridge `cartridge.commit` only; what the schedule changes as a result (the playlist, the mode) is applied silently. A boundary that starts or ends a demo records `mode.change`, and a playlist change at the same boundary resets the cursors silently. A rotation and a boundary in the same tick record one cut each. A cut is recorded only when an entry is on screen, naming it. |
 | An authored blank | Re-evaluated every 2 s like a hold, without repeating the `blank` event. |
-| Orientation change, new cartridge | Applied at the next tick; the `cut` carries that tick's show time. |
-| Which failures count toward `set.all_failed` | Load failures (before or after the first frame), missing first frames, and entries that are not image or video media. The streak ends when an item finishes its time: naturally, at its watchdog, when it completes, or when a takeover cuts it. |
+| Rotation, new cartridge | Applied at the next tick; the `cut` carries that tick's show time. |
+| Which failures count toward `set.all_failed` | Load failures (before or after the first frame), missing first frames, and entries that are not image or video media. The streak ends when an item finishes its time: naturally, at its watchdog, when it completes, or when a takeover cuts it. It also ends when the playlist or the orientation rendered changes, and at a new cartridge. |
 | A takeover due while the next item is still loading, or before a late first frame's natural end | It still cuts at its time (§5.9: only a takeover preempts a standard item, and it does so at its activation). The loading item is abandoned; a late item's marker is armed at the takeover instead. |
 | The preview clock before its first command | Reads what a Surface would show now, and runs. |
 | Day 1 on a daylight-saving date | §8.2's "next valid instant", read literally: a skipped local time becomes the moment the clocks change, and a repeated one the earlier instant. So on the days around a show whose Day 1 springs forward, the show clock stands at that moment for the hour the clocks skip, and whatever is on screen waits. The specification keeps this reading and says so in §8.2; shifting by the length of the gap was rejected because it adds one backward jump a day. |
-| No orientation from the host | The gate is skipped (§5.1) and each entry plays the lane's slot, else the other one. |
+| No orientation from the host | The gate is skipped (§5.1) and each entry plays its landscape file, else its portrait one; backings and demo branding resolve in landscape (`ORIENTATION_WHEN_MISSING`). A DemoStation's picture-in-picture skips the gate too. |
 | Day 1 clamp | A projection that lands outside Day 1 becomes Day 1's start, as §8.2 now states. The alternative reading, its end for a late time, differed only for a Day 1 that is not a whole day, which Studio does not produce. |
-| Boundaries on the `demo_station` lane | Not the engine's: it resolves one playlist lane and has no mode. A host with a DemoStation mode watches that lane itself (§5.11). |
 
 ## Build and test
 
@@ -226,7 +260,7 @@ cd engine
 npm ci
 npm run build          # tsc: src/ → dist/ (commit dist/ with the source)
 npm test               # unit tests: the Loader's refusals and warnings, engine behaviour
-npm run conformance    # the 19 scenarios
+npm run conformance    # the 24 scenarios
 npm run bench          # performance against the targets below
 ```
 

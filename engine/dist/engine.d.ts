@@ -11,7 +11,8 @@
  *   tick(wall, mono):
  *     showNow = clock(wall, mono)                 one instant for the whole tick
  *     a jump?  → marker = 0                       §8.3
- *     showNow ≥ next schedule boundary → resolve  §5.2; a new playlist cuts
+ *     showNow ≥ next schedule boundary → resolve  §5.2; a new playlist cuts, and
+ *                                                 on a DemoStation, a demo starting or ending (§5.11)
  *     waiting for a first frame?  10 s of monotonic time → skip; else return
  *     marker forced, or showNow ≥ marker → renderNext   §5.9: the only place content changes
  *
@@ -19,13 +20,19 @@
  *     viability pass → working set → next entry after the cursor → RenderItem
  *     with a hint; an empty set holds (the last frame stays) and retries in 2 s
  *
+ * There is one schedule, whatever the orientation (§5.1). The orientation
+ * rendered — the device's, or the opposite one in a DemoStation's
+ * picture-in-picture — decides only which entries pass the orientation gate and
+ * which file of each plays. When it changes, the playlist is the same, so the
+ * rotation keeps its cursors and continues in the new orientation.
+ *
  * Nothing on the tick path allocates when nothing changes, and nothing
  * touches a database: the Snapshot is indexed once, when committed.
  */
 import { type BoardResolver } from "./board.js";
 import type { ShowClock } from "./clock.js";
 import type { Orientation, ProjectDay, ResourceType, Snapshot, SurfaceScheduleEntry } from "./model.js";
-import type { RenderItem } from "./render.js";
+import type { DemoState, RenderItem } from "./render.js";
 import { type DirectiveState } from "./rules.js";
 import type { TraceEvent } from "./trace.js";
 import { Calendar } from "./venue-time.js";
@@ -35,13 +42,29 @@ export declare const FIRST_FRAME_TIMEOUT_MS = 10000;
 export declare const EMPTY_RETRY_MS = 2000;
 /** §8.3 — forward show-clock movement beyond real elapsed time plus this is a jump. */
 export declare const JUMP_TOLERANCE_MS = 250;
+/**
+ * §5.14 — with no orientation from the host, the gate is skipped, and each entry
+ * plays this orientation's file, else the other one; backings and demo branding
+ * resolve in it. Landscape, as §6's Automatic reads a display that is not taller
+ * than it is wide.
+ */
+export declare const ORIENTATION_WHEN_MISSING: Orientation;
 export interface EngineOptions {
     readonly snapshot: Snapshot;
-    /** The playlist lane this engine resolves. A Surface uses its orientation's lane. */
-    readonly slot: Orientation;
-    /** The orientation files are chosen for (§5.7). The host always supplies it. */
+    /**
+     * The orientation the device renders (§6). The host always supplies it. The
+     * schedule is the same whatever it is (§5.1): it decides which entries pass
+     * the orientation gate and which file of each plays (§5.3, §5.7).
+     */
     readonly orientation: Orientation | null | undefined;
     readonly clock: ShowClock;
+    /**
+     * True on a host that runs the DemoStation mode (§5.11). The engine then
+     * resolves the `demo_station` slot too, and while a demo is on it plays the
+     * same playlist in the picture-in-picture, in the opposite orientation
+     * (`TickOutput.demo`, `RenderItem.pip`). Otherwise the slot is ignored.
+     */
+    readonly demoStation?: boolean;
     /** Defaults to the minimal one-page resolver. */
     readonly boardResolver?: BoardResolver;
     readonly firstFrameTimeoutMs?: number;
@@ -58,6 +81,12 @@ export interface TickOutput {
     /** A new item to put on screen, or null. An empty working set produces none: the last frame stays. */
     readonly renderItem: RenderItem | null;
     readonly trace: readonly TraceEvent[];
+    /**
+     * While a DemoStation's demo is on (§5.11): its branding. The demo fills the
+     * screen, and every item plays in the picture-in-picture (`pip`). Null
+     * otherwise, and always on a host without the DemoStation mode.
+     */
+    readonly demo: DemoState | null;
 }
 export type WorkingSetKind = "none" | "standard" | "takeover" | "empty" | "blank";
 export type MarkerReason = "forced" | "natural" | "watchdog" | "interrupt" | "retry" | "completed" | "skipped";
@@ -78,8 +107,13 @@ export interface EntryInspection {
 export interface Inspection {
     readonly showNow: number;
     readonly day: ProjectDay | null;
-    readonly slot: Orientation;
+    /** The device's orientation, as the host set it (§6). */
     readonly orientation: Orientation | null;
+    /** The orientation whose files play (§5.1): the device's, or the opposite in a DemoStation's picture-in-picture. */
+    readonly renderedOrientation: Orientation | null;
+    /** A DemoStation's demo, while it is on (§5.11). */
+    readonly demo: DemoState | null;
+    /** The active `playlist` schedule entry (§5.2). */
     readonly scheduleEntry: SurfaceScheduleEntry | null;
     readonly playlist: {
         readonly id: number;
@@ -103,21 +137,25 @@ export interface Inspection {
     readonly currentSince: number | null;
     readonly pending: RenderItem | null;
 }
-/** Creates an engine for one committed Snapshot, one lane and one orientation. */
+/** Creates an engine for one committed Snapshot and one device. */
 export declare function createEngine(options: EngineOptions): SurfaceEngine;
 export declare class SurfaceEngine {
     private snap;
     private calendar;
     private plans;
+    /** The `playlist` slot: the one schedule (§5.2). */
     private lane;
+    /** The `demo_station` slot on a DemoStation host (§5.11); empty otherwise. */
+    private demoLane;
+    private readonly demoStation;
     private readonly clock;
     private readonly boardResolver;
     private readonly firstFrameTimeoutMs;
     private readonly emptyRetryMs;
-    private laneSlot;
-    /** Whether the lane follows the orientation (it does whenever the two start out the same). */
-    private readonly laneFollows;
+    /** The device's orientation (§6). */
     private orientationValue;
+    /** The orientation whose files play (§5.1): the device's, or the opposite during a demo (§5.11). */
+    private rendered;
     private readonly tokenPrefix;
     private tokenCount;
     private show;
@@ -130,6 +168,9 @@ export declare class SurfaceEngine {
     private nextBoundary;
     private mustResolve;
     private resolveCause;
+    private demoEntry;
+    private demoOn;
+    private demoValue;
     private readonly standardCursor;
     private readonly takeoverCursor;
     private lastSet;
@@ -162,8 +203,12 @@ export declare class SurfaceEngine {
     private readonly out;
     constructor(options: EngineOptions);
     get snapshot(): Snapshot;
-    get slot(): Orientation;
+    /** The device's orientation (§6). */
     get orientation(): Orientation | null;
+    /** The orientation whose files play (§5.1): the device's, or the opposite in a DemoStation's picture-in-picture. */
+    get renderedOrientation(): Orientation | null;
+    /** A DemoStation's demo, while it is on (§5.11). */
+    get demo(): DemoState | null;
     /** The show clock at the last tick. */
     get showNow(): number;
     /** What is on screen: the last item that reported its first frame, or the blank. */
@@ -181,9 +226,10 @@ export declare class SurfaceEngine {
     /** The host could not show the item: skip it and move on. */
     onLoadFailed(token: string, reason?: string): readonly TraceEvent[];
     /**
-     * The host's orientation changed (§5.1, §6): cut and re-resolve at the next
-     * tick. The lane follows the orientation when the engine was created with
-     * the two the same (or with no orientation); a missing orientation keeps the lane.
+     * The device's orientation changed (§5.1, §6): the operator set it, or the
+     * driven display turned. At the next tick the engine cuts, keeps both
+     * cursors — the playlist is the same — and continues with the new
+     * orientation's files. During a demo the picture-in-picture turns with it.
      */
     setOrientation(orientation: Orientation | null | undefined): readonly TraceEvent[];
     /** A new cartridge is committed: reset all state and cut at the next tick (§5.9). */
@@ -192,14 +238,27 @@ export declare class SurfaceEngine {
     private emit;
     private install;
     private afterCommit;
+    /**
+     * §5.1 — a rotation. The schedule does not depend on the orientation, so the
+     * playlist is the same and both cursors are kept; the entry on screen is cut,
+     * and the next pass runs in the new orientation. A schedule boundary reached
+     * in the same tick is a cause of its own, recorded by the resolution.
+     */
     private afterOrientationChange;
     private jump;
     /**
-     * §5.2 — within the lane, the latest entry whose timestamp ≤ showNow. A
-     * boundary that keeps the playlist does nothing; one that changes it resets
-     * both cursors and forces the next content.
+     * §5.2 — the latest `playlist` entry whose timestamp ≤ showNow, and on a
+     * DemoStation host the latest `demo_station` entry (§5.11). A boundary that
+     * keeps the playlist and the mode does nothing but update the demo branding.
+     * One that changes the playlist resets both cursors; one that starts or ends a
+     * demo moves the rotation between the full screen and the picture-in-picture
+     * and keeps them. Either cuts and forces the next content.
      */
     private resolveSchedule;
+    /** §5.1, §5.11 — the orientation whose files play: the device's, or its opposite while a demo is on. */
+    private updateRendered;
+    /** §5.11 — the active `demo_station` entry, and its branding in the device's own orientation while it turns the demo on. */
+    private updateDemo;
     /** The marker is reached: the current content ends, and the next is chosen. */
     private evaluate;
     private renderNext;
@@ -209,9 +268,9 @@ export declare class SurfaceEngine {
      * rule, the earliest future takeover activation (§5.9 interruptAt).
      */
     private pass;
-    /** §5.3 step 2 — an empty slot for this orientation excludes a media entry. */
+    /** §5.3 step 2 — an empty slot for the orientation rendered excludes a media entry. */
     private passesOrientation;
-    /** The orientation whose slot supplies the file (§5.7); without an orientation, the lane's own first. */
+    /** The orientation whose slot supplies the file (§5.7); without an orientation, landscape's first (§5.14). */
     private playOrientation;
     /** §5.6 — the first entry after the cursor, wrapping; the first entry with no cursor. */
     private choose;
@@ -225,8 +284,10 @@ export declare class SurfaceEngine {
      * standard set rules, the next takeover activation replaces the duration.
      */
     private hint;
-    /** §5.10 — a backing media item, resolved by orientation with no fallback. */
+    /** §5.10 — a backing media item, resolved in the orientation rendered with no fallback. */
     private backing;
+    /** A media item drawn as a layer — a backing, demo branding — resolved in `orientation` with no fallback (§5.7). */
+    private layer;
     /** §5.5 — nothing new is produced: the last frame stays, and the marker is armed 2 s out. */
     private rearm;
     /** §5.9 — marker 0: the next tick evaluates, whatever the show time's value or sign. */

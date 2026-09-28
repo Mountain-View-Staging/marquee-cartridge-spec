@@ -10,7 +10,8 @@
  *
  * The runner is the simulated HOST described in README.md: it drives the
  * engine's clock, answers each render item the way `scenario.host` says a real
- * host would, and compares the engine's trace with `expected.json`.
+ * host would, and compares the engine's trace with `expected.json` — and, where
+ * `expected.json` lists them, the Loader's warnings.
  */
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -20,13 +21,18 @@ import { DatabaseSync } from "node:sqlite";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CODES = {
   render: ["rotation.start", "rotation.next", "rotation.wrap"],
-  cut: ["takeover.activate", "schedule.change", "orientation.change", "cartridge.commit"],
+  cut: ["takeover.activate", "schedule.change", "orientation.change", "mode.change", "cartridge.commit"],
   jump: ["jump.backward", "jump.forward"],
   hold: ["set.empty", "set.all_failed"],
   blank: ["schedule.blank"],
   skip: ["media.load_failed", "media.no_first_frame", "media.watchdog", "media.not_playable"],
   warning: ["orientation.missing"],
 };
+const WARNING_CODES = [
+  "table.unknown", "column.unknown", "value.unknown", "value.malformed", "reference.dangling",
+  "position.duplicate", "timezone.invalid", "days.empty", "locations.empty",
+];
+const ORIENTATIONS = ["portrait", "landscape"];
 const MAX_RETICKS = 64;
 
 const args = process.argv.slice(2);
@@ -44,6 +50,17 @@ function validate(dir) {
   const s = read(join(HERE, "scenarios", dir, "scenario.json"));
   const e = read(join(HERE, "scenarios", dir, "expected.json"));
   if (s.id !== dir || e.id !== dir) problems.push("id does not match its folder");
+  if (!ORIENTATIONS.includes(s.engine?.orientation)) problems.push(`engine.orientation ${s.engine?.orientation} is neither portrait nor landscape`);
+  if ("slot" in (s.engine ?? {})) problems.push("engine.slot is retired: an engine resolves the one schedule, whatever its orientation");
+  if (s.engine?.demoStation !== undefined && typeof s.engine.demoStation !== "boolean") problems.push("engine.demoStation is not a boolean");
+  for (const ev of s.events ?? []) {
+    if (ev.type === "setOrientation" && !ORIENTATIONS.includes(ev.orientation)) problems.push(`setOrientation at second ${ev.atSecond}: ${ev.orientation}`);
+    else if (ev.type !== "setOrientation" && ev.type !== "wallJump") problems.push(`unknown event type ${ev.type}`);
+  }
+  for (const [i, w] of (e.warnings ?? []).entries()) {
+    if (!WARNING_CODES.includes(w.code)) problems.push(`warning ${i}: unknown code ${w.code}`);
+    if (typeof w.table !== "string") problems.push(`warning ${i}: no table`);
+  }
   const cart = join(HERE, "cartridges", `${s.cartridge}.db`);
   if (!existsSync(cart)) return [...problems, `missing cartridge ${s.cartridge}.db (run build.py)`];
   const db = new DatabaseSync(cart, { readOnly: true });
@@ -68,6 +85,13 @@ function validate(dir) {
 
 // ── running: the simulated host ─────────────────────────────────────────────────
 
+function normalizeWarning(w) {
+  const out = { code: w.code, table: w.table };
+  if (w.column != null) out.column = w.column;
+  if (w.rowId != null) out.row = w.rowId;
+  return out;
+}
+
 function normalize(ev) {
   const out = { t: ev.showTime, kind: ev.kind, code: ev.code };
   if (ev.entryId != null) out.entry = ev.entryId;
@@ -79,13 +103,14 @@ function normalize(ev) {
 
 async function run(engineMod, dir) {
   const s = read(join(HERE, "scenarios", dir, "scenario.json"));
-  const expected = read(join(HERE, "scenarios", dir, "expected.json")).trace.map((ev) => ({ ...ev, t: ms(ev.t) }));
+  const expectedFile = read(join(HERE, "scenarios", dir, "expected.json"));
+  const expected = expectedFile.trace.map((ev) => ({ ...ev, t: ms(ev.t) }));
   const bytes = readFileSync(join(HERE, "cartridges", `${s.cartridge}.db`));
   const snapshot = await engineMod.loadCartridge(new Uint8Array(bytes));
   const clock = s.clock.source === "preview" ? engineMod.previewClock() : engineMod.surfaceClock();
   const pages = s.host.boardPages ?? {};
   const engine = engineMod.createEngine({
-    snapshot, slot: s.engine.slot, orientation: s.engine.orientation, clock,
+    snapshot, orientation: s.engine.orientation, demoStation: s.engine.demoStation === true, clock,
     boardResolver: (set) => ({ model: null, pageCount: pages[String(set.id)] ?? 1, anchorPage: 0 }),
   });
 
@@ -127,6 +152,15 @@ async function run(engineMod, dir) {
   for (let i = 0; i < n; i++) {
     const a = JSON.stringify(trace[i] ?? null), b = JSON.stringify(expected[i] ?? null);
     if (a !== b) diffs.push(`#${i}\n    expected ${b}\n    actual   ${a}`);
+  }
+  // The Loader's warnings, in order, where the scenario lists them.
+  if (expectedFile.warnings) {
+    const loaded = (snapshot.warnings ?? []).map(normalizeWarning);
+    const n = Math.max(loaded.length, expectedFile.warnings.length);
+    for (let i = 0; i < n; i++) {
+      const a = JSON.stringify(loaded[i] ?? null), b = JSON.stringify(expectedFile.warnings[i] ?? null);
+      if (a !== b) diffs.push(`warning #${i}\n    expected ${b}\n    actual   ${a}`);
+    }
   }
   return diffs;
 }

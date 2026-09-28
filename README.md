@@ -267,7 +267,7 @@ CREATE TABLE surface_location (
 CREATE TABLE surface_schedule_entry (
   id                 INTEGER PRIMARY KEY,
   config_id          INTEGER NOT NULL REFERENCES surface_config(id),
-  slot               TEXT    NOT NULL,   -- 'portrait' | 'landscape' | 'demo_station'
+  slot               TEXT    NOT NULL,   -- 'playlist' | 'demo_station'
   timestamp          INTEGER NOT NULL,   -- most-recent <= now wins, per slot
   playlist_id        INTEGER REFERENCES playlist(id),     -- NULL on demo_station entries
   background_item_id INTEGER REFERENCES media_item(id),   -- demo branding (behind)
@@ -275,7 +275,7 @@ CREATE TABLE surface_schedule_entry (
   created            INTEGER NOT NULL,
   updated            INTEGER NOT NULL,
   CHECK (
-    ( slot IN ('portrait','landscape')
+    ( slot = 'playlist'
         AND background_item_id IS NULL AND overlay_item_id IS NULL )
     OR
     ( slot = 'demo_station'
@@ -292,6 +292,18 @@ A location identifies an installation. It carries **no orientation**: a device's
 its own (§6). An earlier draft of this version carried the mount as
 `surface_location.orientation`; that column is retired, and a Loader ignores it, without a
 warning, in a cartridge that still has it.
+
+A surface config has **one schedule**: its `playlist` entries, which every device of the config
+resolves, whatever its orientation (§5.1). A playlist carries both orientations already — each
+item holds a portrait file, a landscape file, or both (§4.6) — so a device plays the scheduled
+playlist with the files of the orientation it renders. Installations that need different
+content in each orientation are different surface configs. The `demo_station` entries are the
+DemoStation mode's (§5.11).
+
+An earlier draft of this version scheduled playlists per orientation, in the slots `portrait` and
+`landscape`. Those values are retired. A row that carries one is malformed, like a row holding a
+NUL byte (§4): skipped, with a warning naming the column. It is never read as a `playlist` entry,
+so a draft cartridge with no `playlist` row schedules nothing.
 
 ### 4.5 `playlist`, `playlist_entry`, `directive`
 
@@ -472,12 +484,11 @@ depend on a tick arriving at a particular moment: a throttled or late tick simpl
 
 ```mermaid
 flowchart TD
-    A["tick: showNow (synthetic, venue) + jump check"] --> B["slot: the orientation the device renders (§6)"]
-    B --> C["surface_schedule_entry for my slot:<br/>latest timestamp ≤ showNow"]
+    A["tick: showNow (synthetic, venue) + jump check"] --> C["the one schedule, slot 'playlist':<br/>latest timestamp ≤ showNow"]
     C --> D{"playlist_id NULL?"}
     D -->|yes| E["show nothing"]
     D -->|no| F["playlist_entry in position order"]
-    F --> G["viability gates:<br/>day → orientation slot → directive ON"]
+    F --> G["viability gates:<br/>day → orientation rendered (§5.1) → directive ON"]
     G --> H{"any takeover ON?"}
     H -->|yes| I["working set = takeover set"]
     H -->|no| J["working set = standard set"]
@@ -486,30 +497,41 @@ flowchart TD
     K --> L["render marker: now + duration, or interrupt time"]
 ```
 
-### 5.1 Pick the slot
+### 5.1 One schedule, and the orientation rendered
 
-The **rendered slot** is `portrait` or `landscape`: the orientation the device renders (§6),
-never a value read from the cartridge. `demo_station` is a parallel mode slot (§5.11), never an
-alternative to these.
+A surface config has **one schedule**, its `playlist` entries (§4.4), and every device of the
+config resolves it the same way (§5.2). What differs between devices is the **orientation
+rendered**: the device's own (§6) — or, in a DemoStation's picture-in-picture, the opposite one
+(§5.11) — never a value read from the cartridge. It decides which entries pass the orientation
+gate (§5.3), which file of each item plays (§5.7), the start and duration (§5.8), and the backing
+(§5.10). The schedule does not depend on it.
 
-Re-resolve the schedule **immediately** whenever the rendered slot changes. A Surface always has
-an orientation; if one is ever missing, skip the orientation gate (§5.3) and log the error.
+When the orientation rendered changes — the device rotates, or a demo starts or ends — the
+playlist does not. Cut **immediately** (§5.9), keep both rotation cursors (§5.6), and run the
+viability pass in the new orientation: entries whose slot is empty in it drop out, entries that
+were excluded join, and the rotation continues after the cursors with the new orientation's
+files. The entry that was cut keeps its place as the last one shown, as after a show-clock jump
+(§8.3).
+
+A Surface always has an orientation; if one is ever missing, skip the orientation gate (§5.3) and
+log the error.
 
 ### 5.2 Pick the schedule entry
 
-Within the slot, the **most recent entry whose `timestamp ≤ showNow` wins**. Entries are a
-timeline of changeovers, not windows: there is no end time.
+The **most recent `playlist` entry whose `timestamp ≤ showNow` wins**. Entries are a timeline of
+changeovers, not windows: there is no end time.
 
 ```sql
 SELECT * FROM surface_schedule_entry
- WHERE config_id = :config AND slot = :slot AND timestamp <= :showNow
- ORDER BY timestamp DESC LIMIT 1;
+ WHERE config_id = :config AND slot = 'playlist' AND timestamp <= :showNow
+ ORDER BY timestamp DESC, id DESC LIMIT 1;
 ```
 
 - A `playlist_id` of NULL means **show nothing from now**: clear to blank. (This differs from an
   empty working set, §5.5, where nothing new is produced and the last frame stays.)
-- The **next schedule boundary** is the earliest `timestamp > showNow` across the rendered slot
-  and `demo_station`. It is an interrupt time (§5.9).
+- The **next schedule boundary** is the earliest `timestamp > showNow` among the `playlist`
+  entries and, on a Surface that runs the DemoStation mode, the `demo_station` entries. It is an
+  interrupt time (§5.9).
 - When a boundary **changes** the active playlist, cut immediately and reset both rotation
   cursors (§5.6). When it keeps the **same** playlist, do nothing: back-to-back blocks of one
   playlist are one run.
@@ -523,8 +545,8 @@ Run it each time the current content ends, always against the show clock. It is 
    every directive evaluated below to the current day. Outside every day, the whole timeline
    participates.
 2. **Orientation gate.** For each `playlist_entry` of the active playlist, in `position` order: a
-   `media_item` entry passes only if its item has a file in the slot for the playlist orientation
-   (§5.7). An empty slot is an intentional exclusion, so the entry's directives are **never
+   `media_item` entry passes only if its item has a file in the slot for the orientation rendered
+   (§5.1, §5.7). An empty slot is an intentional exclusion, so the entry's directives are **never
    evaluated**. A `session_set` entry passes if the set is present.
 3. **Directive gate.** Find the governing directive of each type within the current day (§5.4).
    The entry joins the **takeover set** if its governing `takeover` directive is ON, and the
@@ -563,9 +585,9 @@ Day scoping is what makes directives day-part: yesterday's takeover cannot leak 
 - Several active takeovers form one set, in `position` order.
 - **A takeover is self-providing.** While any viable takeover entry is ON, the takeover set owns
   the screen and the Surface never falls back to the standard set. A takeover entry with an empty
-  slot for this orientation is excluded like any other entry (§5.7), so a takeover authored for one
-  orientation does not take over the other. A takeover entry whose file fails to load is skipped
-  within the takeover set (§5.13).
+  slot for the orientation rendered is excluded like any other entry (§5.7), so a takeover authored
+  for one orientation does not take over the other. A takeover entry whose file fails to load is
+  skipped within the takeover set (§5.13).
 - **Empty standard set.** Nothing new is produced, so what is on screen stays. Run the
   viability pass again after 2 s of show time. Directive windows can legitimately empty the set for a moment.
 
@@ -586,6 +608,13 @@ cursor**, wrapping to the first entry. With no cursor, start at the first entry.
   that entry drops out).
 - When a takeover period ends, the standard rotation resumes after the standard cursor: close to
   where it left off, even if that entry is now excluded.
+- **A change of the orientation rendered keeps both cursors**: a device rotating, or a
+  DemoStation's demo starting or ending (§5.1, §5.11). The playlist is the same, so the rotation
+  continues after the cursors in the new orientation. Restarting it would show the playlist's first
+  entries again every time a device turned or a demo began.
+- A takeover period begins when the working set becomes the takeover set. A change of the
+  orientation rendered can do that too: turning into an orientation whose takeover set is
+  non-empty, from one whose takeover set was empty, begins a period.
 
 ### 5.7 Item → file, by orientation
 
@@ -601,6 +630,9 @@ landscape → landscape_file_id    -- no fallback
 - **Whatever file is in the slot plays**, whatever its pixel shape. A landscape image placed in
   the portrait slot plays on a portrait Surface, as authored.
 - Both slots may reference the same file.
+- **One playlist serves both orientations.** An item with a file in one slot only plays on the
+  devices that render that orientation and is skipped on the others. That is how content — a
+  takeover included (§5.5) — is authored for one orientation.
 
 The same rule applies to backings (an empty slot means no backing on that orientation) and to
 `demo_station` branding. Then choose which rendition of the file to play (§7.6).
@@ -644,8 +676,8 @@ never interrupts. A standard item otherwise always finishes its time.
 
 **Setting the marker to 0 forces the next render loop to evaluate,** whatever the show time,
 including before 1970 (negative milliseconds). Use it for a show-clock jump, a video completing its
-window, a skip after a load failure, a change of active playlist, a mode change, and a newly
-committed cartridge.
+window, a skip after a load failure, a change of active playlist, a rotation, a mode change, and a
+newly committed cartridge.
 
 For video, the hint is a watchdog — the window's duration when the window has an end, else
 `intrinsic_duration` (the clip's full length, even when trimmed at the start), else 300 s, plus
@@ -658,7 +690,8 @@ the marker to 0. One clip that never completes cannot park the rotation.
 |---|---|
 | The working set changes from **standard to takeover** | Cut immediately to the takeover set's first entry |
 | A schedule boundary changes the active playlist (§5.2) | Cut; resolve the new playlist; reset cursors |
-| The Surface's mode changes | Cut; enter the new mode |
+| The device rotates (§5.1) | Cut; keep the cursors; continue in the new orientation |
+| The Surface's mode changes: a DemoStation's demo starts or ends (§5.11) | Cut; the rotation moves into the picture-in-picture or back, and keeps its cursors |
 | The show clock jumps (§8.3) | Marker to 0; re-evaluate everything; cut |
 | A new cartridge is committed | Reset all state; cut |
 
@@ -672,8 +705,8 @@ naturally:
 
 Compute `interruptAt` during the viability pass: while the working set is standard, it is the
 earliest future `takeover` directive turning ON for an entry of the active playlist. The schedule
-boundary is checked separately in the render loop (`showNow ≥` next boundary); a changed playlist
-sets the marker to 0.
+boundary is checked separately in the render loop (`showNow ≥` next boundary); a changed playlist,
+or a demo starting or ending, sets the marker to 0.
 
 The standard → takeover transition always cuts and starts the takeover set at its first entry,
 even when the entry on screen is also in the new takeover set.
@@ -706,24 +739,41 @@ a `media_item`, resolved to a file by orientation (§5.7), and may be a still or
   advances the rotation.
 - An interrupt ends the composite as a whole, including a multi-page board mid-board.
 
-### 5.11 The `demo_station` slot
+### 5.11 The `demo_station` slot and the picture-in-picture
 
-A Surface's schedule has two kinds of entry: **playlist** entries (`portrait` and `landscape`
-slots) and **DemoStation** entries (`demo_station` slot). `demo_station` is resolved the same
-"latest ≤ now" way, in parallel with the rendered slot, and the active kind alone tells a Surface
-which mode it is in. The `CHECK` constraint encodes the rules:
+A surface's schedule has two kinds of entry: **playlist** entries (`playlist` slot) and
+**DemoStation** entries (`demo_station` slot). `demo_station` is resolved the same "latest ≤ now"
+way, in parallel with `playlist`, and its active entry alone tells a Surface which mode it is in.
+The `CHECK` constraint encodes the rules:
 
-- `portrait` / `landscape` entries carry **only** a playlist (or NULL, an authored blank) — never
-  branding.
+- `playlist` entries carry **only** a playlist (or NULL, an authored blank) — never branding.
 - `demo_station` entries carry **branding only**: `background_item_id` and an optional
   `overlay_item_id`. They never carry a playlist.
 - A `demo_station` entry with a background means **demo on**; an all-NULL entry means **demo off**.
-- A DemoStation's **picture-in-picture shows the playlist scheduled for the opposite orientation
-  at that moment** — a portrait DemoStation plays the `landscape` slot's playlist — under the rules
-  of this section unchanged.
 
-Identify a demo entry by its `slot`. Demo presentation is a Surface implementation choice; a
-Surface that does not implement demo mode ignores the slot entirely.
+During a demo, a DemoStation gives its screen to the demo, framed by the branding: the background
+behind everything, the overlay in front. The schedule keeps playing in a **picture-in-picture**,
+and the picture-in-picture is the Surface's player itself, moved into a smaller frame:
+
+- **It plays the same scheduled playlist, with the files of the orientation opposite the
+  device's.** A portrait DemoStation's picture-in-picture plays each item's landscape file, and a
+  landscape DemoStation's each portrait file. Every rule of this section applies to it in that
+  orientation — the orientation gate (§5.3), start and duration (§5.8), the backing (§5.10),
+  takeovers and interrupts (§5.5, §5.9) — exactly as on a Surface that renders it.
+- **When a demo starts, the player moves into the picture-in-picture; when it ends, back to the
+  full screen.** Each move is a mode change (§5.9): the item on screen is cut, both rotation
+  cursors are kept — the playlist has not changed — and the rotation continues after them in the
+  new orientation (§5.1, §5.6). The picture-in-picture picks up where the full-screen player was,
+  and the full-screen player where the picture-in-picture was: during a demo the show continues,
+  smaller, and however often demos start and end, every entry keeps its turn.
+- A `demo_station` boundary that leaves the demo on changes only the branding. The item on screen
+  plays on.
+- The branding resolves in the device's own orientation, with no fallback (§5.7): an empty slot
+  means no background or no overlay, and the demo is on all the same.
+
+Identify a demo entry by its `slot`. How a demo is laid out — where the picture-in-picture sits,
+what fills the rest of the screen — is a Surface implementation choice. A Surface that does not
+implement demo mode ignores the slot entirely.
 
 ### 5.12 Content types
 
@@ -760,15 +810,14 @@ had to choose. A conforming client makes the same choices, because the conforman
 | Situation | Rule |
 |---|---|
 | Two directives, schedule entries or playlist entries share a timestamp or position | The higher `id` is later. Rotation cursors compare (position, id). |
-| No schedule entry for the lane has started yet | Hold, as for an empty working set (`set.empty`), and play from the first changeover. |
-| What an interruption records | One event per cause. A jump records `jump` only, and a playlist change it causes resets the cursors silently. A `cut` is recorded only when an entry is on screen, and names it. |
+| No `playlist` entry has started yet | Hold, as for an empty working set (`set.empty`), and play from the first changeover. |
+| What an interruption records | One event per cause. A jump records `jump` only, and a new cartridge `cartridge.commit` only: what the schedule changes as a result — the playlist, the mode — is applied silently. A boundary that starts or ends a demo records `mode.change`, and a playlist change at the same boundary resets the cursors silently. A rotation and a boundary in the same tick are two causes, and each records its cut. A `cut` is recorded only when an entry is on screen, and names it. |
 | An authored blank | Re-evaluated every 2 s like a hold, without repeating the `blank` event. |
-| An orientation change; a new cartridge | Applied at the next tick; the `cut` carries that tick's show time. |
-| Which failures count toward `set.all_failed` | Load failures before or after the first frame, missing first frames, and entries that are not image or video media. The streak ends when an item finishes its time: naturally, at its watchdog, on completion, or when a takeover cuts it. |
+| A rotation; a new cartridge | Applied at the next tick; the `cut` carries that tick's show time. |
+| Which failures count toward `set.all_failed` | Load failures before or after the first frame, missing first frames, and entries that are not image or video media. The streak ends when an item finishes its time: naturally, at its watchdog, on completion, or when a takeover cuts it. It also ends when the playlist or the orientation rendered changes, and at a new cartridge. |
 | A takeover due while the next item is still loading, or before a late first frame's natural end | It still cuts at its time (§5.9). The loading item is abandoned; a late item's marker is armed at the takeover instead. |
 | The preview clock before its first command | Reads what a Surface would show now, and runs. |
-| No orientation from the host | The gate is skipped (§5.1), and each entry plays the lane's slot, else the other one. |
-| Boundaries on the `demo_station` lane | Not the engine's: it resolves one playlist lane and has no mode. A host with a DemoStation mode watches that lane itself (§5.11). |
+| No orientation from the host | The gate is skipped (§5.1), and each entry plays its landscape file, else its portrait one; backings and demo branding resolve in landscape, as Automatic reads a display that is not taller than it is wide (§6). A DemoStation's picture-in-picture skips the gate too. |
 
 ## 6. Provisioning
 
@@ -793,8 +842,10 @@ gone, re-pick. Clear the stored `location_id` whenever the configured `projectCo
   taller than it is wide, else landscape.
 - **Landscape** or **Portrait**, chosen by the operator on the device.
 
-A change — the operator's, or the driven display turning — takes effect immediately (§5.1). A
-publish never changes it: a client does not read an orientation from the cartridge.
+A change — the operator's, or the driven display turning — takes effect immediately (§5.1). It
+keeps the schedule: the device plays the same playlist, from where it was, with the other
+orientation's files. A publish never changes the orientation: a client does not read one from the
+cartridge.
 
 ---
 
@@ -886,15 +937,16 @@ Rules that make the order safe:
 
 ### 7.7 Fetching by lane
 
-A cartridge lists every file its surface config can play, on every lane. A Surface **may** fetch
-only the files reachable from the lanes it renders:
+A cartridge lists every file its surface config can play, in both orientations. A **lane** is one
+orientation over the config's one schedule: the file in that orientation's slot of each item
+(§5.7), and the backings in that orientation (§5.10). A Surface **may** fetch only the files of the
+lanes it renders:
 
-- **Its own orientation's lane** (§5.1): the file in that orientation's slot of each item (§5.7),
-  and the backings in that orientation (§5.10). The other orientation's slot files serve a lane
-  this Surface does not render.
+- **Its own orientation's lane** (§5.1). The other orientation's slot files serve the devices that
+  render it.
 - **On a Surface that runs the DemoStation mode** (§5.11), also the opposite orientation's lane
-  while the `demo_station` lane has any entry with a background — the picture-in-picture plays
-  it — and the demo branding in the orientation the Surface renders.
+  while the `demo_station` slot has any entry with a background — the picture-in-picture plays the
+  same playlist in that orientation — and the demo branding in the orientation the Surface renders.
 - **Everything else the cartridge delivers**, whatever the lane: brand files (§9), and any file no
   item places in an orientation's slot.
 
@@ -1095,7 +1147,9 @@ facts and lead to opposite investigations.
 
 Unknown tables, columns, and values of `resource_type`, `slot`, `type`, and `kind` are skipped,
 not treated as errors. A column retired from the baseline (§4.4) is ignored as well, and silently:
-it is not unknown.
+it is not unknown. Nor is a retired value — `portrait` or `landscape` in
+`surface_schedule_entry.slot` (§4.4) — but a row that carries one cannot be read: it is malformed,
+skipped with a warning (§4).
 
 ### 10.5 A new table must be safe to ignore
 
@@ -1117,7 +1171,10 @@ overlapping takeovers; synthetic time from a device in another timezone; show-cl
 multi-page session boards interrupted by a takeover; video completion, load failure, and the
 watchdog; schedule changeover; day scoping; Studio preview; empty orientation slots and a
 landscape file in a portrait slot; all entries failing without disarming; the first-frame
-timeout; late callbacks from replaced items; and same-playlist boundaries and authored blanks.
+timeout; late callbacks from replaced items; same-playlist boundaries and authored blanks; one
+schedule played in both orientations, with a takeover authored for one of them; a device rotating
+mid-show; a DemoStation's picture-in-picture as a demo starts and ends; and schedule rows on
+retired slots, where the scenario also lists the warnings the Loader must give.
 
 The reference engine in [`engine/`](engine/) passes every scenario:
 
@@ -1142,6 +1199,8 @@ node conformance/run.mjs --engine engine/dist/node.js
 - [ ] Reports a table that failed to decode differently from a table that is empty.
 - [ ] Ignores unknown tables, columns, and enumerated values, and the retired
       `surface_location.orientation` without a warning (§4.4).
+- [ ] Treats a schedule row on a retired slot (`portrait`, `landscape`) as malformed: skipped with
+      a warning, never read as a `playlist` entry (§4.4).
 - [ ] Treats a row with a NUL byte (U+0000) in a text column as malformed: skipped with a warning,
       or refused in a table that holds exactly one row (§4).
 
@@ -1155,18 +1214,23 @@ node conformance/run.mjs --engine engine/dist/node.js
 
 **What is on screen**
 
-- [ ] Picks the schedule entry as latest-`timestamp`-≤-now within its own slot; treats a NULL
-      `playlist_id` as show nothing.
+- [ ] Resolves the one `playlist` schedule as latest-`timestamp`-≤-now, whatever the orientation
+      it renders; treats a NULL `playlist_id` as show nothing.
 - [ ] Admits an entry only when a governing directive is ON.
 - [ ] Scopes directives to the containing day, and skips scoping outside all days.
 - [ ] Suppresses the standard set entirely while any takeover is ON, with no fallback.
 - [ ] Advances by position cursors, separately for standard and takeover.
 - [ ] Cuts immediately on the standard → takeover transition, and on no other directive change.
 - [ ] Skips an entry whose slot is empty for its orientation, and plays the slot's file as authored — never the other orientation's.
+- [ ] On a rotation, cuts, keeps both cursors, and continues after them with the new orientation's
+      files.
+- [ ] Running the DemoStation mode, plays the same playlist in the picture-in-picture with the
+      opposite orientation's files, and moves the one rotation between the full screen and the
+      picture-in-picture as a demo starts and ends, keeping its cursors.
 - [ ] Composites backing, content, and overlay, with one duration per composite.
 - [ ] Renders session boards.
 - [ ] Never disarms: every evaluation leaves the marker armed.
-- [ ] Makes the choices in §5.14 the same way (ties by `id`; a lane with no entry yet holds; one trace event per cause).
+- [ ] Makes the choices in §5.14 the same way (ties by `id`; no `playlist` entry yet holds; one trace event per cause).
 
 **Provisioning**
 
@@ -1202,7 +1266,7 @@ cartridge_meta   cartridge_kind 'surface', format_version '25.0.1',
                  timezone America/Los_Angeles
 project_days     1 row: 2026-09-15, 00:00:00.000–23:59:59.999 PT
 surface_location 1 row: LOBBY3-A
-surface_schedule_entry  1 row: slot 'portrait', Day 1 00:00 PT → playlist "Editor parity"
+surface_schedule_entry  1 row: slot 'playlist', Day 1 00:00 PT → playlist "Editor parity"
 playlist_entry   12 rows
 directive        3 rows, all on entry 5 (position 3):
                    standard ON  08:00 PT
@@ -1214,9 +1278,10 @@ directive        3 rows, all on entry 5 (position 3):
 
 1. **Show clock** — real time is before the event, so the Surface simulates Day 1 at the venue's
    current time of day: 16:30 PT on 2026-09-15 (§8.2).
-2. **Slot** — the Surface drives a portrait display and is set to Automatic, so it renders
+2. **Orientation** — the Surface drives a portrait display and is set to Automatic, so it renders
    portrait (§6). It takes the only location, `LOBBY3-A`, for its reports.
-3. **Schedule** — the portrait entry at 00:00 is the latest ≤ 16:30 → "Editor parity".
+3. **Schedule** — the playlist entry at 00:00 is the latest ≤ 16:30 → "Editor parity". A landscape
+   device of the same config resolves the same entry; only the files it plays differ.
 4. **Viability** — only entry 5 has directives. Its governing standard directive (08:00) is ON; its
    governing takeover directive (12:30) is OFF. The standard set is {entry 5}. The other 11 entries
    have no ON directive and never appear on a Surface — even though Studio's operator player plays
@@ -1249,8 +1314,10 @@ directive        3 rows, all on entry 5 (position 3):
 | **show code / `projectCode`** | The Show's public identifier and media keyspace root |
 | **surface code** | Names the surface cartridge; `PROJECT` is reserved |
 | **location** | One physical installation of a surface config, by `location_id`; carries no orientation (§6) |
-| **lane** | One slot's schedule and what a Surface renders from it; a Surface renders its orientation's lane (§5.1, §7.7) |
-| **slot** | `portrait` \| `landscape` \| `demo_station` — schedule entries are scoped per slot |
+| **lane** | One orientation over the one schedule: the files a device rendering it plays. A Surface renders its own orientation's lane, a DemoStation's picture-in-picture the opposite one (§5.1, §7.7) |
+| **slot** | `playlist` \| `demo_station`, the two kinds of schedule entry (§4.4). An item's `portrait_file_id` and `landscape_file_id` are its orientation slots (§5.7) |
+| **orientation rendered** | The orientation whose files play: the device's own, or the opposite one in a DemoStation's picture-in-picture (§5.1) |
+| **picture-in-picture** | Where a DemoStation's player plays during a demo: the same playlist, in the opposite orientation (§5.11) |
 | **directive** | A timestamped on/off state change for one playlist entry, of type standard or takeover |
 | **takeover** | A directive type that, while ON for any entry, replaces the standard rotation |
 | **working set** | The takeover set if non-empty, else the standard set |
@@ -1278,6 +1345,7 @@ directive        3 rows, all on entry 5 (position 3):
 | Deliverable names | In `media_file` and the manifest | In the manifest and renditions only |
 | Renditions | Optional table | Always present |
 | Locations | May be empty | At least one |
+| Schedule | One per orientation: `portrait` and `landscape` slots, each scheduling its own playlists | One schedule per surface config (`playlist`): a device plays it with the files of its orientation (§5.1) |
 | Location orientation | `screen_location.orientation`, the mount, adopted by a Surface | Not carried: a device renders its own orientation (§6) |
 | Studio runtime modifiers | Carried, not honoured | Not carried |
 | Server bookkeeping | `last_checked_at`, `last_pulled_revision`, `revision`, `archived` carried | Not carried |
@@ -1289,7 +1357,7 @@ directive        3 rows, all on entry 5 (position 3):
 | Interrupts | Not specified | Closed set; standard → takeover cuts immediately |
 | Synthetic time | Optional; operator's wall clock projected onto Day 1 | Required; venue time of day on Day 1 |
 | Session boards | Optional | Required |
-| DemoStation entries | May carry a PIP playlist | Branding only; the PIP plays the opposite orientation's scheduled playlist |
+| DemoStation entries | May carry a PIP playlist | Branding only; the picture-in-picture is the Surface's player, moved: the same playlist in the opposite orientation, its rotation continuing (§5.11) |
 | Brand members | Never playable | Playable when image or video; only non-media items are skipped |
 | Composition | Backing and overlay on playlists and media items | Project default backing (`project.backing_item_id`, new), session board override; playlist and item backing/overlay removed |
 | Branding | v5/v6 columns, undocumented | Brand delivery specified (§9) |

@@ -1,0 +1,73 @@
+{
+  "id": "MCS-22",
+  "trace": [
+    {
+      "t": "2026-09-15T08:00:00-07:00",
+      "kind": "render",
+      "code": "rotation.start",
+      "entry": 1,
+      "set": "standard",
+      "file": 101
+    },
+    {
+      "t": "2026-09-15T08:00:10-07:00",
+      "kind": "render",
+      "code": "rotation.next",
+      "entry": 2,
+      "set": "standard",
+      "file": 102
+    },
+    {
+      "t": "2026-09-15T08:00:15-07:00",
+      "kind": "cut",
+      "code": "orientation.change",
+      "entry": 2
+    },
+    {
+      "t": "2026-09-15T08:00:15-07:00",
+      "kind": "render",
+      "code": "rotation.next",
+      "entry": 3,
+      "set": "standard",
+      "file": 203
+    },
+    {
+      "t": "2026-09-15T08:00:25-07:00",
+      "kind": "render",
+      "code": "rotation.next",
+      "entry": 4,
+      "set": "standard",
+      "file": 204
+    },
+    {
+      "t": "2026-09-15T08:00:35-07:00",
+      "kind": "render",
+      "code": "rotation.wrap",
+      "entry": 1,
+      "set": "standard",
+      "file": 201
+    },
+    {
+      "t": "2026-09-15T08:00:40-07:00",
+      "kind": "cut",
+      "code": "orientation.change",
+      "entry": 1
+    },
+    {
+      "t": "2026-09-15T08:00:40-07:00",
+      "kind": "render",
+      "code": "rotation.start",
+      "entry": 2,
+      "set": "takeover",
+      "file": 102
+    },
+    {
+      "t": "2026-09-15T08:00:50-07:00",
+      "kind": "render",
+      "code": "rotation.next",
+      "entry": 2,
+      "set": "standard",
+      "file": 102
+    }
+  ]
+}

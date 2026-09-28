@@ -30,7 +30,9 @@ test("loads a v25.0.1 surface cartridge into an indexed snapshot", async () => {
   assert.equal("orientation" in s.locations[0], false, "a location carries no orientation (§6)");
   assert.deepEqual(s.playlists.get(1).entries.map((e) => e.position), [1, 2, 3, 4]);
   assert.deepEqual(s.directives.get(2).takeover.map((d) => d.onScreen), [true, false]);
-  assert.equal(s.scheduleBySlot.portrait.length, 1);
+  assert.deepEqual(Object.keys(s.scheduleBySlot), ["playlist", "demo_station"]);
+  assert.deepEqual(s.scheduleBySlot.playlist.map((e) => [e.id, e.slot, e.playlistId]), [[1, "playlist", 1]]);
+  assert.deepEqual(s.scheduleBySlot.demo_station, []);
   assert.deepEqual(s.warnings, []);
   assert.ok(Object.isFrozen(s) && Object.isFrozen(s.days) && Object.isFrozen(s.playlists.get(1).entries));
 });
@@ -141,6 +143,50 @@ test("rows with unknown enumerated values are skipped with a warning, not fatal"
     ["value.unknown", "directive", 98],
   ]);
   assert.equal(s.directives.get(1).standard.length, 1);
+});
+
+test("a schedule row on a retired slot — an earlier draft's 'portrait' or 'landscape' — is malformed: skipped with a warning naming the column", async () => {
+  // As an earlier draft wrote them: a playlist lane per orientation. There is no dual reading.
+  const s = await loadCartridge(variant("base", `
+    PRAGMA ignore_check_constraints = ON;
+    INSERT INTO surface_schedule_entry VALUES (7, 1, 'portrait', 1789000000000, 1, NULL, NULL, 0, 0);
+    INSERT INTO surface_schedule_entry VALUES (8, 1, 'landscape', 1789000000000, NULL, NULL, NULL, 0, 0);
+    INSERT INTO surface_schedule_entry VALUES (9, 1, 'ceiling', 1789000000000, 1, NULL, NULL, 0, 0)`));
+  assert.deepEqual(s.warnings.map((w) => [w.code, w.table, w.column, w.rowId]), [
+    ["value.malformed", "surface_schedule_entry", "slot", 7],
+    ["value.malformed", "surface_schedule_entry", "slot", 8],
+    ["value.unknown", "surface_schedule_entry", "slot", 9],
+  ]);
+  assert.match(s.warnings[0].message, /retired/);
+  assert.deepEqual(s.scheduleBySlot.playlist.map((e) => e.id), [1]);
+  // A cartridge from the earlier draft, with no playlist row at all, schedules nothing.
+  const draft = await loadCartridge(variant("base", `
+    PRAGMA ignore_check_constraints = ON;
+    UPDATE surface_schedule_entry SET slot = 'portrait';
+    INSERT INTO surface_schedule_entry VALUES (2, 1, 'landscape', 1789000000000, 1, NULL, NULL, 0, 0)`));
+  assert.deepEqual(draft.scheduleBySlot.playlist, []);
+  assert.deepEqual(draft.warnings.map((w) => [w.code, w.rowId]), [["value.malformed", 1], ["value.malformed", 2]]);
+});
+
+test("demo_station rows load into their own slot, and a tool's rows build the same way", async () => {
+  const s = await loadCartridge(fixture("demo-station"));
+  assert.deepEqual(s.warnings, []);
+  assert.deepEqual(s.scheduleBySlot.playlist.map((e) => e.id), [1]);
+  assert.deepEqual(s.scheduleBySlot.demo_station.map((e) => [e.id, e.playlistId, e.backgroundItemId, e.overlayItemId]), [[2, null, 9, 8], [3, null, null, null]]);
+  // buildSnapshot, as an authoring tool calls it: a retired slot is malformed there too.
+  const rows = {
+    cartridge_meta: [{ cartridge_kind: "surface", format_version: "25.0.1", project_code: "SHOW26", surface_id: "LOBBY3", published_revision: 1, timezone: "America/Los_Angeles", generated_at: 0 }],
+    project: [{ id: 1, cloud_uid: "u", name: "Show 26", project_code: "SHOW26", timezone: "America/Los_Angeles", show_wallpaper_item_id: null, desktop_wallpaper_item_id: null, backing_item_id: null, brand_style: null, brand_style_item_id: null }],
+    surface_config: [{ id: 1, name: "Lobby 3", surface_id: "LOBBY3", published_revision: 1, published_at: 0 }],
+    surface_location: [{ id: 1, config_id: 1, location_id: "LOBBY3-A", label: null }],
+    surface_schedule_entry: [
+      { id: 1, config_id: 1, slot: "playlist", timestamp: 0, playlist_id: null, background_item_id: null, overlay_item_id: null },
+      { id: 2, config_id: 1, slot: "landscape", timestamp: 0, playlist_id: null, background_item_id: null, overlay_item_id: null },
+    ],
+  };
+  const built = buildSnapshot("surface", rows, []);
+  assert.deepEqual(built.scheduleBySlot.playlist.map((e) => e.id), [1]);
+  assert.deepEqual(built.warnings.filter((w) => w.table === "surface_schedule_entry").map((w) => [w.code, w.rowId]), [["value.malformed", 2]]);
 });
 
 test("a damaged file that still starts with the SQLite magic is refused as damaged", async () => {

@@ -144,7 +144,9 @@ const rendered = () => (setting !== "automatic" ? setting : innerHeight > innerW
   let synced = await media.sync(snapshot, { files: laneFiles(), onProgress: (n, of) => say(`fetching and verifying media… ${n} / ${of}`) });
   $("message").hidden = true;
 
-  const engine = createEngine({ snapshot, slot: orientation, orientation, clock: surfaceClock() });
+  // One schedule, whatever the orientation (§5.1). This player does not run the DemoStation
+  // mode, so the engine ignores the demo_station slot (§5.11).
+  const engine = createEngine({ snapshot, orientation, clock: surfaceClock() });
   const recent = [];
   let lastRender = null;
   let notice = null;
@@ -167,12 +169,15 @@ const rendered = () => (setting !== "automatic" ? setting : innerHeight > innerW
   });
   host.start();
 
-  /** A change of orientation — the operator's, or the window's shape — applies at once (§5.1). */
+  /**
+   * A change of orientation — the operator's, or the window's shape — applies at once (§5.1):
+   * the same playlist carries on from where it was, with the other orientation's files.
+   */
   function applyOrientation() {
     const next = rendered();
     if (next === orientation) return;
     orientation = next;
-    engine.setOrientation(orientation);   // re-resolved at the next tick
+    engine.setOrientation(orientation);   // a cut at the next tick; the cursors are kept
     // §7.7 — the new lane's files; until one is held, its entry is skipped when its turn comes.
     media.sync(snapshot, { files: laneFiles() }).then((s) => { synced = s; });
   }

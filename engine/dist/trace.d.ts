@@ -8,7 +8,7 @@
  */
 export type TraceKind = "render" | "cut" | "jump" | "hold" | "blank" | "skip" | "warning";
 export type RenderCode = "rotation.start" | "rotation.next" | "rotation.wrap";
-export type CutCode = "takeover.activate" | "schedule.change" | "orientation.change" | "cartridge.commit";
+export type CutCode = "takeover.activate" | "schedule.change" | "orientation.change" | "mode.change" | "cartridge.commit";
 export type JumpCode = "jump.backward" | "jump.forward";
 export type HoldCode = "set.empty" | "set.all_failed";
 export type BlankCode = "schedule.blank";

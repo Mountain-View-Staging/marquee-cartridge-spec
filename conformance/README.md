@@ -2,7 +2,7 @@
 
 The executable definition of what a Marquee Surface puts on screen. A Surface engine conforms to
 the specification when, for every scenario here, the trace it produces matches `expected.json`
-exactly.
+exactly — and, where a scenario lists them, so do the Loader's warnings.
 
 Both first-party engines — Swift and TypeScript — run this suite in CI. Third-party Surfaces are
 welcome to run it too.
@@ -42,9 +42,12 @@ IDs are systematic so a trace reads on its own:
 | Landscape file id | 200 + item id |
 | Stills | 10 s (`display_duration`) |
 | Videos | 12 s (`intrinsic_duration`), no trim |
+| Schedule entry id | its row, in order: 1 is the first |
+| Demo branding | `demo-station` only: item 9 is the background and item 8 the overlay; neither is in a playlist |
 
-The **base** show: playlist A = entries 1–4, all standard ON at 08:00; entry 2 has a takeover
-from 11:30 to 12:30. Other cartridges are variations, named for what they change.
+The **base** show: one schedule, playlist A from Day 1 00:00 (a surface has one schedule, whatever
+the orientation: specification §5.1); playlist A = entries 1–4, all standard ON at 08:00; entry 2
+has a takeover from 11:30 to 12:30. Other cartridges are variations, named for what they change.
 
 ## `scenario.json`
 
@@ -52,14 +55,14 @@ from 11:30 to 12:30. Other cartridges are variations, named for what they change
 |---|---|
 | `id`, `title`, `rules` | Identity and the rules under test |
 | `cartridge` | Which `cartridges/<name>.db` to load |
-| `engine` | `slot` and `orientation` the engine is configured with |
+| `engine` | `orientation`: the orientation the device renders. `demoStation: true`: the host runs the DemoStation mode, so the engine resolves the `demo_station` slot (specification §5.11) |
 | `clock.source` | `surface` (real/synthetic show clock) or `preview` (Studio transport) |
 | `clock.start` | Wall-clock start, ISO 8601 with offset |
 | `clock.tickMs`, `clock.seconds` | Tick every `tickMs`; run ticks `0 … seconds − 1` |
 | `clock.deviceTimeZone` | The process timezone while running. Engines must not depend on it. |
 | `clock.commands` | Preview only: `{ atSecond, set?, action? }` with `action` `play` or `pause` |
 | `host` | How the simulated host answers render items (below) |
-| `events` | `{ atSecond, type: "wallJump", deltaMs }` — a wall-clock correction; `setOrientation` |
+| `events` | `{ atSecond, type: "wallJump", deltaMs }` — a wall-clock correction; `{ atSecond, type: "setOrientation", orientation }` — the device rotates |
 
 ## The simulated host
 
@@ -77,13 +80,17 @@ The runner plays the host, the same way for every scenario. At each tick, in ord
      since been replaced** — a real player's late callback — and the engine must ignore them.
 4. A `blank` render item needs no answer.
 
+A DemoStation's items — the picture-in-picture's, while a demo is on — are answered the same way:
+the host plays the rotation wherever the engine puts it.
+
 Session board page counts come from `host.boardPages` (`{ "<session_set id>": pages }`) through
 an injected board resolver. Production resolvers are checked against the same page counts
 separately.
 
 ## The trace
 
-`expected.json` is `{ id, trace: [event, …] }`. Events are compared field for field, in order.
+`expected.json` is `{ id, trace: [event, …] }`, and for a scenario about the Loader also
+`warnings` (below). Events are compared field for field, in order.
 
 | Field | Present on | Meaning |
 |---|---|---|
@@ -109,7 +116,8 @@ Codes are the stable contract; any human-readable text an engine attaches is fre
 | render | `rotation.wrap` | Nothing after the cursor, so the first entry again |
 | cut | `takeover.activate` | The standard → takeover transition (a `time` hint reached) |
 | cut | `schedule.change` | A schedule boundary changed the active playlist |
-| cut | `orientation.change` | The host changed orientation |
+| cut | `orientation.change` | The device rotated: the rotation continues after its cursors in the new orientation |
+| cut | `mode.change` | A DemoStation's demo started or ended: the rotation moved into the picture-in-picture or back, and continues after its cursors |
 | cut | `cartridge.commit` | A new cartridge was committed |
 | jump | `jump.backward`, `jump.forward` | A show-clock jump (Reference §5.5); re-evaluation follows at once |
 | hold | `set.empty` | The working set is empty; the last frame stays |
@@ -124,15 +132,24 @@ Codes are the stable contract; any human-readable text an engine attaches is fre
 **Holds are recorded on entry, not on retry.** A `hold` is recorded unless the previous
 `render`, `hold`, or `blank` event was a `hold` with the same code. Skips are always recorded.
 
+### Load warnings
+
+A scenario about the Loader lists, in `expected.json`, the warnings it must give for the
+cartridge: `warnings: [{ code, table, column?, row? }, …]`, compared field for field and in
+order (the Loader's order: the rows of one table by `id`). `row` is the row's `id`. A scenario
+without `warnings` does not compare them. Codes are the Loader's, as stable as the trace's:
+`table.unknown`, `column.unknown`, `value.unknown`, `value.malformed`, `reference.dangling`,
+`position.duplicate`, `timezone.invalid`, `days.empty`, `locations.empty`.
+
 ## The engine module
 
 `run.mjs --engine <module>` imports an ES module exporting:
 
 | Export | Contract |
 |---|---|
-| `loadCartridge(bytes) → Promise<Snapshot>` | The Loader |
+| `loadCartridge(bytes) → Promise<Snapshot>` | The Loader. The Snapshot's `warnings` are `{ code, table, column?, rowId? }` |
 | `surfaceClock()`, `previewClock()` | Clock sources; the preview clock has `set(showMs)`, `play()`, `pause()` |
-| `createEngine({ snapshot, slot, orientation, clock, boardResolver })` | Returns an engine |
+| `createEngine({ snapshot, orientation, demoStation, clock, boardResolver })` | Returns an engine for one device |
 
 The engine has `tick(wallMs, monoMs) → { renderItem?, trace }`, and `onFirstFrame(token)`,
 `onMediaCompleted(token)`, `onLoadFailed(token, reason)`, `setOrientation(o)`, each returning the
@@ -165,6 +182,11 @@ applies the same host rules.
 | MCS-17 | No first frame within 10 s is a load failure | `base` | Surface Engine PRD §5.6 |
 | MCS-18 | A late completion from a replaced item is ignored | `late-callback` | Surface Engine PRD §5.6 |
 | MCS-19 | Same-playlist boundary is a no-op; a NULL playlist blanks | `boundaries` | Reference §6.2 |
+| MCS-20 | One schedule on a portrait device: a portrait-only item plays, a landscape-only item is excluded, and a portrait takeover cuts | `one-schedule` | Reference §6.2, §6.3, §9.4 |
+| MCS-21 | The same schedule on a landscape device: the landscape-only item plays, and the portrait takeover never interrupts | `one-schedule` | Reference §6.2, §6.3, §9.4 |
+| MCS-22 | A device rotating mid-show keeps its playlist and its cursors, and continues with the other orientation's files | `one-schedule` | Reference §6.2, §6.5, §6.7, §9.4 |
+| MCS-23 | A DemoStation's picture-in-picture plays the same playlist with the opposite orientation's files, and the rotation continues as the demo starts and ends | `demo-station` | Reference §6.5, §6.7, §7, §9.4 |
+| MCS-24 | A schedule row on a retired slot is malformed: skipped with a warning, and the one schedule plays on | `retired-slot` | Specification §4.4, §10.4 |
 
 Expected traces were derived by hand from the specification and are reviewed before either
 engine exists. When an engine disagrees with a trace, decide which is wrong against the

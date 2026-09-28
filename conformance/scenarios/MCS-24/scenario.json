@@ -1,0 +1,23 @@
+{
+  "id": "MCS-24",
+  "title": "A schedule row on a retired slot is malformed: skipped with a warning, and the one schedule plays on",
+  "rules": "Specification §4.4, §10.4",
+  "cartridge": "retired-slot",
+  "engine": {
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 46,
+    "start": "2026-09-15T08:00:00-07:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {}
+  },
+  "events": []
+}

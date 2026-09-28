@@ -40,11 +40,13 @@ export const at = (iso) => Date.parse(iso);
  * a second, answers every render item with a first frame at once (unless the
  * entry is listed in `fail`), and returns the normalised trace.
  */
-export async function run(bytes, { start, seconds, orientation = "portrait", slot = "portrait", fail = [], events = {}, clock, boardResolver } = {}) {
+export async function run(bytes, { start, seconds, orientation = "portrait", demoStation = false, fail = [], events = {}, clock, boardResolver } = {}) {
   const snapshot = bytes.kind ? bytes : await loadCartridge(bytes);
-  const engine = createEngine({ snapshot, slot, orientation, clock: clock ?? surfaceClock(), boardResolver });
+  const engine = createEngine({ snapshot, orientation, demoStation, clock: clock ?? surfaceClock(), boardResolver });
   const trace = [];
   const items = [];
+  /** The tick output's `demo` at each second, after the tick. */
+  const demos = [];
   const take = (evs) => { for (const ev of evs) trace.push(ev); };
   for (let s = 0; s < seconds; s++) {
     events[s]?.(engine);
@@ -53,6 +55,7 @@ export async function run(bytes, { start, seconds, orientation = "portrait", slo
     for (let i = 0; i < 64; i++) {
       const out = engine.tick(wall, mono);
       take(out.trace);
+      demos[s] = out.demo;
       const item = out.renderItem;
       if (!item) break;
       items.push(item);
@@ -62,7 +65,7 @@ export async function run(bytes, { start, seconds, orientation = "portrait", slo
       break;
     }
   }
-  return { engine, trace, items };
+  return { engine, trace, items, demos };
 }
 
 /** A trace reduced to what conformance compares, times as venue ISO strings. */

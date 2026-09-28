@@ -10,7 +10,7 @@
  *   import { loadCartridge, sqlJsOpener, createEngine, surfaceClock } from "./dist/index.js";
  *
  *   const snapshot = await loadCartridge(bytes, { open: sqlJsOpener(SQL) });
- *   const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+ *   const engine = createEngine({ snapshot, orientation: "portrait", clock: surfaceClock() });
  *   // every frame:
  *   const { renderItem, trace } = engine.tick(Date.now(), performance.now());
  */
@@ -20,7 +20,7 @@ import { loadCartridgeWith, type LoadOptions } from "./loader.js";
 import type { ProjectSnapshot, Snapshot } from "./model.js";
 
 export type * from "./model.js";
-export type { Backing, BlankRenderItem, BoardContent, BoardRenderItem, Hint, MediaContent, MediaRenderItem, PlayableRenderItem, RenderItem } from "./render.js";
+export type { Backing, BlankRenderItem, BoardContent, BoardRenderItem, DemoState, Hint, MediaContent, MediaRenderItem, PlayableRenderItem, RenderItem } from "./render.js";
 export type * from "./trace.js";
 
 export { CartridgeError, type CartridgeErrorCode } from "./errors.js";
@@ -35,6 +35,7 @@ export {
   EMPTY_RETRY_MS,
   FIRST_FRAME_TIMEOUT_MS,
   JUMP_TOLERANCE_MS,
+  ORIENTATION_WHEN_MISSING,
   type EngineOptions,
   type EntryInspection,
   type Inspection,

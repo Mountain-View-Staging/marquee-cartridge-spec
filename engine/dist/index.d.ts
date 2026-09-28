@@ -10,21 +10,21 @@
  *   import { loadCartridge, sqlJsOpener, createEngine, surfaceClock } from "./dist/index.js";
  *
  *   const snapshot = await loadCartridge(bytes, { open: sqlJsOpener(SQL) });
- *   const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+ *   const engine = createEngine({ snapshot, orientation: "portrait", clock: surfaceClock() });
  *   // every frame:
  *   const { renderItem, trace } = engine.tick(Date.now(), performance.now());
  */
 import { type LoadOptions } from "./loader.js";
 import type { ProjectSnapshot, Snapshot } from "./model.js";
 export type * from "./model.js";
-export type { Backing, BlankRenderItem, BoardContent, BoardRenderItem, Hint, MediaContent, MediaRenderItem, PlayableRenderItem, RenderItem } from "./render.js";
+export type { Backing, BlankRenderItem, BoardContent, BoardRenderItem, DemoState, Hint, MediaContent, MediaRenderItem, PlayableRenderItem, RenderItem } from "./render.js";
 export type * from "./trace.js";
 export { CartridgeError, type CartridgeErrorCode } from "./errors.js";
 export { isSqlite, loadCartridgeWith, readCartridge, type DatabaseAdapter, type LoadOptions, type Opener } from "./loader.js";
 export { buildSnapshot, type DecodedRow, type RawTables } from "./snapshot.js";
 export { BASELINE, FORMAT_MAJOR, type ColumnSpec, type ColumnType, type MalformedRowPolicy, type TableSpec } from "./schema.js";
 export { sqlJsOpener, type SqlJsModule } from "./sqljs.js";
-export { createEngine, SurfaceEngine, EMPTY_RETRY_MS, FIRST_FRAME_TIMEOUT_MS, JUMP_TOLERANCE_MS, type EngineOptions, type EntryInspection, type Inspection, type MarkerReason, type TickOutput, type WorkingSetKind, } from "./engine.js";
+export { createEngine, SurfaceEngine, EMPTY_RETRY_MS, FIRST_FRAME_TIMEOUT_MS, JUMP_TOLERANCE_MS, ORIENTATION_WHEN_MISSING, type EngineOptions, type EntryInspection, type Inspection, type MarkerReason, type TickOutput, type WorkingSetKind, } from "./engine.js";
 export { previewClock, surfaceClock, type PreviewClock, type ShowClock } from "./clock.js";
 export { Calendar, DayOne, VenueZone, isValidTimeZone } from "./venue-time.js";
 export { boardPageAt, minimalBoardResolver, type BoardContext, type BoardResolution, type BoardResolver, type MinimalBoardModel, type MinimalBoardSession, type SessionState, } from "./board.js";

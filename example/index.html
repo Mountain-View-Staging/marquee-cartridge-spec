@@ -28,9 +28,23 @@
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; }
   .panel h2 { font-size: .78rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
   .wide { grid-column: 1 / -1; }
-  #stage { width: 100%; border: 1px solid var(--line); border-radius: 6px; }
+  #stage { width: 100%; border: 1px solid var(--line); border-radius: 6px; position: relative; overflow: hidden; background: #000; }
   #stage.landscape { aspect-ratio: 16 / 9; }
   #stage.portrait { aspect-ratio: 9 / 16; height: min(64vh, 720px); width: auto; margin: 0 auto; }
+  /* The full screen, and on a DemoStation the demo over it: its branding, the demo itself and the
+     picture-in-picture. The layout is this page's; the specification leaves it to each Surface. */
+  #screen { position: absolute; inset: 0; }
+  #demo { position: absolute; inset: 0; }
+  #demo[hidden], #demo img[hidden] { display: none; }
+  #demo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  #demo img.ov { z-index: 3; }
+  #demo .screen { position: absolute; z-index: 1; display: grid; place-items: center; text-align: center; padding: 4%;
+    box-sizing: border-box; background: #0b0f14; border: 2px solid rgba(230, 237, 243, .25); color: var(--muted); font: 12px var(--mono); }
+  #pip { position: absolute; z-index: 2; box-shadow: 0 0 0 2px rgba(230, 237, 243, .6); }
+  #stage.landscape #demo .screen { left: 4%; top: 18%; width: 60%; aspect-ratio: 16 / 9; }
+  #stage.landscape #pip { right: 4%; top: 12%; height: 76%; aspect-ratio: 9 / 16; }
+  #stage.portrait #pip { left: 6%; top: 14%; width: 88%; aspect-ratio: 16 / 9; }
+  #stage.portrait #demo .screen { left: 6%; bottom: 10%; width: 88%; aspect-ratio: 16 / 9; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
   button {
     background: #21262d; color: var(--text); border: 1px solid var(--line);
@@ -85,9 +99,18 @@
     <div class="controls">
       <button id="btn-landscape" aria-pressed="true">Landscape</button>
       <button id="btn-portrait" aria-pressed="false">Portrait</button>
+      <button id="btn-demo" aria-pressed="false">DemoStation</button>
       <button id="btn-mute" aria-pressed="false">Mute</button>
     </div>
-    <div id="stage" class="landscape"></div>
+    <div id="stage" class="landscape">
+      <div id="screen"></div>
+      <div id="demo" hidden>
+        <img class="bg" alt="">
+        <div class="screen">A demo is on.<br>The presenter's screen fills this frame.</div>
+        <div id="pip"></div>
+        <img class="ov" alt="">
+      </div>
+    </div>
     <div class="caption" id="caption">loading…</div>
     <div class="note" id="notice" hidden></div>
   </section>
@@ -168,9 +191,12 @@ async function fetchCartridge(name) {
   const synced = await media.sync(snapshot);
 
   // A device's orientation is its own (§6); the explorer starts landscape and switches below.
+  // DemoStation is the kind of host (§5.11): switching it plays a new engine on the same clock.
   let orientation = "landscape";
+  let demoStation = false;
   const clock = previewClock();
-  const engine = createEngine({ snapshot, slot: orientation, orientation, clock });
+  const engineFor = () => createEngine({ snapshot, orientation, demoStation, clock });
+  let engine = engineFor();
   const calendar = engine.venueCalendar;
   const at = (ms) => calendar.format(ms);
   const days = snapshot.days;
@@ -179,7 +205,8 @@ async function fetchCartridge(name) {
   let lastRender = null;
   const host = new BrowserHost({
     engine,
-    stage: $("stage"),
+    stage: $("screen"),
+    pipStage: $("pip"),
     media,
     onTrace: (event) => {
       if (event.kind === "render" || event.kind === "blank") lastRender = event;
@@ -194,6 +221,30 @@ async function fetchCartridge(name) {
     },
   });
   host.start();
+
+  /** §5.11 — the demo, while one is on: its branding in the device's orientation, the picture-in-picture between. */
+  let shownDemo = null;
+  function paintDemo(demo) {
+    if (demo === shownDemo) return;
+    shownDemo = demo;
+    $("demo").hidden = !demo;
+    for (const [cls, layer] of [["bg", demo?.background], ["ov", demo?.overlay]]) {
+      const img = $("demo").querySelector(`img.${cls}`);
+      const url = layer ? media.urlFor(layer.mediaFileId) : null;
+      img.hidden = !url;
+      if (url) img.src = url;
+    }
+  }
+
+  function setDemoStation(on) {
+    if (on === demoStation) return;
+    demoStation = on;
+    $("btn-demo").setAttribute("aria-pressed", String(on));
+    engine = engineFor();
+    host.setEngine(engine);
+    paintDemo(null);
+  }
+  $("btn-demo").addEventListener("click", () => setDemoStation(!demoStation));
 
   // ── clock controls ──────────────────────────────────────────────────────────
   let showNow = 0;
@@ -230,11 +281,13 @@ async function fetchCartridge(name) {
     [0, "16:59:55", "RECEPTION's standard directive turns on at 17:00 and joins the rotation at the next pass; nothing is cut."],
     [1, "11:59:50", "Day 2 at noon: no takeover. Day 1's directives govern Day 1 only."],
     [1, "17:00:00", "Day 2 at 17:00: RECEPTION is not on. Its ON was authored on Day 1 and has no OFF, and it stays in Day 1."],
-    [1, "17:59:52", "Day 2 at 18:00 both lanes are scheduled with no playlist: an authored blank clears the screen."],
+    [1, "17:59:52", "Day 2 at 18:00 the schedule has no playlist: an authored blank clears the screen."],
+    [0, "15:29:50", "DemoStation: a demo starts at 15:30. The rotation moves into the picture-in-picture and carries on there with the other orientation's files; at 15:45 it moves back, where it left off.", true],
   ];
   $("presets").innerHTML = presets.map(([d, hms, what], i) => `<button data-i="${i}"><b>Day ${d + 1} ${hms}</b>${escape(what)}</button>`).join("");
   $("presets").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
-    const [d, hms] = presets[Number(b.dataset.i)];
+    const [d, hms, , demo] = presets[Number(b.dataset.i)];
+    if (demo) setDemoStation(true);
     setShow(moment(d, hms));
     clock.play();
   }));
@@ -244,7 +297,7 @@ async function fetchCartridge(name) {
     $(`btn-${o}`).addEventListener("click", () => {
       if (o === orientation) return;
       orientation = o;
-      engine.setOrientation(o);          // §5.1: the lane follows; re-resolved at the next tick
+      engine.setOrientation(o);          // §5.1: the same playlist carries on, with the other files
       $("stage").classList.remove("landscape", "portrait");
       $("stage").classList.add(o);
       $("btn-landscape").setAttribute("aria-pressed", String(o === "landscape"));
@@ -266,7 +319,7 @@ async function fetchCartridge(name) {
       `<li class="${e.kind}"><span class="t">${at(e.showTime).slice(11)}</span><span class="code">${e.kind} ${e.code}</span><span>${escape(e.message)}</span></li>`).join("");
   }
 
-  host.onTick = (now) => { showNow = now; };
+  host.onTick = (now, _projected, demo) => { showNow = now; paintDemo(demo); };
   function paint() {
     const v = engine.inspect();
     if (!Number.isFinite(v.showNow)) return;   // before the first tick
@@ -281,7 +334,11 @@ async function fetchCartridge(name) {
     const setLabel = { standard: "standard", takeover: `<span style="color:var(--alert)">takeover</span>`, empty: `<span style="color:var(--warn)">empty — the last frame stays</span>`, blank: `<span style="color:var(--alert)">authored blank</span>`, none: "nothing scheduled" }[v.workingSet];
     $("resolution").innerHTML = [
       ["day", v.day ? `${v.day.day} (directives scoped to it)` : "none: the whole timeline participates"],
-      ["lane / orientation", `${v.slot} / ${v.orientation ?? "missing"}`],
+      ["orientation", v.renderedOrientation !== v.orientation
+        ? `the device's ${v.orientation ?? "missing"} · the picture-in-picture renders ${v.renderedOrientation}`
+        : `${v.orientation ?? "missing"}`],
+      ["demo", !demoStation ? "not a DemoStation: its slot is ignored"
+        : v.demo ? `on (schedule entry ${v.demo.scheduleEntryId}): the rotation plays in the picture-in-picture` : "off: the rotation plays full screen"],
       ["schedule entry", v.scheduleEntry ? `${v.scheduleEntry.id}, from ${at(v.scheduleEntry.timestamp)}` : "none yet"],
       ["playlist", v.playlist ? escape(v.playlist.name) : v.workingSet === "blank" ? "NULL: show nothing" : "—"],
       ["working set", `${setLabel}${v.suppressed.length ? ` · ${v.suppressed.length} standard suppressed` : ""}`],

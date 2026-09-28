@@ -11,6 +11,11 @@
  * it loads, and the column is ignored without a warning (§10.4). There is one,
  * `surface_location.orientation` — a device's orientation is its own (§6).
  *
+ * A value an earlier draft wrote and the format has retired is listed in
+ * `RETIRED` below. Unlike a retired column it cannot be ignored — the row means
+ * something the format no longer says — so the row is malformed: skipped with a
+ * `value.malformed` warning naming the column (§4.4). There is no dual reading.
+ *
  * Column types:
  *   int    an INTEGER that must be a whole number
  *   real   a REAL that must be a finite number
@@ -60,4 +65,15 @@ export declare const KNOWN: {
     readonly directiveType: Set<string>;
     readonly variantKind: Set<string>;
     readonly cartridgeKind: Set<string>;
+};
+/**
+ * Values an earlier draft of v25.0.1 wrote and the format has retired (§4.4).
+ * A row carrying one is malformed, not unknown: skipped with a `value.malformed`
+ * warning naming the column.
+ *
+ *   slot  'portrait', 'landscape' — the draft scheduled playlists per
+ *         orientation; a surface now has one playlist schedule (§5.1).
+ */
+export declare const RETIRED: {
+    readonly slot: Set<string>;
 };

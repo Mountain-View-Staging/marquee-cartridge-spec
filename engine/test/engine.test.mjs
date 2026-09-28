@@ -1,7 +1,8 @@
 /**
  * Engine behaviour the conformance scenarios do not reach: orientation
- * changes, commits, backings, skipped non-media, a missing orientation,
- * preview pauses, day-scoping ties, and venue time on daylight-saving dates.
+ * changes, the DemoStation mode, commits, backings, skipped non-media, a
+ * missing orientation, preview pauses, day-scoping ties, and venue time on
+ * daylight-saving dates.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -23,7 +24,7 @@ const t = (iso) => new Date(Date.parse(iso)).toISOString();
 
 test("a tick that changes nothing returns the same output object and the shared empty trace", async () => {
   const snapshot = await loadCartridge(fixture("base"));
-  const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+  const engine = createEngine({ snapshot, orientation: "portrait", clock: surfaceClock() });
   const start = at("2026-09-15T08:00:00-07:00");
   const first = engine.tick(start, 0);
   engine.onFirstFrame(first.renderItem.token);
@@ -35,7 +36,7 @@ test("a tick that changes nothing returns the same output object and the shared 
   assert.ok(Object.isFrozen(a.trace));
 });
 
-test("an orientation change cuts, keeps the cursor on the same playlist, and plays the other slot's file", async () => {
+test("a rotation cuts, keeps the cursor on the one playlist, and plays the other slot's file", async () => {
   const { trace } = await run(fixture("base"), {
     start: "2026-09-15T08:00:00-07:00",
     seconds: 16,
@@ -49,17 +50,207 @@ test("an orientation change cuts, keeps the cursor on the same playlist, and pla
   ]);
 });
 
-test("an orientation change to a lane with nothing scheduled holds the last frame", async () => {
+test("a rotation and a schedule boundary in the same tick are two causes: one cut each, and the new playlist starts over", async () => {
+  // schedule-change: playlist A until 08:00:25, then playlist B (entries 11, 12).
   const { trace, engine } = await run(fixture("schedule-change"), {
     start: "2026-09-15T08:00:00-07:00",
-    seconds: 8,
-    events: { 3: (e) => e.setOrientation("landscape") },
+    seconds: 26,
+    events: { 25: (e) => e.setOrientation("landscape") },
   });
-  assert.equal(engine.slot, "landscape");
-  assert.deepEqual(brief(trace).slice(1), [
-    { t: t("2026-09-15T08:00:03-07:00"), kind: "cut", code: "orientation.change", entry: 1 },
-    { t: t("2026-09-15T08:00:03-07:00"), kind: "hold", code: "set.empty" },
+  assert.equal(engine.orientation, "landscape");
+  assert.deepEqual(brief(trace).slice(2), [
+    { t: t("2026-09-15T08:00:20-07:00"), kind: "render", code: "rotation.next", entry: 3, set: "standard", file: 103 },
+    { t: t("2026-09-15T08:00:25-07:00"), kind: "cut", code: "orientation.change", entry: 3 },
+    { t: t("2026-09-15T08:00:25-07:00"), kind: "cut", code: "schedule.change", entry: 3 },
+    { t: t("2026-09-15T08:00:25-07:00"), kind: "render", code: "rotation.start", entry: 11, set: "standard", file: 211 },
   ]);
+});
+
+test("a rotation never changes the schedule: the same entry governs, and the rotation keeps its place", async () => {
+  const snapshot = await loadCartridge(fixture("base"));
+  const engine = createEngine({ snapshot, orientation: "portrait", clock: surfaceClock() });
+  const start = at("2026-09-15T08:00:00-07:00");
+  engine.onFirstFrame(engine.tick(start, 0).renderItem.token);
+  const before = engine.inspect();
+  engine.setOrientation("landscape");
+  const out = engine.tick(start + 1000, 1000);
+  const after = engine.inspect();
+  assert.equal(after.scheduleEntry, before.scheduleEntry);
+  assert.deepEqual(after.playlist, before.playlist);
+  assert.equal(after.renderedOrientation, "landscape");
+  assert.deepEqual(out.trace.map((e) => e.code), ["orientation.change"]);
+  assert.equal(out.renderItem.entryId, 2, "the entry after the cursor, not the top");
+  assert.equal(out.renderItem.media.mediaFileId, 202);
+  assert.equal(out.renderItem.pip, false);
+});
+
+// ── The DemoStation mode (§5.11) ───────────────────────────────────────────────
+// demo-station.db: playlist A = items 1, 2, 4 (both files) and 3 (portrait only);
+// the demo is on from 08:00:25 (background item 9, overlay item 8) and off from 08:00:55.
+
+const DEMO_ON = { scheduleEntryId: 2, background: { mediaItemId: 9, mediaFileId: 109, contentType: "image/png" }, overlay: { mediaItemId: 8, mediaFileId: 108, contentType: "image/png" } };
+
+test("a DemoStation's demo: the output carries its branding in the device's orientation, and its items play in the picture-in-picture", async () => {
+  let during;
+  const { trace, items, demos, engine } = await run(fixture("demo-station"), {
+    start: "2026-09-15T08:00:00-07:00",
+    seconds: 60,
+    demoStation: true,
+    events: { 30: (e) => { during = e.inspect(); } },
+  });
+  assert.deepEqual(demos[24], null);
+  assert.deepEqual(demos[25], DEMO_ON);
+  assert.equal(demos[54], demos[25], "the same object while nothing changes");
+  assert.equal(demos[55], null);
+  assert.deepEqual(items.map((i) => `${i.entryId} ${i.media.mediaFileId} ${i.pip ? "pip" : "full"}`), [
+    "1 101 full", "2 102 full", "3 103 full", "4 204 pip", "1 201 pip", "2 202 pip", "3 103 full",
+  ]);
+  assert.deepEqual(brief(trace).filter((e) => e.kind === "cut").map((e) => `${e.t} ${e.code} ${e.entry}`), [
+    `${t("2026-09-15T08:00:25-07:00")} mode.change 3`,
+    `${t("2026-09-15T08:00:55-07:00")} mode.change 2`,
+  ]);
+  assert.equal(during.orientation, "portrait");
+  assert.equal(during.renderedOrientation, "landscape");
+  assert.deepEqual(during.demo, DEMO_ON);
+  assert.deepEqual(during.entries.find((e) => e.entryId === 3).excluded, "no landscape file: the slot is empty");
+  assert.equal(engine.renderedOrientation, "portrait");
+  assert.equal(engine.demo, null);
+});
+
+test("a landscape DemoStation: the picture-in-picture renders portrait files, so a portrait-only item plays there", async () => {
+  const { trace, demos } = await run(fixture("demo-station"), {
+    start: "2026-09-15T08:00:00-07:00",
+    seconds: 60,
+    orientation: "landscape",
+    demoStation: true,
+  });
+  assert.deepEqual(demos[25], { scheduleEntryId: 2, background: { mediaItemId: 9, mediaFileId: 209, contentType: "image/png" }, overlay: { mediaItemId: 8, mediaFileId: 208, contentType: "image/png" } });
+  assert.deepEqual(brief(trace).map((e) => `${e.t.slice(11, 19)} ${e.kind} ${e.code} ${e.entry ?? ""} ${e.file ?? ""}`.trim()), [
+    "15:00:00 render rotation.start 1 201",
+    "15:00:10 render rotation.next 2 202",
+    "15:00:20 render rotation.next 4 204",
+    "15:00:25 cut mode.change 4",
+    "15:00:25 render rotation.wrap 1 101",
+    "15:00:35 render rotation.next 2 102",
+    "15:00:45 render rotation.next 3 103",
+    "15:00:55 cut mode.change 3",
+    "15:00:55 render rotation.next 4 204",
+  ]);
+});
+
+test("a host without the DemoStation mode ignores the demo_station slot", async () => {
+  const { trace, items, demos } = await run(fixture("demo-station"), { start: "2026-09-15T08:00:00-07:00", seconds: 60 });
+  assert.deepEqual(brief(trace).map((e) => `${e.code} ${e.entry} ${e.file}`), [
+    "rotation.start 1 101", "rotation.next 2 102", "rotation.next 3 103", "rotation.next 4 104", "rotation.wrap 1 101", "rotation.next 2 102",
+  ]);
+  assert.ok(items.every((i) => i.pip === false));
+  assert.ok(demos.every((d) => d === null));
+});
+
+test("a demo boundary that keeps the demo on changes only the branding: nothing is cut", async () => {
+  const bytes = variant("demo-station", `INSERT INTO surface_schedule_entry VALUES (4, 1, 'demo_station', ${at("2026-09-15T08:00:40-07:00")}, NULL, 8, NULL, 0, 0)`);
+  const { trace, demos } = await run(bytes, { start: "2026-09-15T08:00:00-07:00", seconds: 60, demoStation: true });
+  assert.deepEqual(demos[40], { scheduleEntryId: 4, background: { mediaItemId: 8, mediaFileId: 108, contentType: "image/png" }, overlay: null });
+  const reference = await run(fixture("demo-station"), { start: "2026-09-15T08:00:00-07:00", seconds: 60, demoStation: true });
+  assert.deepEqual(brief(trace), brief(reference.trace));
+});
+
+test("the demo is on whenever its entry names a background, even one with no file in the device's orientation", async () => {
+  const bytes = variant("demo-station", "UPDATE media_item SET portrait_file_id = NULL WHERE id = 9");
+  const { items, demos } = await run(bytes, { start: "2026-09-15T08:00:25-07:00", seconds: 1, demoStation: true });
+  assert.deepEqual(demos[0], { scheduleEntryId: 2, background: null, overlay: DEMO_ON.overlay });
+  assert.equal(items[0].pip, true);
+});
+
+test("a jump into a demo records the jump only, and the rotation continues in the picture-in-picture", async () => {
+  const clock = previewClock();
+  clock.set(at("2026-09-15T08:00:00-07:00"));
+  const { trace, items } = await run(fixture("demo-station"), {
+    start: "2026-09-01T12:00:00-07:00",
+    seconds: 13,
+    clock,
+    demoStation: true,
+    events: { 12: () => clock.set(at("2026-09-15T08:00:30-07:00")) },
+  });
+  assert.deepEqual(brief(trace), [
+    { t: t("2026-09-15T08:00:00-07:00"), kind: "render", code: "rotation.start", entry: 1, set: "standard", file: 101 },
+    { t: t("2026-09-15T08:00:10-07:00"), kind: "render", code: "rotation.next", entry: 2, set: "standard", file: 102 },
+    { t: t("2026-09-15T08:00:30-07:00"), kind: "jump", code: "jump.forward" },
+    { t: t("2026-09-15T08:00:30-07:00"), kind: "render", code: "rotation.next", entry: 4, set: "standard", file: 204 },
+  ]);
+  assert.equal(items.at(-1).pip, true);
+});
+
+test("a rotation during a demo turns the picture-in-picture with the device, and the branding too", async () => {
+  const { trace, items, demos } = await run(fixture("demo-station"), {
+    start: "2026-09-15T08:00:00-07:00",
+    seconds: 60,
+    demoStation: true,
+    events: { 30: (e) => e.setOrientation("landscape") },
+  });
+  assert.deepEqual(demos[30], { scheduleEntryId: 2, background: { mediaItemId: 9, mediaFileId: 209, contentType: "image/png" }, overlay: { mediaItemId: 8, mediaFileId: 208, contentType: "image/png" } });
+  assert.deepEqual(brief(trace).slice(3).map((e) => `${e.t.slice(11, 19)} ${e.kind} ${e.code} ${e.entry ?? ""} ${e.file ?? ""}`.trim()), [
+    "15:00:25 cut mode.change 3",
+    "15:00:25 render rotation.next 4 204",
+    "15:00:30 cut orientation.change 4",
+    "15:00:30 render rotation.wrap 1 101",
+    "15:00:40 render rotation.next 2 102",
+    "15:00:50 render rotation.next 3 103",
+    "15:00:55 cut mode.change 3",
+    "15:00:55 render rotation.next 4 204",
+  ]);
+  assert.deepEqual(items.slice(3).map((i) => i.pip), [true, true, true, true, false]);
+});
+
+test("a takeover during a demo cuts in the picture-in-picture", async () => {
+  // base: entry 2's takeover is ON 11:30–12:30. The demo is on from 11:29:42 (item 1 as its background).
+  const bytes = variant("base", `INSERT INTO surface_schedule_entry VALUES (2, 1, 'demo_station', ${at("2026-09-15T11:29:42-07:00")}, NULL, 1, NULL, 0, 0)`);
+  const { trace, items } = await run(bytes, { start: "2026-09-15T11:29:36-07:00", seconds: 35, demoStation: true });
+  assert.deepEqual(brief(trace).map((e) => `${e.t.slice(11, 19)} ${e.kind} ${e.code} ${e.entry ?? ""} ${e.set ?? ""} ${e.file ?? ""}`.trim()), [
+    "18:29:36 render rotation.start 1 standard 101",
+    "18:29:42 cut mode.change 1",
+    "18:29:42 render rotation.next 2 standard 202",
+    "18:29:52 render rotation.next 3 standard 203",
+    "18:30:00 cut takeover.activate 3",
+    "18:30:00 render rotation.start 2 takeover 202",
+    "18:30:10 render rotation.wrap 2 takeover 202",
+  ]);
+  assert.deepEqual(items.map((i) => i.pip), [false, true, true, true, true]);
+});
+
+test("a boundary that starts a demo and changes the playlist records mode.change only; the new playlist starts over", async () => {
+  const bytes = variant("schedule-change", `INSERT INTO surface_schedule_entry VALUES (3, 1, 'demo_station', ${at("2026-09-15T08:00:25-07:00")}, NULL, 1, NULL, 0, 0)`);
+  const { trace, items } = await run(bytes, { start: "2026-09-15T08:00:00-07:00", seconds: 26, demoStation: true });
+  assert.deepEqual(brief(trace).slice(3), [
+    { t: t("2026-09-15T08:00:25-07:00"), kind: "cut", code: "mode.change", entry: 3 },
+    { t: t("2026-09-15T08:00:25-07:00"), kind: "render", code: "rotation.start", entry: 11, set: "standard", file: 211 },
+  ]);
+  assert.equal(items.at(-1).pip, true);
+});
+
+test("a new cartridge during a demo: everything restarts, and the demo is resolved again without a cut of its own", async () => {
+  const again = await loadCartridge(fixture("demo-station"));
+  const plain = await loadCartridge(fixture("base"));
+  const republish = await run(fixture("demo-station"), { start: "2026-09-15T08:00:00-07:00", seconds: 31, demoStation: true, events: { 30: (e) => e.commit(again) } });
+  assert.deepEqual(brief(republish.trace).slice(-2), [
+    { t: t("2026-09-15T08:00:30-07:00"), kind: "cut", code: "cartridge.commit", entry: 4 },
+    { t: t("2026-09-15T08:00:30-07:00"), kind: "render", code: "rotation.start", entry: 1, set: "standard", file: 201 },
+  ]);
+  assert.equal(republish.items.at(-1).pip, true);
+  assert.deepEqual(republish.demos[30], DEMO_ON);
+  const ended = await run(fixture("demo-station"), { start: "2026-09-15T08:00:00-07:00", seconds: 31, demoStation: true, events: { 30: (e) => e.commit(plain) } });
+  assert.deepEqual(brief(ended.trace).slice(-2).map((e) => `${e.code} ${e.file ?? e.entry}`), ["cartridge.commit 4", "rotation.start 101"]);
+  assert.equal(ended.items.at(-1).pip, false);
+  assert.equal(ended.demos[30], null);
+});
+
+test("a DemoStation with no orientation: the picture-in-picture skips the gate too, and the branding resolves in landscape", async () => {
+  const { trace, items, demos, engine } = await run(fixture("demo-station"), { start: "2026-09-15T08:00:25-07:00", seconds: 1, orientation: null, demoStation: true });
+  assert.deepEqual(brief(trace).map((e) => e.code), ["orientation.missing", "rotation.start"]);
+  assert.equal(items[0].pip, true);
+  assert.equal(items[0].media.mediaFileId, 201);
+  assert.equal(engine.renderedOrientation, null);
+  assert.deepEqual(demos[0].background, { mediaItemId: 9, mediaFileId: 209, contentType: "image/png" });
 });
 
 test("a committed cartridge cuts, resets every cursor, and starts over", async () => {
@@ -127,14 +318,18 @@ test("backings: a session set's own, else the project's; resolved by orientation
   assert.equal(landscapeOnly.backing, null, "an empty slot means no backing, not the project's");
 });
 
-test("a missing orientation skips the orientation gate and says so once", async () => {
+test("a missing orientation skips the orientation gate, says so once, and plays each landscape file, else the portrait one", async () => {
+  // orientation.db: item 1 is landscape-only (201), item 2 holds file 202 in both slots, item 3 is 103 / 203.
   const { trace } = await run(fixture("orientation"), { start: "2026-09-15T08:00:00-07:00", seconds: 21, orientation: null });
   assert.deepEqual(brief(trace), [
     { t: t("2026-09-15T08:00:00-07:00"), kind: "warning", code: "orientation.missing" },
     { t: t("2026-09-15T08:00:00-07:00"), kind: "render", code: "rotation.start", entry: 1, set: "standard", file: 201 },
     { t: t("2026-09-15T08:00:10-07:00"), kind: "render", code: "rotation.next", entry: 2, set: "standard", file: 202 },
-    { t: t("2026-09-15T08:00:20-07:00"), kind: "render", code: "rotation.next", entry: 3, set: "standard", file: 103 },
+    { t: t("2026-09-15T08:00:20-07:00"), kind: "render", code: "rotation.next", entry: 3, set: "standard", file: 203 },
   ]);
+  // A portrait-only item plays its portrait file.
+  const portraitOnly = await run(variant("orientation", "UPDATE media_item SET landscape_file_id = NULL WHERE id = 3"), { start: "2026-09-15T08:00:00-07:00", seconds: 21, orientation: null });
+  assert.equal(portraitOnly.items.find((i) => i.entryId === 3).media.mediaFileId, 103);
 });
 
 test("nothing scheduled yet on the lane holds, then plays from the first changeover", async () => {
@@ -237,7 +432,7 @@ test("an orientation changed and changed back before a tick is no change", async
 
 test("a failure reported twice for the item on screen skips it once", async () => {
   const snapshot = await loadCartridge(fixture("base"));
-  const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+  const engine = createEngine({ snapshot, orientation: "portrait", clock: surfaceClock() });
   const start = at("2026-09-15T08:00:00-07:00");
   const item = engine.tick(start, 0).renderItem;
   engine.onFirstFrame(item.token);
@@ -249,7 +444,7 @@ test("a failure reported twice for the item on screen skips it once", async () =
 
 test("a late first frame does not push a known takeover back", async () => {
   const snapshot = await loadCartridge(fixture("base"));
-  const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+  const engine = createEngine({ snapshot, orientation: "portrait", clock: surfaceClock() });
   const start = at("2026-09-15T11:29:50-07:00");
   const trace = [];
   let late = null; // each first frame is reported a second after its item is issued
@@ -268,7 +463,7 @@ test("a late first frame does not push a known takeover back", async () => {
 
 test("a takeover due while the next item is still loading cuts on time", async () => {
   const snapshot = await loadCartridge(fixture("base"));
-  const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+  const engine = createEngine({ snapshot, orientation: "portrait", clock: surfaceClock() });
   const start = at("2026-09-15T11:29:46-07:00");
   const trace = [];
   for (let s = 0; s < 16; s++) {
@@ -287,7 +482,7 @@ test("a takeover due while the next item is still loading cuts on time", async (
 
 test("items that fail right after their first frame still end in set.all_failed", async () => {
   const snapshot = await loadCartridge(fixture("base"));
-  const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+  const engine = createEngine({ snapshot, orientation: "portrait", clock: surfaceClock() });
   const start = at("2026-09-15T08:00:00-07:00");
   const trace = [];
   for (let i = 0; i < 16; i++) {
@@ -308,7 +503,7 @@ test("items that fail right after their first frame still end in set.all_failed"
 
 test("a repeated failure report cannot cut short the all-failed hold", async () => {
   const snapshot = await loadCartridge(fixture("base"));
-  const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+  const engine = createEngine({ snapshot, orientation: "portrait", clock: surfaceClock() });
   const start = at("2026-09-15T08:00:00-07:00");
   const first = engine.tick(start, 0).renderItem;
   engine.onFirstFrame(first.token);
@@ -327,7 +522,7 @@ test("a repeated failure report cannot cut short the all-failed hold", async () 
 
 test("a failure reported for an item that was cut does not move the new playlist's cursor", async () => {
   const snapshot = await loadCartridge(fixture("schedule-change"));
-  const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+  const engine = createEngine({ snapshot, orientation: "portrait", clock: surfaceClock() });
   const start = at("2026-09-15T08:00:20-07:00");
   const third = engine.tick(start, 0).renderItem;
   engine.onFirstFrame(third.token);
@@ -338,19 +533,27 @@ test("a failure reported for an item that was cut does not move the new playlist
   assert.equal(engine.inspect().cursors.standard, 1);
 });
 
-test("the lane keeps following the orientation through a missing one", async () => {
+test("through a missing orientation and out of it, the rotation keeps its cursors", async () => {
   const { engine, trace } = await run(fixture("base"), {
     start: "2026-09-15T08:00:00-07:00",
     seconds: 3,
     events: { 1: (e) => e.setOrientation(null), 2: (e) => e.setOrientation("landscape") },
   });
-  assert.equal(engine.slot, "landscape");
-  assert.deepEqual(brief(trace).filter((e) => e.kind === "render").map((e) => e.file), [101, 102, 203]);
+  assert.equal(engine.orientation, "landscape");
+  assert.equal(engine.renderedOrientation, "landscape");
+  assert.deepEqual(brief(trace).map((e) => `${e.kind} ${e.code} ${e.file ?? e.entry ?? ""}`.trim()), [
+    "render rotation.start 101",
+    "cut orientation.change 1",
+    "warning orientation.missing",
+    "render rotation.next 202",
+    "cut orientation.change 2",
+    "render rotation.next 203",
+  ]);
 });
 
 test("a first frame reported for a superseded item is ignored", async () => {
   const snapshot = await loadCartridge(fixture("base"));
-  const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+  const engine = createEngine({ snapshot, orientation: "portrait", clock: surfaceClock() });
   const start = at("2026-09-15T08:00:00-07:00");
   const stale = engine.tick(start, 0).renderItem;
   // A wall-clock correction before the first frame: the pending item is abandoned.

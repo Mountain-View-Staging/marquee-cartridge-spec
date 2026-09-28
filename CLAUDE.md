@@ -11,7 +11,7 @@ unlike every sibling it is published to the world.
 README.md          the specification — CANONICAL
 engine/            the reference engine: the Loader and the on-screen rules, in TypeScript;
                    compiled ES modules committed in engine/dist
-conformance/       the conformance suite: fixture cartridges, 19 scenarios, the runner
+conformance/       the conformance suite: fixture cartridges, 24 scenarios, the runner
 example/           the explorer and the demo show: the engine on a preview clock
 player/            the reference player: the engine on a browser host, one hard-coded surface
 .github/workflows/ CI: the suite against the engine, dist/ freshness, unit tests, the leak scan
@@ -105,10 +105,11 @@ cd example && python3 build-demo.py
 No dependencies beyond `python3`; ffmpeg is optional and only for the video item (without
 it the demo builds without that item rather than failing). The build is byte-for-byte
 reproducible with the same ffmpeg. The content is chosen so the rules that are easiest to
-get wrong are *visible*: per-slot resolution, takeover suppression and the immediate cut,
-day-scoped directives, an entry skipped for an empty orientation slot, a landscape file
-playing in a portrait slot, position-cursor resume after a takeover, a trimmed video, a
-session board, backings, and an authored blank. `example/README.md` says where to look for
+get wrong are *visible*: one schedule played in both orientations, takeover suppression and
+the immediate cut, day-scoped directives, an entry skipped for an empty orientation slot, a
+landscape file playing in a portrait slot, position-cursor resume after a takeover, a trimmed
+video, a session board, backings, an authored blank, and a DemoStation's picture-in-picture
+(the explorer's DemoStation switch). `example/README.md` says where to look for
 each. Every file carries its hash and size, and the Loader must load both cartridges with
 no warnings.
 
@@ -118,6 +119,6 @@ Pages serves from `main`, so a push is a publish.
 
 ```bash
 cd engine && npm ci && npm run build && npm test && cd ..
-node conformance/run.mjs --engine engine/dist/node.js     # 19/19
+node conformance/run.mjs --engine engine/dist/node.js     # 24/24
 python3 -m http.server 8000     # then check /example/ and /player/ actually run
 ```

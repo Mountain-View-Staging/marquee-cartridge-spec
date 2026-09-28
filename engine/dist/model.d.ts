@@ -10,8 +10,12 @@
  * specification in this repository's README.
  */
 export type Orientation = "portrait" | "landscape";
-/** The schedule lanes (§4.4). `demo_station` is a mode lane, never a rotation. */
-export type Slot = "portrait" | "landscape" | "demo_station";
+/**
+ * The schedule's slots (§4.4): `playlist`, the one schedule every device of the
+ * config resolves, whatever its orientation; `demo_station`, the DemoStation
+ * mode's, which carries branding and never a rotation (§5.11).
+ */
+export type Slot = "playlist" | "demo_station";
 export type DirectiveType = "standard" | "takeover";
 export type ResourceType = "media_item" | "session_set";
 export type CartridgeKind = "project" | "surface";
@@ -66,14 +70,15 @@ export interface SurfaceLocation {
     readonly locationId: string;
     readonly label: string | null;
 }
-/** §4.4 — a changeover on one lane's timeline. */
+/** §4.4 — a changeover on one slot's timeline. */
 export interface SurfaceScheduleEntry {
     readonly id: number;
     readonly configId: number;
     readonly slot: Slot;
     readonly timestamp: number;
-    /** NULL on a playlist lane is an authored blank (§5.2). */
+    /** On a `playlist` entry, NULL is an authored blank (§5.2). Always NULL on `demo_station`. */
     readonly playlistId: number | null;
+    /** Demo branding (§5.11): a background means demo on. Always NULL on `playlist`. */
     readonly backgroundItemId: number | null;
     readonly overlayItemId: number | null;
 }
@@ -199,10 +204,11 @@ export interface LoadWarning {
     readonly rowId?: number;
 }
 export type LoadWarningCode = "table.unknown" | "column.unknown" | "value.unknown" | "value.malformed" | "reference.dangling" | "position.duplicate" | "timezone.invalid" | "days.empty" | "locations.empty";
-/** The schedule, per lane, sorted by (timestamp, id). */
+/** The schedule, per slot, sorted by (timestamp, id). */
 export interface ScheduleBySlot {
-    readonly portrait: readonly SurfaceScheduleEntry[];
-    readonly landscape: readonly SurfaceScheduleEntry[];
+    /** The one playlist schedule (§5.2). */
+    readonly playlist: readonly SurfaceScheduleEntry[];
+    /** The DemoStation mode's entries (§5.11). */
     readonly demo_station: readonly SurfaceScheduleEntry[];
 }
 interface SnapshotBase {

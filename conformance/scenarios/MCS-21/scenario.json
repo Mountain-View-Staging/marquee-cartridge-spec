@@ -1,0 +1,23 @@
+{
+  "id": "MCS-21",
+  "title": "The same schedule on a landscape device: the landscape-only item plays, and the portrait takeover never interrupts",
+  "rules": "Reference §6.2, §6.3, §9.4",
+  "cartridge": "one-schedule",
+  "engine": {
+    "orientation": "landscape"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 60,
+    "start": "2026-09-15T08:00:00-07:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {}
+  },
+  "events": []
+}

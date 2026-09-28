@@ -31,7 +31,8 @@ const SOURCE = { base: "../example", projectCode: "SHOW26", surfaceCode: "DEMO1"
   stored per show and surface code, so changing the address forgets it.
 - **Renders its own orientation** (§6): automatic — the shape of the window it fills — unless
   `O` sets landscape or portrait on this device. A change applies at once, a resize too while
-  automatic, and a publish never changes it.
+  automatic, and a publish never changes it. The schedule is the same either way (§5.1): the
+  playlist carries on from where it was, with the other orientation's files.
 - **Fetches and verifies media by lane** (§7.7) before the first frame: only the files the
   orientation it renders can show (`filesForLanes`), in the browser's rendition order
   (`webOptimized` first; HEVC only if the browser says it can play it), then size, then
@@ -44,6 +45,9 @@ const SOURCE = { base: "../example", projectCode: "SHOW26", surfaceCode: "DEMO1"
   only when its first frame is ready, so nothing flashes to black; the stage clears only for
   an authored blank; a trimmed video stops on the last frame before its out-point; video
   plays with sound unless muted.
+- **Does not run the DemoStation mode** (§5.11), so it ignores the `demo_station` slot, as a
+  Surface without the mode does. The [explorer](../example/) shows the mode: the same host
+  draws a DemoStation's picture-in-picture there.
 
 ## Keys
 

@@ -11,13 +11,20 @@
  *   tick(wall, mono):
  *     showNow = clock(wall, mono)                 one instant for the whole tick
  *     a jump?  → marker = 0                       §8.3
- *     showNow ≥ next schedule boundary → resolve  §5.2; a new playlist cuts
+ *     showNow ≥ next schedule boundary → resolve  §5.2; a new playlist cuts, and
+ *                                                 on a DemoStation, a demo starting or ending (§5.11)
  *     waiting for a first frame?  10 s of monotonic time → skip; else return
  *     marker forced, or showNow ≥ marker → renderNext   §5.9: the only place content changes
  *
  *   renderNext:
  *     viability pass → working set → next entry after the cursor → RenderItem
  *     with a hint; an empty set holds (the last frame stays) and retries in 2 s
+ *
+ * There is one schedule, whatever the orientation (§5.1). The orientation
+ * rendered — the device's, or the opposite one in a DemoStation's
+ * picture-in-picture — decides only which entries pass the orientation gate and
+ * which file of each plays. When it changes, the playlist is the same, so the
+ * rotation keeps its cursors and continues in the new orientation.
  *
  * Nothing on the tick path allocates when nothing changes, and nothing
  * touches a database: the Snapshot is indexed once, when committed.
@@ -41,6 +48,7 @@ import type {
   Backing,
   BlankRenderItem,
   BoardRenderItem,
+  DemoState,
   Hint,
   MediaRenderItem,
   PlayableRenderItem,
@@ -64,14 +72,30 @@ export const FIRST_FRAME_TIMEOUT_MS = 10_000;
 export const EMPTY_RETRY_MS = 2_000;
 /** §8.3 — forward show-clock movement beyond real elapsed time plus this is a jump. */
 export const JUMP_TOLERANCE_MS = 250;
+/**
+ * §5.14 — with no orientation from the host, the gate is skipped, and each entry
+ * plays this orientation's file, else the other one; backings and demo branding
+ * resolve in it. Landscape, as §6's Automatic reads a display that is not taller
+ * than it is wide.
+ */
+export const ORIENTATION_WHEN_MISSING: Orientation = "landscape";
 
 export interface EngineOptions {
   readonly snapshot: Snapshot;
-  /** The playlist lane this engine resolves. A Surface uses its orientation's lane. */
-  readonly slot: Orientation;
-  /** The orientation files are chosen for (§5.7). The host always supplies it. */
+  /**
+   * The orientation the device renders (§6). The host always supplies it. The
+   * schedule is the same whatever it is (§5.1): it decides which entries pass
+   * the orientation gate and which file of each plays (§5.3, §5.7).
+   */
   readonly orientation: Orientation | null | undefined;
   readonly clock: ShowClock;
+  /**
+   * True on a host that runs the DemoStation mode (§5.11). The engine then
+   * resolves the `demo_station` slot too, and while a demo is on it plays the
+   * same playlist in the picture-in-picture, in the opposite orientation
+   * (`TickOutput.demo`, `RenderItem.pip`). Otherwise the slot is ignored.
+   */
+  readonly demoStation?: boolean;
   /** Defaults to the minimal one-page resolver. */
   readonly boardResolver?: BoardResolver;
   readonly firstFrameTimeoutMs?: number;
@@ -89,6 +113,12 @@ export interface TickOutput {
   /** A new item to put on screen, or null. An empty working set produces none: the last frame stays. */
   readonly renderItem: RenderItem | null;
   readonly trace: readonly TraceEvent[];
+  /**
+   * While a DemoStation's demo is on (§5.11): its branding. The demo fills the
+   * screen, and every item plays in the picture-in-picture (`pip`). Null
+   * otherwise, and always on a host without the DemoStation mode.
+   */
+  readonly demo: DemoState | null;
 }
 
 export type WorkingSetKind = "none" | "standard" | "takeover" | "empty" | "blank";
@@ -112,8 +142,13 @@ export interface EntryInspection {
 export interface Inspection {
   readonly showNow: number;
   readonly day: ProjectDay | null;
-  readonly slot: Orientation;
+  /** The device's orientation, as the host set it (§6). */
   readonly orientation: Orientation | null;
+  /** The orientation whose files play (§5.1): the device's, or the opposite in a DemoStation's picture-in-picture. */
+  readonly renderedOrientation: Orientation | null;
+  /** A DemoStation's demo, while it is on (§5.11). */
+  readonly demo: DemoState | null;
+  /** The active `playlist` schedule entry (§5.2). */
   readonly scheduleEntry: SurfaceScheduleEntry | null;
   readonly playlist: { readonly id: number; readonly name: string } | null;
   readonly nextBoundary: number | null;
@@ -138,10 +173,11 @@ const FORCED = 0, NATURAL = 1, WATCHDOG = 2, INTERRUPT = 3, RETRY = 4, COMPLETED
 const UNRESOLVED = 0, NOTHING = 1, BLANK = 2, PLAYLIST = 3;
 const MARKER_REASONS: readonly MarkerReason[] = ["forced", "natural", "watchdog", "interrupt", "retry", "completed", "skipped"];
 
-type ResolveCause = "boot" | "boundary" | "jump" | "orientation" | "commit";
+type ResolveCause = "boot" | "boundary" | "jump" | "commit";
 
 const NO_EVENTS: readonly TraceEvent[] = Object.freeze([]);
 const NO_SET_ENTRIES: readonly SessionSetEntry[] = Object.freeze([]);
+const NO_SCHEDULE: readonly SurfaceScheduleEntry[] = Object.freeze([]);
 
 /** One playlist entry, compiled for the viability pass. */
 interface EntryPlan {
@@ -181,7 +217,7 @@ class Cursor {
 
 let engines = 0;
 
-/** Creates an engine for one committed Snapshot, one lane and one orientation. */
+/** Creates an engine for one committed Snapshot and one device. */
 export function createEngine(options: EngineOptions): SurfaceEngine {
   return new SurfaceEngine(options);
 }
@@ -190,15 +226,19 @@ export class SurfaceEngine {
   private snap: Snapshot;
   private calendar: Calendar;
   private plans: Map<number, readonly EntryPlan[]>;
+  /** The `playlist` slot: the one schedule (§5.2). */
   private lane: readonly SurfaceScheduleEntry[];
+  /** The `demo_station` slot on a DemoStation host (§5.11); empty otherwise. */
+  private demoLane: readonly SurfaceScheduleEntry[];
+  private readonly demoStation: boolean;
   private readonly clock: ShowClock;
   private readonly boardResolver: BoardResolver;
   private readonly firstFrameTimeoutMs: number;
   private readonly emptyRetryMs: number;
-  private laneSlot: Orientation;
-  /** Whether the lane follows the orientation (it does whenever the two start out the same). */
-  private readonly laneFollows: boolean;
+  /** The device's orientation (§6). */
   private orientationValue: Orientation | null;
+  /** The orientation whose files play (§5.1): the device's, or the opposite during a demo (§5.11). */
+  private rendered: Orientation | null;
   private readonly tokenPrefix: string;
   private tokenCount = 0;
 
@@ -215,6 +255,12 @@ export class SurfaceEngine {
   private nextBoundary = Number.POSITIVE_INFINITY;
   private mustResolve = true;
   private resolveCause: ResolveCause = "boot";
+
+  // The DemoStation mode (§5.11): the active `demo_station` entry, whether it
+  // turns the demo on, and its branding while it does.
+  private demoEntry: SurfaceScheduleEntry | null = null;
+  private demoOn = false;
+  private demoValue: DemoState | null = null;
 
   // Rotation (§5.5, §5.6).
   private readonly standardCursor = new Cursor();
@@ -259,25 +305,26 @@ export class SurfaceEngine {
   private interruptAt = Number.POSITIVE_INFINITY;
   private chosenCode: RenderCode = "rotation.start";
 
-  private readonly out: { showNow: number; projected: boolean; renderItem: RenderItem | null; trace: readonly TraceEvent[] } = {
+  private readonly out: { showNow: number; projected: boolean; renderItem: RenderItem | null; trace: readonly TraceEvent[]; demo: DemoState | null } = {
     showNow: 0,
     projected: false,
     renderItem: null,
     trace: NO_EVENTS,
+    demo: null,
   };
 
   constructor(options: EngineOptions) {
-    const { snapshot, slot, clock } = options;
+    const { snapshot, clock } = options;
     if (!snapshot || snapshot.kind !== "surface") throw new TypeError("createEngine needs a surface Snapshot (loadCartridge)");
-    if (slot !== "portrait" && slot !== "landscape") throw new TypeError(`createEngine: slot must be 'portrait' or 'landscape', not ${String(slot)}`);
     if (!clock || typeof clock.now !== "function") throw new TypeError("createEngine needs a show clock (surfaceClock() or previewClock())");
     this.snap = snapshot;
     this.calendar = new Calendar(snapshot.days, snapshot.meta.timezone);
     this.plans = compilePlans(snapshot);
-    this.laneSlot = slot;
-    this.lane = snapshot.scheduleBySlot[slot];
+    this.demoStation = options.demoStation === true;
+    this.lane = snapshot.scheduleBySlot.playlist;
+    this.demoLane = this.demoStation ? snapshot.scheduleBySlot.demo_station : NO_SCHEDULE;
     this.orientationValue = asOrientation(options.orientation);
-    this.laneFollows = this.orientationValue === null || this.orientationValue === slot;
+    this.rendered = this.orientationValue;
     this.clock = clock;
     this.boardResolver = options.boardResolver ?? minimalBoardResolver;
     this.firstFrameTimeoutMs = options.firstFrameTimeoutMs ?? FIRST_FRAME_TIMEOUT_MS;
@@ -288,11 +335,17 @@ export class SurfaceEngine {
   get snapshot(): Snapshot {
     return this.incoming ?? this.snap;
   }
-  get slot(): Orientation {
-    return this.laneSlot;
-  }
+  /** The device's orientation (§6). */
   get orientation(): Orientation | null {
     return this.orientationValue;
+  }
+  /** The orientation whose files play (§5.1): the device's, or the opposite in a DemoStation's picture-in-picture. */
+  get renderedOrientation(): Orientation | null {
+    return this.rendered;
+  }
+  /** A DemoStation's demo, while it is on (§5.11). */
+  get demo(): DemoState | null {
+    return this.demoValue;
   }
   /** The show clock at the last tick. */
   get showNow(): number {
@@ -421,15 +474,15 @@ export class SurfaceEngine {
   }
 
   /**
-   * The host's orientation changed (§5.1, §6): cut and re-resolve at the next
-   * tick. The lane follows the orientation when the engine was created with
-   * the two the same (or with no orientation); a missing orientation keeps the lane.
+   * The device's orientation changed (§5.1, §6): the operator set it, or the
+   * driven display turned. At the next tick the engine cuts, keeps both
+   * cursors — the playlist is the same — and continues with the new
+   * orientation's files. During a demo the picture-in-picture turns with it.
    */
   setOrientation(orientation: Orientation | null | undefined): readonly TraceEvent[] {
     this.events = null;
     const next = asOrientation(orientation);
     if (next === this.orientationValue) return NO_EVENTS;
-    if (next !== null && this.laneFollows) this.laneSlot = next;
     if (!this.orientationChanged) this.previousOrientation = this.orientationValue;
     this.orientationValue = next;
     this.orientationChanged = true;
@@ -452,6 +505,7 @@ export class SurfaceEngine {
     out.projected = this.clock.kind === "preview" || show !== wall;
     out.renderItem = this.issued;
     out.trace = this.events ?? NO_EVENTS;
+    out.demo = this.demoValue;
     return out;
   }
 
@@ -469,7 +523,8 @@ export class SurfaceEngine {
     this.snap = snapshot;
     this.calendar = new Calendar(snapshot.days, snapshot.meta.timezone);
     this.plans = compilePlans(snapshot);
-    this.lane = snapshot.scheduleBySlot[this.laneSlot];
+    this.lane = snapshot.scheduleBySlot.playlist;
+    this.demoLane = this.demoStation ? snapshot.scheduleBySlot.demo_station : NO_SCHEDULE;
     this.committing = true;
     // A new calendar is not a clock movement.
     this.lastShow = Number.NaN;
@@ -495,6 +550,10 @@ export class SurfaceEngine {
     this.activePlaylistId = null;
     this.activeFrom = Number.NEGATIVE_INFINITY;
     this.nextBoundary = Number.POSITIVE_INFINITY;
+    this.demoEntry = null;
+    this.demoOn = false;
+    this.demoValue = null;
+    this.updateRendered();
     this.mustResolve = true;
     this.resolveCause = "commit";
     this.forceMarker(FORCED);
@@ -502,20 +561,30 @@ export class SurfaceEngine {
     this.lastStateCode = null;
   }
 
+  /**
+   * §5.1 — a rotation. The schedule does not depend on the orientation, so the
+   * playlist is the same and both cursors are kept; the entry on screen is cut,
+   * and the next pass runs in the new orientation. A schedule boundary reached
+   * in the same tick is a cause of its own, recorded by the resolution.
+   */
   private afterOrientationChange(show: number): void {
     this.orientationChanged = false;
-    const lane = this.snap.scheduleBySlot[this.laneSlot];
-    if (this.orientationValue === this.previousOrientation && lane === this.lane) return; // changed and changed back before a tick
+    if (this.orientationValue === this.previousOrientation) return; // changed and changed back before a tick
+    this.updateRendered();
+    this.updateDemo(this.demoEntry); // the branding resolves in the device's orientation
     const on = this.currentItem;
     if (on !== null && on.kind !== "blank") {
-      this.emit({ showTime: show, kind: "cut", code: "orientation.change", entryId: on.entryId, message: `orientation ${this.previousOrientation ?? "missing"} → ${this.orientationValue ?? "missing"}` });
+      this.emit({
+        showTime: show,
+        kind: "cut",
+        code: "orientation.change",
+        entryId: on.entryId,
+        message: `the device's orientation ${this.previousOrientation ?? "missing"} → ${this.orientationValue ?? "missing"}${this.demoOn ? ", and the picture-in-picture's with it" : ""}; entry ${on.entryId} ends now, and the rotation continues after its cursors with ${this.rendered ?? "either slot's"} files`,
+      });
     }
     this.currentLive = false;
     this.pendingItem = null;
     this.clearFailures();
-    this.lane = lane;
-    this.mustResolve = true;
-    if (this.resolveCause === "boundary") this.resolveCause = "orientation";
     this.forceMarker(FORCED);
     if (this.orientationValue !== null) this.orientationWarned = false;
   }
@@ -539,50 +608,114 @@ export class SurfaceEngine {
   }
 
   /**
-   * §5.2 — within the lane, the latest entry whose timestamp ≤ showNow. A
-   * boundary that keeps the playlist does nothing; one that changes it resets
-   * both cursors and forces the next content.
+   * §5.2 — the latest `playlist` entry whose timestamp ≤ showNow, and on a
+   * DemoStation host the latest `demo_station` entry (§5.11). A boundary that
+   * keeps the playlist and the mode does nothing but update the demo branding.
+   * One that changes the playlist resets both cursors; one that starts or ends a
+   * demo moves the rotation between the full screen and the picture-in-picture
+   * and keeps them. Either cuts and forces the next content.
    */
   private resolveSchedule(show: number): void {
-    const lane = this.lane;
-    let lo = 0, hi = lane.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >>> 1;
-      if (lane[mid]!.timestamp <= show) lo = mid + 1;
-      else hi = mid;
-    }
-    const entry = lo > 0 ? lane[lo - 1]! : null;
-    this.activeEntry = entry;
-    this.activeFrom = entry !== null ? entry.timestamp : Number.NEGATIVE_INFINITY;
-    this.nextBoundary = lo < lane.length ? lane[lo]!.timestamp : Number.POSITIVE_INFINITY;
     const cause = this.resolveCause;
     this.mustResolve = false;
     this.resolveCause = "boundary";
 
+    const lane = this.lane;
+    const i = latestAt(lane, show);
+    const entry = i >= 0 ? lane[i]! : null;
+    let from = entry !== null ? entry.timestamp : Number.NEGATIVE_INFINITY;
+    let next = i + 1 < lane.length ? lane[i + 1]!.timestamp : Number.POSITIVE_INFINITY;
+    const demoLane = this.demoLane;
+    const j = latestAt(demoLane, show);
+    const demoEntry = j >= 0 ? demoLane[j]! : null;
+    if (demoEntry !== null && demoEntry.timestamp > from) from = demoEntry.timestamp;
+    if (j + 1 < demoLane.length && demoLane[j + 1]!.timestamp < next) next = demoLane[j + 1]!.timestamp;
+    this.activeEntry = entry;
+    this.activeFrom = from;
+    this.nextBoundary = next;
+    if (demoEntry !== this.demoEntry) this.updateDemo(demoEntry);
+
     const state = entry === null ? NOTHING : entry.playlistId === null ? BLANK : PLAYLIST;
     const playlistId = entry !== null ? entry.playlistId : null;
-    if (state === this.activeState && playlistId === this.activePlaylistId) return;
+    const playlistChanged = state !== this.activeState || playlistId !== this.activePlaylistId;
+    const demoOn = demoEntry !== null && demoEntry.backgroundItemId !== null;
+    const modeChanged = demoOn !== this.demoOn;
+    if (!playlistChanged && !modeChanged) return;
 
+    const recorded = cause === "boundary" && this.activeState !== UNRESOLVED;
     const on = this.currentItem;
-    if (cause === "boundary" && this.activeState !== UNRESOLVED && on !== null && on.kind !== "blank") {
-      this.emit({
-        showTime: show,
-        kind: "cut",
-        code: "schedule.change",
-        entryId: on.entryId,
-        message: `schedule entry ${entry?.id} at ${this.calendar.format(show)}: ${describePlaylist(this.activePlaylistId)} → ${describePlaylist(playlistId)}`,
-      });
+    const previousPlaylist = this.activePlaylistId;
+    if (playlistChanged) {
+      this.activeState = state;
+      this.activePlaylistId = playlistId;
+      this.standardCursor.clear();
+      this.takeoverCursor.clear();
+      this.lastSet = NONE;
     }
-    this.activeState = state;
-    this.activePlaylistId = playlistId;
-    this.standardCursor.clear();
-    this.takeoverCursor.clear();
-    this.lastSet = NONE;
+    if (modeChanged) {
+      this.demoOn = demoOn;
+      this.updateRendered();
+    }
+    // One event per cause: a demo starting or ending names the move; a playlist
+    // change the same boundary makes resets the cursors silently.
+    if (recorded && on !== null && on.kind !== "blank") {
+      this.emit(modeChanged
+        ? {
+          showTime: show,
+          kind: "cut",
+          code: "mode.change",
+          entryId: on.entryId,
+          message: demoOn
+            ? `a demo starts at ${this.calendar.format(show)} (schedule entry ${demoEntry!.id}): entry ${on.entryId} ends now, and the rotation continues in the picture-in-picture with ${this.rendered ?? "either slot's"} files`
+            : `the demo ends at ${this.calendar.format(show)}: entry ${on.entryId} ends now, and the rotation continues on the full screen with ${this.rendered ?? "either slot's"} files`,
+        }
+        : {
+          showTime: show,
+          kind: "cut",
+          code: "schedule.change",
+          entryId: on.entryId,
+          message: `schedule entry ${entry?.id} at ${this.calendar.format(show)}: ${describePlaylist(previousPlaylist)} → ${describePlaylist(playlistId)}`,
+        });
+    }
     this.clearFailures();
     this.currentLive = false;
     this.pendingItem = null;
     this.forceMarker(FORCED);
   }
+
+  // ── the DemoStation mode (§5.11) ─────────────────────────────────────────────
+  //
+  // The picture-in-picture is this engine's own rotation, moved: the same
+  // playlist, in the orientation opposite the device's. That is the whole rule,
+  // and it is here:
+  //   updateRendered  the orientation whose files play while a demo is on;
+  //   updateDemo      the demo's branding, in the device's own orientation.
+  // resolveSchedule starts and ends a demo — a cut that keeps both cursors, as a
+  // rotation does, since the playlist is the same — and the items built while it
+  // is on carry `pip`.
+
+  /** §5.1, §5.11 — the orientation whose files play: the device's, or its opposite while a demo is on. */
+  private updateRendered(): void {
+    const o = this.orientationValue;
+    this.rendered = o === null || !this.demoOn ? o : o === "portrait" ? "landscape" : "portrait";
+  }
+
+  /** §5.11 — the active `demo_station` entry, and its branding in the device's own orientation while it turns the demo on. */
+  private updateDemo(entry: SurfaceScheduleEntry | null): void {
+    this.demoEntry = entry;
+    if (entry === null || entry.backgroundItemId === null) {
+      this.demoValue = null;
+      return;
+    }
+    const orientation = this.orientationValue ?? ORIENTATION_WHEN_MISSING;
+    this.demoValue = Object.freeze({
+      scheduleEntryId: entry.id,
+      background: this.layer(entry.backgroundItemId, orientation),
+      overlay: this.layer(entry.overlayItemId, orientation),
+    });
+  }
+
+  // ── the next content (§5.3 – §5.9) ───────────────────────────────────────────
 
   /** The marker is reached: the current content ends, and the next is chosen. */
   private evaluate(show: number, mono: number): void {
@@ -612,7 +745,7 @@ export class SurfaceEngine {
       if (this.holding("set.empty")) this.rearm(show);
       else this.hold("set.empty", show, this.activeState === PLAYLIST
         ? `playlist ${this.activePlaylistId} is not in the cartridge; the last frame stays`
-        : `nothing is scheduled on the ${this.laneSlot} lane at ${this.calendar.format(show)}; the last frame stays`);
+        : `no playlist is scheduled yet at ${this.calendar.format(show)}; the last frame stays`);
       return;
     }
 
@@ -677,22 +810,22 @@ export class SurfaceEngine {
     this.interruptAt = interrupt;
   }
 
-  /** §5.3 step 2 — an empty slot for this orientation excludes a media entry. */
+  /** §5.3 step 2 — an empty slot for the orientation rendered excludes a media entry. */
   private passesOrientation(plan: EntryPlan): boolean {
     if (plan.board) return plan.set !== null;
     if (plan.item === null) return false;
-    const orientation = this.orientationValue;
+    const orientation = this.rendered;
     if (orientation === null) return plan.portrait !== null || plan.landscape !== null;
     return (orientation === "portrait" ? plan.portrait : plan.landscape) !== null;
   }
 
-  /** The orientation whose slot supplies the file (§5.7); without an orientation, the lane's own first. */
+  /** The orientation whose slot supplies the file (§5.7); without an orientation, landscape's first (§5.14). */
   private playOrientation(plan: EntryPlan): Orientation {
-    const orientation = this.orientationValue;
+    const orientation = this.rendered;
     if (orientation !== null) return orientation;
-    const own = this.laneSlot;
-    if ((own === "portrait" ? plan.portrait : plan.landscape) !== null) return own;
-    return own === "portrait" ? "landscape" : "portrait";
+    const first = ORIENTATION_WHEN_MISSING;
+    if ((first === "portrait" ? plan.portrait : plan.landscape) !== null) return first;
+    return first === "portrait" ? "landscape" : "portrait";
   }
 
   /** §5.6 — the first entry after the cursor, wrapping; the first entry with no cursor. */
@@ -763,6 +896,7 @@ export class SurfaceEngine {
         }),
         backing: this.backing(sessionSet.backingItemId ?? project.backingItemId),
         hint: this.hint(kind, sessionSet.duration * pageCount, show),
+        pip: this.demoOn,
       };
       return Object.freeze(item);
     }
@@ -797,6 +931,7 @@ export class SurfaceEngine {
       }),
       backing: this.backing(project.backingItemId),
       hint: this.hint(kind, video ? watchdogSeconds(window, file) : window.duration!, show),
+      pip: this.demoOn,
     };
     return Object.freeze(item);
   }
@@ -812,12 +947,16 @@ export class SurfaceEngine {
     return Object.freeze({ kind: "duration", seconds });
   }
 
-  /** §5.10 — a backing media item, resolved by orientation with no fallback. */
+  /** §5.10 — a backing media item, resolved in the orientation rendered with no fallback. */
   private backing(itemId: number | null): Backing | null {
+    return this.layer(itemId, this.rendered ?? ORIENTATION_WHEN_MISSING);
+  }
+
+  /** A media item drawn as a layer — a backing, demo branding — resolved in `orientation` with no fallback (§5.7). */
+  private layer(itemId: number | null, orientation: Orientation): Backing | null {
     if (itemId === null) return null;
     const item = this.snap.mediaItems.get(itemId);
     if (item === undefined) return null;
-    const orientation = this.orientationValue ?? this.laneSlot;
     const fileId = orientation === "portrait" ? item.portraitFileId : item.landscapeFileId;
     const file = fileId === null ? undefined : this.snap.mediaFiles.get(fileId);
     if (file === undefined) return null;
@@ -858,7 +997,7 @@ export class SurfaceEngine {
     this.rearm(show);
     if (this.currentItem !== null && this.currentItem.kind === "blank") return;
     const entry = this.activeEntry!;
-    const item: BlankRenderItem = Object.freeze({ kind: "blank", token: this.token(), entryId: null, scheduleEntryId: entry.id });
+    const item: BlankRenderItem = Object.freeze({ kind: "blank", token: this.token(), entryId: null, scheduleEntryId: entry.id, pip: this.demoOn });
     this.currentItem = item;
     this.since = show;
     this.pendingItem = null;
@@ -901,14 +1040,16 @@ export class SurfaceEngine {
     let interrupt = Number.POSITIVE_INFINITY;
     for (const plan of plans) {
       const passes = this.passesOrientation(plan);
-      const orientation = this.orientationValue;
+      const orientation = this.rendered;
       const excluded = passes
         ? null
         : plan.board
           ? "its session set is not in the cartridge"
           : plan.item === null
             ? "its media item is not in the cartridge"
-            : `no ${orientation} file: the slot is empty`;
+            : orientation === null
+              ? "no file in either slot"
+              : `no ${orientation} file: the slot is empty`;
       const file = passes && !plan.board ? (this.playOrientation(plan) === "portrait" ? plan.portrait : plan.landscape) : null;
       const takeoverOn = passes ? plan.takeover.nextOn(show) : Number.POSITIVE_INFINITY;
       const standardState = passes ? plan.standard.state(show, dayStart) : "none";
@@ -940,8 +1081,9 @@ export class SurfaceEngine {
     return Object.freeze({
       showNow: show,
       day,
-      slot: this.laneSlot,
       orientation: this.orientationValue,
+      renderedOrientation: this.rendered,
+      demo: this.demoValue,
       scheduleEntry: this.activeEntry,
       playlist: playlist !== null ? { id: playlist.id, name: playlist.name } : null,
       nextBoundary: Number.isFinite(this.nextBoundary) ? this.nextBoundary : null,
@@ -967,6 +1109,17 @@ export class SurfaceEngine {
 
 function asOrientation(value: unknown): Orientation | null {
   return value === "portrait" || value === "landscape" ? value : null;
+}
+
+/** §5.2 — the index of the latest entry whose timestamp ≤ show (ties: the higher id, sorted last), or −1. */
+function latestAt(timeline: readonly SurfaceScheduleEntry[], show: number): number {
+  let lo = 0, hi = timeline.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (timeline[mid]!.timestamp <= show) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo - 1;
 }
 
 function describePlaylist(id: number | null): string {

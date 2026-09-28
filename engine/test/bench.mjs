@@ -43,7 +43,7 @@ const noop = { out: { trace: [], renderItem: null }, tick(wall, mono) { return w
 async function idleTicks(label, start) {
   // Stills that hold for an hour, so a million 1 ms ticks cross no transition.
   const snapshot = await loadCartridge(variant("base", "UPDATE media_item SET display_duration = 3600"));
-  const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+  const engine = createEngine({ snapshot, orientation: "portrait", clock: surfaceClock() });
   const t0 = at(start);
   const first = engine.tick(t0, 0).renderItem;
   if (first) engine.onFirstFrame(first.token); // else: a hold, re-evaluated every 2 s of show time
@@ -99,7 +99,7 @@ function playlistSql(entries) {
 async function renderNext() {
   const snapshot = await loadCartridge(variant("base", playlistSql(500)));
   const entries = snapshot.playlists.get(1).entries.length;
-  const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+  const engine = createEngine({ snapshot, orientation: "portrait", clock: surfaceClock() });
   const t0 = at("2026-09-15T09:00:00-07:00");
   const samples = [];
   const N = 6000;

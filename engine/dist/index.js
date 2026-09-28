@@ -10,7 +10,7 @@
  *   import { loadCartridge, sqlJsOpener, createEngine, surfaceClock } from "./dist/index.js";
  *
  *   const snapshot = await loadCartridge(bytes, { open: sqlJsOpener(SQL) });
- *   const engine = createEngine({ snapshot, slot: "portrait", orientation: "portrait", clock: surfaceClock() });
+ *   const engine = createEngine({ snapshot, orientation: "portrait", clock: surfaceClock() });
  *   // every frame:
  *   const { renderItem, trace } = engine.tick(Date.now(), performance.now());
  */
@@ -21,7 +21,7 @@ export { isSqlite, loadCartridgeWith, readCartridge } from "./loader.js";
 export { buildSnapshot } from "./snapshot.js";
 export { BASELINE, FORMAT_MAJOR } from "./schema.js";
 export { sqlJsOpener } from "./sqljs.js";
-export { createEngine, SurfaceEngine, EMPTY_RETRY_MS, FIRST_FRAME_TIMEOUT_MS, JUMP_TOLERANCE_MS, } from "./engine.js";
+export { createEngine, SurfaceEngine, EMPTY_RETRY_MS, FIRST_FRAME_TIMEOUT_MS, JUMP_TOLERANCE_MS, ORIENTATION_WHEN_MISSING, } from "./engine.js";
 export { previewClock, surfaceClock } from "./clock.js";
 export { Calendar, DayOne, VenueZone, isValidTimeZone } from "./venue-time.js";
 export { boardPageAt, minimalBoardResolver, } from "./board.js";

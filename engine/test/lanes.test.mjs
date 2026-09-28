@@ -1,7 +1,8 @@
 /**
- * filesForLanes: which files a host needs for the lanes it renders (§7.7).
- * Every file the manifest lists, except those referenced only as an item's
- * slot file on a lane the host does not render.
+ * filesForLanes: which files a host needs for the lanes it renders (§7.7). A
+ * lane is one orientation over the one schedule. Every file the manifest lists,
+ * except those referenced only as an item's slot file for an orientation the
+ * host does not render.
  */
 import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
@@ -48,16 +49,15 @@ test("over every conformance fixture: the two lanes together are the manifest, e
 });
 
 /**
- * A portrait-only config shaped like a real one: the landscape lane is not
- * scheduled, most items carry a landscape file no portrait device can show, and
- * the cartridge also delivers backings, brand files and a file no item names.
+ * A config shaped like a real one, as a portrait device sees it: most items
+ * carry a landscape file no portrait device shows, and the cartridge also
+ * delivers backings, brand files and a file no item names.
  */
 function portraitOnlyShow() {
   const file = (id, orientation) => `
     INSERT INTO media_file VALUES (${id}, 'image/png', 'PNG', 1080, 1920, '${orientation}', 0.5625, NULL, 0, 0);
     INSERT INTO media_manifest VALUES (${id}, 'file-${id}.png', 'sha256:${String(id).padStart(64, "0")}', 1024, 'image/png');`;
   return variant("board", `
-    DELETE FROM surface_schedule_entry WHERE slot = 'landscape';
     -- item 3 becomes landscape-only, its portrait file gone from the cartridge
     UPDATE media_item SET portrait_file_id = NULL WHERE id = 3;
     DELETE FROM media_manifest WHERE media_file_id = 103;
@@ -75,10 +75,9 @@ function portraitOnlyShow() {
     UPDATE session_set SET backing_item_id = 70, brand_style_item_id = 62 WHERE id = 1;`);
 }
 
-test("a portrait-only show: the landscape slot files stay behind; brand files, portrait backings and unnamed files come", async () => {
+test("a portrait device: the landscape slot files stay behind; brand files, portrait backings and unnamed files come", async () => {
   const s = await loadCartridge(portraitOnlyShow());
   assert.deepEqual(s.warnings, []);
-  assert.deepEqual(s.scheduleBySlot.landscape, []);
   assert.deepEqual([...s.manifest.keys()].sort((a, b) => a - b), [101, 150, 201, 203, 250, 260, 261, 262, 270, 280, 999]);
   // 201 and 203 are the rotation's landscape files, 250 the backing's, 270 the board backing's.
   assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"] })), [101, 150, 260, 261, 262, 280, 999]);
@@ -87,7 +86,7 @@ test("a portrait-only show: the landscape slot files stay behind; brand files, p
   assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"], demo: true })), [101, 150, 260, 261, 262, 280, 999]);
 });
 
-test("demo: while the demo lane has an entry with a background, the opposite lane comes too", async () => {
+test("demo: while the demo_station slot has an entry with a background, the opposite lane comes too — the picture-in-picture plays the same playlist in it", async () => {
   const on = await loadCartridge(variant("base", `
     INSERT INTO surface_schedule_entry VALUES (10, 1, 'demo_station', 1789488000000, NULL, 1, NULL, 0, 0);
     INSERT INTO surface_schedule_entry VALUES (11, 1, 'demo_station', 1789491600000, NULL, NULL, NULL, 0, 0)`));
@@ -99,6 +98,14 @@ test("demo: while the demo lane has an entry with a background, the opposite lan
   // Only "demo off" entries (no background): no picture-in-picture, no opposite lane.
   const off = await loadCartridge(variant("base", "INSERT INTO surface_schedule_entry VALUES (11, 1, 'demo_station', 1789491600000, NULL, NULL, NULL, 0, 0)"));
   assert.deepEqual(ids(filesForLanes(off, { lanes: ["portrait"], demo: true })), [101, 102, 103, 104]);
+});
+
+test("the demo-station fixture: a portrait DemoStation fetches both lanes; a plain portrait Surface one", async () => {
+  // Items 1, 2, 4 have both files; 3 is portrait-only; 8 and 9 are the demo's overlay and background.
+  const s = await loadCartridge(fixture("demo-station"));
+  assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"], demo: true })), [101, 102, 103, 104, 108, 109, 201, 202, 204, 208, 209]);
+  assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"] })), [101, 102, 103, 104, 108, 109]);
+  assert.deepEqual(ids(filesForLanes(s, { lanes: ["landscape"] })), [201, 202, 204, 208, 209]);
 });
 
 test("a project snapshot reads the same way", async () => {

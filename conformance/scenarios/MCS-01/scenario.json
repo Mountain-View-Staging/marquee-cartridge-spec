@@ -4,7 +4,6 @@
   "rules": "Reference §6.5, §6.6",
   "cartridge": "base",
   "engine": {
-    "slot": "portrait",
     "orientation": "portrait"
   },
   "clock": {

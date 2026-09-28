@@ -91,7 +91,7 @@ CREATE TABLE surface_location (
 CREATE TABLE surface_schedule_entry (
   id                 INTEGER PRIMARY KEY,
   config_id          INTEGER NOT NULL REFERENCES surface_config(id),
-  slot               TEXT    NOT NULL,   -- 'portrait' | 'landscape' | 'demo_station'
+  slot               TEXT    NOT NULL,   -- 'playlist' | 'demo_station'
   timestamp          INTEGER NOT NULL,   -- most-recent <= now wins, per slot
   playlist_id        INTEGER REFERENCES playlist(id),     -- NULL on demo_station entries
   background_item_id INTEGER REFERENCES media_item(id),   -- demo branding (behind)
@@ -99,7 +99,7 @@ CREATE TABLE surface_schedule_entry (
   created            INTEGER NOT NULL,
   updated            INTEGER NOT NULL,
   CHECK (
-    ( slot IN ('portrait','landscape')
+    ( slot = 'playlist'
         AND background_item_id IS NULL AND overlay_item_id IS NULL )
     OR
     ( slot = 'demo_station'
@@ -248,7 +248,8 @@ def base(**over):
         days=[day("2026-09-15")],
         items=[still(1), still(2), still(3), still(4)],
         playlists={1: [1, 2, 3, 4]},
-        schedule=[("portrait", "2026-09-15 00:00:00", 1), ("landscape", "2026-09-15 00:00:00", 1)],
+        # One schedule, whatever the orientation: (slot, when, playlist[, background, overlay]).
+        schedule=[("playlist", "2026-09-15 00:00:00", 1)],
         directives=[(e, "standard", "2026-09-15 08:00:00", 1) for e in (1, 2, 3, 4)]
                    + [(2, "takeover", "2026-09-15 11:30:00", 1), (2, "takeover", "2026-09-15 12:30:00", 0)],
         session_sets=[],
@@ -288,7 +289,7 @@ CARTRIDGES = {
     "schedule-change": base(
         items=[still(1), still(2), still(3), still(4), still(11), still(12)],
         playlists={1: [1, 2, 3, 4], 2: [11, 12]},
-        schedule=[("portrait", "2026-09-15 00:00:00", 1), ("portrait", "2026-09-15 08:00:25", 2)],
+        schedule=[("playlist", "2026-09-15 00:00:00", 1), ("playlist", "2026-09-15 08:00:25", 2)],
         directives=std((1, 2, 3, 4, 11, 12))),
     # MCS-13
     "two-days": base(
@@ -309,9 +310,33 @@ CARTRIDGES = {
         directives=std((1, 2)) + [(3, "takeover", "2026-09-15 08:00:05", 1)]),
     # MCS-19
     "boundaries": base(
-        schedule=[("portrait", "2026-09-15 00:00:00", 1), ("portrait", "2026-09-15 08:00:15", 1),
-                  ("portrait", "2026-09-15 08:00:35", None)],
+        schedule=[("playlist", "2026-09-15 00:00:00", 1), ("playlist", "2026-09-15 08:00:15", 1),
+                  ("playlist", "2026-09-15 08:00:35", None)],
         directives=std((1, 2, 3, 4))),
+    # MCS-20, 21, 22: one schedule, played in both orientations. Item 2 has a portrait file
+    # only and item 3 a landscape file only, so entry 2's takeover is a portrait takeover.
+    "one-schedule": base(
+        items=[still(1), still(2, landscape=False), still(3, portrait=False), still(4)],
+        directives=std((1, 2, 3, 4)) + [(2, "takeover", "2026-09-15 08:00:25", 1),
+                                        (2, "takeover", "2026-09-15 08:00:45", 0)]),
+    # MCS-23: a DemoStation. The demo is on from 08:00:25 (background item 9, overlay item 8,
+    # neither in a playlist) and off from 08:00:55. Item 3 has a portrait file only.
+    "demo-station": base(
+        items=[still(1), still(2), still(3, landscape=False), still(4), still(8), still(9)],
+        directives=std((1, 2, 3, 4)),
+        schedule=[("playlist", "2026-09-15 00:00:00", 1),
+                  ("demo_station", "2026-09-15 08:00:25", None, 9, 8),
+                  ("demo_station", "2026-09-15 08:00:55", None, None, None)]),
+    # MCS-24: an earlier draft's rows, on the retired slots 'landscape' and 'portrait', beside
+    # the one playlist schedule. Read as schedule entries, they would blank the screen at
+    # 08:00:15 or switch to playlist B at 08:00:25.
+    "retired-slot": base(
+        items=[still(1), still(2), still(3), still(4), still(11), still(12)],
+        playlists={1: [1, 2, 3, 4], 2: [11, 12]},
+        directives=std((1, 2, 3, 4, 11, 12)),
+        schedule=[("playlist", "2026-09-15 00:00:00", 1),
+                  ("landscape", "2026-09-15 08:00:15", None),
+                  ("portrait", "2026-09-15 08:00:25", 2)]),
 }
 
 # ── writer ─────────────────────────────────────────────────────────────────────
@@ -383,8 +408,15 @@ def build(name, c):
                 x("INSERT INTO playlist_entry VALUES (?,?,?,'media_item',?,NULL,NULL,NULL,NULL,NULL,?,?)",
                   (e, pid, pos, e, NOW, NOW))
 
-    for n, (slot, when, pid) in enumerate(c["schedule"], 1):
-        x("INSERT INTO surface_schedule_entry VALUES (?,1,?,?,?,NULL,NULL,?,?)", (n, slot, ms(when), pid, NOW, NOW))
+    for n, row in enumerate(c["schedule"], 1):
+        slot, when, pid, background, overlay = (tuple(row) + (None, None))[:5]
+        retired = slot not in ("playlist", "demo_station")
+        if retired:  # an earlier draft's slot, which the CHECK no longer admits (MCS-24)
+            x("PRAGMA ignore_check_constraints = ON")
+        x("INSERT INTO surface_schedule_entry VALUES (?,1,?,?,?,?,?,?,?)",
+          (n, slot, ms(when), pid, background, overlay, NOW, NOW))
+        if retired:
+            x("PRAGMA ignore_check_constraints = OFF")
     for n, (entry, typ, when, on) in enumerate(c["directives"], 1):
         x("INSERT INTO directive VALUES (?,?,?,?,?,?,?,?)", (n, entry, typ, ms(when), on, TZ, NOW, NOW))
 

@@ -8,7 +8,7 @@
  *
  * Indexes (built once):
  *   days                   sorted by (startTime, id)
- *   scheduleBySlot         per lane, sorted by (timestamp, id)
+ *   scheduleBySlot         per slot, sorted by (timestamp, id)
  *   playlists[].entries    sorted by (position, id)
  *   directives             per entry, per type, sorted by (timestamp, id)
  *   sessionSetEntries      per set, sorted by (startTime, id)

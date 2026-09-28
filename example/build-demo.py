@@ -17,22 +17,26 @@ No dependencies beyond python3; ffmpeg is optional and only for the video item
 
 The content is chosen so the rules that are easiest to get wrong are VISIBLE:
 
-  per-slot resolution    the landscape and portrait lanes run different playlists
-  takeover + the cut     SAFETY NOTICE takes over both lanes 12:00-14:00 on Day 1,
-                         cutting whatever is on screen at 12:00:00
+  one schedule           one playlist plays in both orientations, each item with that
+                         orientation's file; a rotation keeps its place in it
+  takeover + the cut     SAFETY NOTICE takes over 12:00-14:00 on Day 1, in either
+                         orientation, cutting whatever is on screen at 12:00:00
   cursor resume          at 14:00 the notice finishes its time, then the standard
                          rotation resumes after the entry it cut, not at the top
   day-scoped directives  RECEPTION turns on at 17:00 on Day 1 with no OFF; on
                          Day 2 it is not on, because Day 1's directive stays in Day 1
-  empty orientation slot WAYFINDING has only a portrait file, so the landscape
-                         playlist skips it
+  empty orientation slot WAYFINDING has only a portrait file, so a landscape
+                         device skips it
   a slot plays as authored  SPONSORS' portrait slot holds its landscape file, so a
                          portrait Surface shows a landscape image, letterboxed over
                          the project's backing
-  an authored blank      from 18:00 on Day 2 both lanes are scheduled with no
-                         playlist: the screen clears
+  an authored blank      from 18:00 on Day 2 the schedule has no playlist: the
+                         screen clears
   a trimmed video        the landscape SIZZLE REEL plays 1 s to 5 s of a 6 s clip
   a session board        MAIN HALL, over its own backing
+  a DemoStation          a demo from 15:30 to 15:45 on Day 1: a DemoStation plays the
+                         rotation in its picture-in-picture, in the other orientation,
+                         and picks up where it was when the demo ends
 
 Day 1 is 2026-10-05, Day 2 2026-10-06, in America/Los_Angeles. Outside those
 days a Surface shows Day 1 at the venue's current time of day (§8.2).
@@ -145,7 +149,7 @@ DDL = {
   created            INTEGER NOT NULL,
   updated            INTEGER NOT NULL,
   CHECK (
-    ( slot IN ('portrait','landscape')
+    ( slot = 'playlist'
         AND background_item_id IS NULL AND overlay_item_id IS NULL )
     OR
     ( slot = 'demo_station'
@@ -318,17 +322,23 @@ GLYPHS = {
 
 
 class Canvas:
-    def __init__(self, width, height, rgb):
+    """RGB, or RGBA when `alpha` is given (the alpha of the fill; drawing is opaque)."""
+
+    def __init__(self, width, height, rgb, alpha=None):
         self.width, self.height = width, height
-        self.rows = [bytearray(bytes(rgb) * width) for _ in range(height)]
+        self.channels = 3 if alpha is None else 4
+        fill = bytes(rgb) if alpha is None else bytes(rgb) + bytes([alpha])
+        self.rows = [bytearray(fill * width) for _ in range(height)]
 
     def rect(self, x, y, w, h, rgb):
         x0, x1 = max(0, x), min(self.width, x + w)
         if x1 <= x0:
             return
-        run = bytes(rgb) * (x1 - x0)
+        px = bytes(rgb) if self.channels == 3 else bytes(rgb) + b"\xff"
+        run = px * (x1 - x0)
+        n = self.channels
         for row in range(max(0, y), min(self.height, y + h)):
-            self.rows[row][x0 * 3:x1 * 3] = run
+            self.rows[row][x0 * n:x1 * n] = run
 
     def frame(self, px, rgb):
         self.rect(0, 0, self.width, px, rgb)
@@ -355,7 +365,7 @@ class Canvas:
         def chunk(tag, data):
             return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
 
-        ihdr = struct.pack(">IIBBBBB", self.width, self.height, 8, 2, 0, 0, 0)
+        ihdr = struct.pack(">IIBBBBB", self.width, self.height, 8, 2 if self.channels == 3 else 6, 0, 0, 0)
         return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr)
                 + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
 
@@ -376,6 +386,18 @@ def backing(width, height, rgb, stripe):
     for row in range(height):
         for start in range(-height, width, band * 2):
             c.rect(start + row, row, band, 1, stripe)
+    return c.png()
+
+
+def overlay(width, height, rgb, label):
+    """Demo branding in front of everything: a frame and a label, transparent elsewhere."""
+    c = Canvas(width, height, (0, 0, 0), alpha=0)
+    c.frame(16, rgb)
+    short = min(width, height)
+    scale = max(3, short // 120)
+    band = 7 * scale + 4 * scale
+    c.rect((width - len(label) * 6 * scale - 4 * scale) // 2, 16, len(label) * 6 * scale + 4 * scale, band, rgb)
+    c.text(label, 16 + band // 2, scale, (255, 255, 255))
     return c.png()
 
 
@@ -426,10 +448,13 @@ ITEMS = {
     107: ("Reception tonight", "image", TEAL, "own", "own", 6),
     120: ("Backing", "backing", (0x14, 0x1A, 0x22), "own", "own", None),
     121: ("Main hall backing", "backing", (0x10, 0x2A, 0x3A), "own", "own", None),
+    122: ("Demo background", "backing", (0x2A, 0x14, 0x3C), "own", "own", None),
+    123: ("Demo overlay", "overlay", AMBER, "own", "own", None),
 }
 
-LANDSCAPE_PLAYLIST = [101, 102, 103, 104, 105, 106, 107, "board"]   # 104 has no landscape file
-PORTRAIT_PLAYLIST = [101, 104, 103, 105, 106, 107, "board"]         # 103 is a landscape file here
+# One playlist for every orientation (§5.1): 104 has no landscape file, so a landscape
+# device skips it; 103's portrait slot holds its landscape file.
+PLAYLIST = [101, 102, 103, 104, 105, 106, 107, "board"]
 
 SESSIONS = [  # (day, start, end, name)
     (0, "09:00", "10:00", "Opening keynote"),
@@ -479,6 +504,8 @@ def build():
             elif kind == "backing":
                 shade = tuple(min(255, c + 14) for c in rgb)
                 made[orient] = add_file(backing(w, h, rgb, shade), "image/png", "PNG", w, h, None)
+            elif kind == "overlay":
+                made[orient] = add_file(overlay(w, h, rgb, "LIVE DEMO"), "image/png", "PNG", w, h, None)
             else:
                 data = video(w, h, rgb)
                 if data is None:
@@ -562,36 +589,37 @@ def build():
         db.execute("INSERT INTO session_set_entry VALUES (?,1,?,NULL,?,?,NULL,'Main Hall',?,?)",
                    (n, n, ms(f"{DAYS[d]} {start}:00"), ms(f"{DAYS[d]} {end}:00"), GENERATED_AT, GENERATED_AT))
 
-    db.execute("INSERT INTO playlist VALUES (1, 'Landscape rotation', ?, ?)", (GENERATED_AT, GENERATED_AT))
-    db.execute("INSERT INTO playlist VALUES (2, 'Portrait rotation', ?, ?)", (GENERATED_AT, GENERATED_AT))
+    db.execute("INSERT INTO playlist VALUES (1, 'Rotation', ?, ?)", (GENERATED_AT, GENERATED_AT))
 
-    entries = []   # (entry id, playlist, item or "board")
+    entries = []   # (entry id, item or "board")
     eid = 1
-    for playlist, items in ((1, LANDSCAPE_PLAYLIST), (2, PORTRAIT_PLAYLIST)):
-        for position, item in enumerate(items, 1):
-            if item != "board" and item not in slots:
-                continue   # no ffmpeg: the video item is absent
-            if item == "board":
-                db.execute("INSERT INTO playlist_entry VALUES (?,?,?,'session_set',NULL,1,NULL,NULL,NULL,NULL,?,?)",
-                           (eid, playlist, position, GENERATED_AT, GENERATED_AT))
-            else:
-                # The landscape Sizzle reel is trimmed to 1 s - 5 s of its 6 s (§5.8).
-                trim = (1.0, 5.0) if item == 106 else (None, None)
-                db.execute("INSERT INTO playlist_entry VALUES (?,?,?,'media_item',?,NULL,NULL,NULL,?,?,?,?)",
-                           (eid, playlist, position, item, trim[0], trim[1], GENERATED_AT, GENERATED_AT))
-            entries.append((eid, playlist, item))
-            eid += 1
+    for position, item in enumerate(PLAYLIST, 1):
+        if item != "board" and item not in slots:
+            continue   # no ffmpeg: the video item is absent
+        if item == "board":
+            db.execute("INSERT INTO playlist_entry VALUES (?,1,?,'session_set',NULL,1,NULL,NULL,NULL,NULL,?,?)",
+                       (eid, position, GENERATED_AT, GENERATED_AT))
+        else:
+            # The Sizzle reel is trimmed to 1 s - 5 s of its 6 s in landscape only (§5.8).
+            trim = (1.0, 5.0) if item == 106 else (None, None)
+            db.execute("INSERT INTO playlist_entry VALUES (?,1,?,'media_item',?,NULL,NULL,NULL,?,?,?,?)",
+                       (eid, position, item, trim[0], trim[1], GENERATED_AT, GENERATED_AT))
+        entries.append((eid, item))
+        eid += 1
 
-    # The schedule: each lane runs its own playlist (§5.2), and from 18:00 on
-    # Day 2 both lanes are an authored blank.
-    sid = 1
-    for slot, playlist in (("landscape", 1), ("portrait", 2)):
-        db.execute("INSERT INTO surface_schedule_entry VALUES (?,1,?,?,?,NULL,NULL,?,?)",
-                   (sid, slot, day_windows[0][0], playlist, GENERATED_AT, GENERATED_AT))
-        sid += 1
-        db.execute("INSERT INTO surface_schedule_entry VALUES (?,1,?,?,NULL,NULL,NULL,?,?)",
-                   (sid, slot, ms(f"{DAYS[1]} 18:00:00"), GENERATED_AT, GENERATED_AT))
-        sid += 1
+    # The schedule: one, whatever the orientation (§5.1). The rotation from Day 1,
+    # and from 18:00 on Day 2 an authored blank (§5.2).
+    db.execute("INSERT INTO surface_schedule_entry VALUES (1,1,'playlist',?,1,NULL,NULL,?,?)",
+               (day_windows[0][0], GENERATED_AT, GENERATED_AT))
+    db.execute("INSERT INTO surface_schedule_entry VALUES (2,1,'playlist',?,NULL,NULL,NULL,?,?)",
+               (ms(f"{DAYS[1]} 18:00:00"), GENERATED_AT, GENERATED_AT))
+    # A demo from 15:30 to 15:45 on Day 1 (§5.11). A DemoStation shows it, framed by
+    # the background and the overlay, and plays the rotation in its picture-in-picture;
+    # a Surface without the mode ignores these rows.
+    db.execute("INSERT INTO surface_schedule_entry VALUES (3,1,'demo_station',?,NULL,122,123,?,?)",
+               (ms(f"{DAYS[0]} 15:30:00"), GENERATED_AT, GENERATED_AT))
+    db.execute("INSERT INTO surface_schedule_entry VALUES (4,1,'demo_station',?,NULL,NULL,NULL,?,?)",
+               (ms(f"{DAYS[0]} 15:45:00"), GENERATED_AT, GENERATED_AT))
 
     did = 1
 
@@ -601,7 +629,7 @@ def build():
                    (did, entry, kind, when, on, TZ, GENERATED_AT, GENERATED_AT))
         did += 1
 
-    for entry, _playlist, item in entries:
+    for entry, item in entries:
         if item == 105:
             # The safety notice is takeover only, on Day 1: ON 12:00, OFF 14:00.
             directive(entry, "takeover", ms(f"{DAYS[0]} 12:00:00"), 1)

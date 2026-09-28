@@ -8,7 +8,7 @@
  *
  * Indexes (built once):
  *   days                   sorted by (startTime, id)
- *   scheduleBySlot         per lane, sorted by (timestamp, id)
+ *   scheduleBySlot         per slot, sorted by (timestamp, id)
  *   playlists[].entries    sorted by (position, id)
  *   directives             per entry, per type, sorted by (timestamp, id)
  *   sessionSetEntries      per set, sorted by (startTime, id)
@@ -17,7 +17,7 @@
  * the same choice when two rows share a timestamp or a position.
  */
 import { CartridgeError } from "./errors.js";
-import { KNOWN } from "./schema.js";
+import { KNOWN, RETIRED } from "./schema.js";
 import { isValidTimeZone } from "./venue-time.js";
 /** Session board page length when a set's duration is unusable (the column's default). */
 const DEFAULT_PAGE_SECONDS = 8;
@@ -183,10 +183,16 @@ export function buildSnapshot(kind, raw, warnings) {
         warn({ code: "locations.empty", table: "surface_location", message: "the cartridge lists no installation; a device has no location to choose" });
     }
     const playlistRows = rows("playlist");
-    const lanes = { portrait: [], landscape: [], demo_station: [] };
+    const slots = { playlist: [], demo_station: [] };
     for (const r of rows("surface_schedule_entry")) {
         const id = num(r, "id");
         const slot = str(r, "slot");
+        // An earlier draft scheduled playlists per orientation. There is no dual
+        // reading: such a row is malformed (§4.4), and says so.
+        if (RETIRED.slot.has(slot)) {
+            warn({ code: "value.malformed", table: "surface_schedule_entry", column: "slot", rowId: id, message: `schedule entry ${id} is on slot '${slot}', which the format has retired: a surface has one playlist schedule; the row is malformed and ignored` });
+            continue;
+        }
         if (!KNOWN.slot.has(slot)) {
             warn({ code: "value.unknown", table: "surface_schedule_entry", column: "slot", rowId: id, message: `schedule entry ${id} is on slot '${slot}', which this engine does not know; ignored` });
             continue;
@@ -204,10 +210,10 @@ export function buildSnapshot(kind, raw, warnings) {
             warn({ code: "reference.dangling", table: "surface_schedule_entry", rowId: id, message: `schedule entry ${id} belongs to surface_config ${entry.configId}, not this cartridge's ${surfaceConfig.id}; ignored` });
             continue;
         }
-        lanes[entry.slot].push(entry);
+        slots[entry.slot].push(entry);
     }
-    for (const lane of Object.values(lanes))
-        lane.sort((a, b) => a.timestamp - b.timestamp || a.id - b.id);
+    for (const timeline of Object.values(slots))
+        timeline.sort((a, b) => a.timestamp - b.timestamp || a.id - b.id);
     const sessions = new Map();
     for (const r of rows("session")) {
         const id = num(r, "id");
@@ -323,8 +329,8 @@ export function buildSnapshot(kind, raw, warnings) {
         }
         playlists.set(id, Object.freeze({ id, name: playlistNames.get(id), entries: Object.freeze(list) }));
     }
-    for (const lane of Object.values(lanes)) {
-        for (const s of lane) {
+    for (const timeline of Object.values(slots)) {
+        for (const s of timeline) {
             if (s.playlistId !== null && !playlists.has(s.playlistId)) {
                 warn({ code: "reference.dangling", table: "surface_schedule_entry", column: "playlist_id", rowId: s.id, message: `schedule entry ${s.id} names playlist ${s.playlistId}, which the cartridge does not carry` });
             }
@@ -372,9 +378,8 @@ export function buildSnapshot(kind, raw, warnings) {
         surfaceConfig,
         locations: Object.freeze(locations),
         scheduleBySlot: Object.freeze({
-            portrait: Object.freeze(lanes.portrait),
-            landscape: Object.freeze(lanes.landscape),
-            demo_station: Object.freeze(lanes.demo_station),
+            playlist: Object.freeze(slots.playlist),
+            demo_station: Object.freeze(slots.demo_station),
         }),
         playlists,
         directives,

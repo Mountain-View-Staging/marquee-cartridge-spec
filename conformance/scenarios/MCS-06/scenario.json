@@ -4,7 +4,6 @@
   "rules": "Reference §6.4",
   "cartridge": "two-takeovers",
   "engine": {
-    "slot": "portrait",
     "orientation": "portrait"
   },
   "clock": {
