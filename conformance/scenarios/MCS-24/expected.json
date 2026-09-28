@@ -42,7 +42,7 @@
       "file": 101
     }
   ],
-  "warnings": [
+  "loadWarnings": [
     {
       "code": "value.malformed",
       "table": "surface_schedule_entry",

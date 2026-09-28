@@ -90,7 +90,7 @@ separately.
 ## The trace
 
 `expected.json` is `{ id, trace: [event, …] }`, and for a scenario about the Loader also
-`warnings` (below). Events are compared field for field, in order.
+`loadWarnings` (below). Events are compared field for field, in order.
 
 | Field | Present on | Meaning |
 |---|---|---|
@@ -135,9 +135,9 @@ Codes are the stable contract; any human-readable text an engine attaches is fre
 ### Load warnings
 
 A scenario about the Loader lists, in `expected.json`, the warnings it must give for the
-cartridge: `warnings: [{ code, table, column?, row? }, …]`, compared field for field and in
+cartridge: `loadWarnings: [{ code, table, column?, row? }, …]`, compared field for field and in
 order (the Loader's order: the rows of one table by `id`). `row` is the row's `id`. A scenario
-without `warnings` does not compare them. Codes are the Loader's, as stable as the trace's:
+without `loadWarnings` does not compare them. Codes are the Loader's, as stable as the trace's:
 `table.unknown`, `column.unknown`, `value.unknown`, `value.malformed`, `reference.dangling`,
 `position.duplicate`, `timezone.invalid`, `days.empty`, `locations.empty`.
 

@@ -11,7 +11,7 @@
  * The runner is the simulated HOST described in README.md: it drives the
  * engine's clock, answers each render item the way `scenario.host` says a real
  * host would, and compares the engine's trace with `expected.json` — and, where
- * `expected.json` lists them, the Loader's warnings.
+ * `expected.json` lists them (`loadWarnings`), the Loader's warnings.
  */
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -57,7 +57,8 @@ function validate(dir) {
     if (ev.type === "setOrientation" && !ORIENTATIONS.includes(ev.orientation)) problems.push(`setOrientation at second ${ev.atSecond}: ${ev.orientation}`);
     else if (ev.type !== "setOrientation" && ev.type !== "wallJump") problems.push(`unknown event type ${ev.type}`);
   }
-  for (const [i, w] of (e.warnings ?? []).entries()) {
+  if ("warnings" in e) problems.push("the Loader's warnings are listed as loadWarnings");
+  for (const [i, w] of (e.loadWarnings ?? []).entries()) {
     if (!WARNING_CODES.includes(w.code)) problems.push(`warning ${i}: unknown code ${w.code}`);
     if (typeof w.table !== "string") problems.push(`warning ${i}: no table`);
   }
@@ -154,11 +155,11 @@ async function run(engineMod, dir) {
     if (a !== b) diffs.push(`#${i}\n    expected ${b}\n    actual   ${a}`);
   }
   // The Loader's warnings, in order, where the scenario lists them.
-  if (expectedFile.warnings) {
+  if (expectedFile.loadWarnings) {
     const loaded = (snapshot.warnings ?? []).map(normalizeWarning);
-    const n = Math.max(loaded.length, expectedFile.warnings.length);
+    const n = Math.max(loaded.length, expectedFile.loadWarnings.length);
     for (let i = 0; i < n; i++) {
-      const a = JSON.stringify(loaded[i] ?? null), b = JSON.stringify(expectedFile.warnings[i] ?? null);
+      const a = JSON.stringify(loaded[i] ?? null), b = JSON.stringify(expectedFile.loadWarnings[i] ?? null);
       if (a !== b) diffs.push(`warning #${i}\n    expected ${b}\n    actual   ${a}`);
     }
   }
