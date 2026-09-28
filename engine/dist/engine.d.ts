@@ -17,8 +17,9 @@
  *     marker forced, or showNow ≥ marker → renderNext   §5.9: the only place content changes
  *
  *   renderNext:
- *     viability pass → working set → next entry after the cursor → RenderItem
- *     with a hint; an empty set holds (the last frame stays) and retries in 2 s
+ *     viability pass → working set (alert, else takeover, else standard) →
+ *     next entry after the cursor → RenderItem with a hint; an empty set holds
+ *     (the last frame stays) and retries in 2 s
  *
  * There is one schedule, whatever the orientation (§5.1). The orientation
  * rendered — the device's, or the opposite one in a DemoStation's
@@ -88,7 +89,7 @@ export interface TickOutput {
      */
     readonly demo: DemoState | null;
 }
-export type WorkingSetKind = "none" | "standard" | "takeover" | "empty" | "blank";
+export type WorkingSetKind = "none" | "standard" | "takeover" | "alert" | "empty" | "blank";
 export type MarkerReason = "forced" | "natural" | "watchdog" | "interrupt" | "retry" | "completed" | "skipped";
 export interface EntryInspection {
     readonly entryId: number;
@@ -100,8 +101,12 @@ export interface EntryInspection {
     readonly mediaFileId: number | null;
     readonly standard: DirectiveState;
     readonly takeover: DirectiveState;
+    /** Its alert directives' state: over the whole timeline, never day-scoped (§5.4). */
+    readonly alert: DirectiveState;
     /** When its takeover next turns ON, if it will. */
     readonly takeoverOnAt: number | null;
+    /** When its alert next turns ON, if it will. */
+    readonly alertOnAt: number | null;
 }
 /** A read-only account of the engine at its last tick, for status views. Allocates. */
 export interface Inspection {
@@ -124,12 +129,14 @@ export interface Inspection {
     readonly workingSet: WorkingSetKind;
     /** Entry ids of the working set, in rotation order. */
     readonly rotation: readonly number[];
-    /** Standard entries suppressed by an active takeover. */
+    /** Entries a higher set suppresses: standard ones under a takeover; standard and takeover ones under an alert. */
     readonly suppressed: readonly number[];
+    /** The next activation that cuts what rules: an alert's or a takeover's under standard, an alert's under a takeover. */
     readonly interruptAt: number | null;
     readonly cursors: {
         readonly standard: number | null;
         readonly takeover: number | null;
+        readonly alert: number | null;
     };
     readonly marker: number;
     readonly markerReason: MarkerReason;
@@ -173,6 +180,7 @@ export declare class SurfaceEngine {
     private demoValue;
     private readonly standardCursor;
     private readonly takeoverCursor;
+    private readonly alertCursor;
     private lastSet;
     /** Entries that failed since an item last finished its time: when it covers the working set, hold. */
     private readonly failed;
@@ -185,8 +193,10 @@ export declare class SurfaceEngine {
     private currentLive;
     private pendingItem;
     private pendingMono;
-    /** The takeover activation known when the pending item was chosen (standard items only). */
+    /** The activation known to cut the pending item when it was chosen: a takeover's or an alert's (§5.9). */
     private pendingInterruptAt;
+    /** Which of the two that activation is, for the trace's words. */
+    private pendingInterruptByAlert;
     private issued;
     private events;
     private lastStateKind;
@@ -198,7 +208,10 @@ export declare class SurfaceEngine {
     private committing;
     private readonly standardList;
     private readonly takeoverList;
-    private interruptAt;
+    private readonly alertList;
+    /** The earliest future activations among the viable entries (§5.9), from the last pass. */
+    private nextTakeoverOn;
+    private nextAlertOn;
     private chosenCode;
     private readonly out;
     constructor(options: EngineOptions);
@@ -263,11 +276,19 @@ export declare class SurfaceEngine {
     private evaluate;
     private renderNext;
     /**
-     * §5.3 — the viability pass: day → orientation → directives, cheapest
-     * first. Fills the two sets in position order, and while standard would
-     * rule, the earliest future takeover activation (§5.9 interruptAt).
+     * §5.3 — the viability pass, for each entry: the orientation gate, then its
+     * alert directives over the whole timeline, then — scoped to the day — its
+     * takeover and standard directives. Fills the three sets in position order,
+     * and the earliest future activation of each higher set (§5.9 interrupts).
      */
     private pass;
+    /**
+     * §5.9 — the activation that cuts an item of this set: under standard, the
+     * next takeover or alert; under a takeover, the next alert; nothing cuts an alert.
+     */
+    private interruptFor;
+    /** §5.6 — the cursor of an item's set. */
+    private cursorOf;
     /** §5.3 step 2 — an empty slot for the orientation rendered excludes a media entry. */
     private passesOrientation;
     /** The orientation whose slot supplies the file (§5.7); without an orientation, landscape's first (§5.14). */
@@ -280,8 +301,8 @@ export declare class SurfaceEngine {
     /** The RenderItem for a chosen entry, or null when the entry is skipped on the spot. */
     private build;
     /**
-     * §5.9 — a duration, unless a known interrupt comes first: while the
-     * standard set rules, the next takeover activation replaces the duration.
+     * §5.9 — a duration, unless a known interrupt comes first: the next
+     * activation of a higher set (interruptFor) replaces the duration.
      */
     private hint;
     /** §5.10 — a backing media item, resolved in the orientation rendered with no fallback. */

@@ -335,7 +335,7 @@ CREATE TABLE playlist_entry (
 CREATE TABLE directive (
   id        INTEGER PRIMARY KEY,
   entry_id  INTEGER NOT NULL REFERENCES playlist_entry(id),
-  type      TEXT    NOT NULL,   -- 'standard' | 'takeover'
+  type      TEXT    NOT NULL,   -- 'standard' | 'takeover' | 'alert'
   timestamp INTEGER NOT NULL,
   on_screen INTEGER NOT NULL,
   timezone  TEXT,               -- authoring context only; never evaluated
@@ -488,11 +488,14 @@ flowchart TD
     C --> D{"playlist_id NULL?"}
     D -->|yes| E["show nothing"]
     D -->|no| F["playlist_entry in position order"]
-    F --> G["viability gates:<br/>day → orientation rendered (§5.1) → directive ON"]
-    G --> H{"any takeover ON?"}
+    F --> G["viability gates:<br/>orientation rendered (§5.1) → alert ON → day → directive ON"]
+    G --> AL{"any alert ON?"}
+    AL -->|yes| AS["working set = alert set"]
+    AL -->|no| H{"any takeover ON?"}
     H -->|yes| I["working set = takeover set"]
     H -->|no| J["working set = standard set"]
-    I --> K["cursor: next position after the last shown"]
+    AS --> K["cursor: next position after the last shown"]
+    I --> K
     J --> K
     K --> L["render marker: now + duration, or interrupt time"]
 ```
@@ -541,19 +544,22 @@ SELECT * FROM surface_schedule_entry
 Run it each time the current content ends, always against the show clock. It is a sequence of
 **gates**, cheapest first; an entry that fails a gate is excluded and never reaches the next one.
 
-1. **Day gate.** Once per pass, find the `project_days` row containing `showNow` (§5.4). It scopes
-   every directive evaluated below to the current day. Outside every day, the whole timeline
-   participates.
-2. **Orientation gate.** For each `playlist_entry` of the active playlist, in `position` order: a
+1. **Orientation gate.** For each `playlist_entry` of the active playlist, in `position` order: a
    `media_item` entry passes only if its item has a file in the slot for the orientation rendered
    (§5.1, §5.7). An empty slot is an intentional exclusion, so the entry's directives are **never
-   evaluated**. A `session_set` entry passes if the set is present.
-3. **Directive gate.** Find the governing directive of each type within the current day (§5.4).
-   The entry joins the **takeover set** if its governing `takeover` directive is ON, and the
-   **standard set** if its governing `standard` directive is ON. It may join both.
+   evaluated** — its alerts included. A `session_set` entry passes if the set is present.
+2. **Alert gate.** Find the entry's governing `alert` directive over the **whole timeline**: an
+   alert is never scoped to a day (§5.4). The entry joins the **alert set** if it is ON.
+3. **Day gate.** Once per pass, find the `project_days` row containing `showNow` (§5.4). It scopes
+   the takeover and standard directives evaluated below to the current day. Outside every day, the
+   whole timeline participates.
+4. **Directive gate.** Find the governing `takeover` and `standard` directives within the current
+   day (§5.4). The entry joins the **takeover set** if its governing `takeover` directive is ON,
+   and the **standard set** if its governing `standard` directive is ON. An entry may join any of
+   the three sets.
 
 **An entry needs an ON directive to be viable.** An entry with no directive of a type is not ON
-for that type, and an entry with no ON directive of either type never appears. Cartridges also
+for that type, and an entry with no ON directive of any type never appears. Cartridges also
 deliver media used outside playlists (wallpapers, backings, branding); being delivered never
 makes anything viable.
 
@@ -577,12 +583,24 @@ SELECT * FROM directive
 Day scoping is what makes directives day-part: yesterday's takeover cannot leak into today.
 `directive.timezone` is authoring context; never evaluate it.
 
-### 5.5 The working set: takeover beats standard
+**An `alert` directive is never day-scoped:** skip step 3 for it, on every day and outside every
+day. An alert switched ON governs until a later `alert` directive of that entry turns it OFF, so a
+single directive at timestamp 0 switches one on for the whole show.
 
-> **If the takeover set is non-empty, it IS the rotation.** The standard set is suppressed
-> entirely — not appended, not interleaved.
+### 5.5 The working set: alert beats takeover beats standard
 
-- Several active takeovers form one set, in `position` order.
+> **If the alert set is non-empty, it IS the rotation.** The takeover and standard sets are
+> suppressed entirely. Otherwise, **if the takeover set is non-empty, it IS the rotation**, and the
+> standard set is suppressed entirely — not appended, not interleaved.
+
+- Several active alerts form one set, in `position` order; so do several active takeovers.
+- **An alert is for an emergency.** A publisher can keep alert entries in every playlist with no
+  directive at all — dormant, never viable, their media delivered with every cartridge — and
+  switch one on by republishing with an `alert` directive ON at timestamp 0. The new cartridge
+  cuts at once (§5.9), on every day of the show and outside it (§5.4, §8.2). An alert is
+  self-providing, like a takeover (below), and it passes the orientation gate like any entry: an
+  alert meant for every device carries a file in both slots (§5.7). A consumer that predates the
+  `alert` type skips those rows (§10.4) and never shows it.
 - **A takeover is self-providing.** While any viable takeover entry is ON, the takeover set owns
   the screen and the Surface never falls back to the standard set. A takeover entry with an empty
   slot for the orientation rendered is excluded like any other entry (§5.7), so a takeover authored
@@ -599,6 +617,7 @@ Keep **two cursors**, each an authored `position`:
 |---|---|---|
 | standard cursor | position of the last **standard** entry shown | active playlist changes; cartridge replaced |
 | takeover cursor | position of the last **takeover** entry shown | active playlist changes; cartridge replaced; a takeover period begins |
+| alert cursor | position of the last **alert** entry shown | active playlist changes; cartridge replaced; an alert period begins |
 
 The next entry is the first entry in the working set whose `position` is **greater than the
 cursor**, wrapping to the first entry. With no cursor, start at the first entry.
@@ -606,13 +625,16 @@ cursor**, wrapping to the first entry. With no cursor, start at the first entry.
 - Advance by position — never by an index into the recomputed list (it skips entries when the
   list changes) and never by looking up the last entry's identity (it restarts at the top when
   that entry drops out).
+- When an alert period ends, a non-empty takeover set begins a new takeover period; otherwise the
+  standard rotation resumes after the standard cursor.
 - When a takeover period ends, the standard rotation resumes after the standard cursor: close to
   where it left off, even if that entry is now excluded.
 - **A change of the orientation rendered keeps both cursors**: a device rotating, or a
   DemoStation's demo starting or ending (§5.1, §5.11). The playlist is the same, so the rotation
   continues after the cursors in the new orientation. Restarting it would show the playlist's first
   entries again every time a device turned or a demo began.
-- A takeover period begins when the working set becomes the takeover set. A change of the
+- An alert period begins when the working set becomes the alert set, and a takeover period when
+  it becomes the takeover set — after standard, or after an alert period. A change of the
   orientation rendered can do that too: turning into an orientation whose takeover set is
   non-empty, from one whose takeover set was empty, begins a period.
 
@@ -670,9 +692,11 @@ Each render item the viability pass produces carries a **next-render hint**:
 | A **time** | that timestamp |
 
 The viability pass gives a **time** hint when a known interrupt comes before the item's natural
-end — the next takeover activation (below) is substituted for the duration. Only entries that
-passed the day and orientation gates count, so a takeover authored for the other orientation
-never interrupts. A standard item otherwise always finishes its time.
+end — the next activation of a higher set (below) is substituted for the duration: under the
+standard set, the next takeover or alert activation; under the takeover set, the next alert
+activation. Only entries that passed the orientation gate count, so a takeover or an alert
+authored for the other orientation never interrupts. An item otherwise always finishes its time,
+and nothing interrupts an alert item.
 
 **Setting the marker to 0 forces the next render loop to evaluate,** whatever the show time,
 including before 1970 (negative milliseconds). Use it for a show-clock jump, a video completing its
@@ -688,6 +712,7 @@ the marker to 0. One clip that never completes cannot park the rotation.
 
 | Interrupt | Effect |
 |---|---|
+| The working set changes to **alert**, from standard or takeover | Cut immediately to the alert set's first entry |
 | The working set changes from **standard to takeover** | Cut immediately to the takeover set's first entry |
 | A schedule boundary changes the active playlist (§5.2) | Cut; resolve the new playlist; reset cursors |
 | The device rotates (§5.1) | Cut; keep the cursors; continue in the new orientation |
@@ -701,15 +726,19 @@ naturally:
 - A standard directive turning on or off.
 - A takeover directive turning off, including the end of a takeover period. The takeover item
   finishes its time; then the standard rotation resumes.
-- An entry joining a takeover set that is already active.
+- An alert directive turning off. The alert item finishes its time; then the takeover set, else the
+  standard rotation (§5.6).
+- An entry joining an alert set or a takeover set that is already active.
 
 Compute `interruptAt` during the viability pass: while the working set is standard, it is the
-earliest future `takeover` directive turning ON for an entry of the active playlist. The schedule
+earliest future `takeover` or `alert` directive turning ON for an entry of the active playlist;
+while it is takeover, the earliest future `alert` directive turning ON. The schedule
 boundary is checked separately in the render loop (`showNow ≥` next boundary); a changed playlist,
 or a demo starting or ending, sets the marker to 0.
 
 The standard → takeover transition always cuts and starts the takeover set at its first entry,
-even when the entry on screen is also in the new takeover set.
+even when the entry on screen is also in the new takeover set. A transition to the alert set does
+the same with the alert set's first entry.
 
 **Never disarm.** Every path out of an evaluation — success, skip, load failure, empty set —
 leaves the marker armed: 0 to skip to the next entry, or `showNow + 2 s` for an empty set.
@@ -759,7 +788,7 @@ and the picture-in-picture is the Surface's player itself, moved into a smaller 
   device's.** A portrait DemoStation's picture-in-picture plays each item's landscape file, and a
   landscape DemoStation's each portrait file. Every rule of this section applies to it in that
   orientation — the orientation gate (§5.3), start and duration (§5.8), the backing (§5.10),
-  takeovers and interrupts (§5.5, §5.9) — exactly as on a Surface that renders it.
+  alerts, takeovers and interrupts (§5.5, §5.9) — exactly as on a Surface that renders it.
 - **When a demo starts, the player moves into the picture-in-picture; when it ends, back to the
   full screen.** Each move is a mode change (§5.9): the item on screen is cut, both rotation
   cursors are kept — the playlist has not changed — and the rotation continues after them in the
@@ -814,8 +843,8 @@ had to choose. A conforming client makes the same choices, because the conforman
 | What an interruption records | One event per cause. A jump records `jump` only, and a new cartridge `cartridge.commit` only: what the schedule changes as a result — the playlist, the mode — is applied silently. A boundary that starts or ends a demo records `mode.change`, and a playlist change at the same boundary resets the cursors silently. A rotation and a boundary in the same tick are two causes, and each records its cut. A `cut` is recorded only when an entry is on screen, and names it. |
 | An authored blank | Re-evaluated every 2 s like a hold, without repeating the `blank` event. |
 | A rotation; a new cartridge | Applied at the next tick; the `cut` carries that tick's show time. |
-| Which failures count toward `set.all_failed` | Load failures before or after the first frame, missing first frames, and entries that are not image or video media. The streak ends when an item finishes its time: naturally, at its watchdog, on completion, or when a takeover cuts it. It also ends when the playlist or the orientation rendered changes, and at a new cartridge. |
-| A takeover due while the next item is still loading, or before a late first frame's natural end | It still cuts at its time (§5.9). The loading item is abandoned; a late item's marker is armed at the takeover instead. |
+| Which failures count toward `set.all_failed` | Load failures before or after the first frame, missing first frames, and entries that are not image or video media. The streak ends when an item finishes its time: naturally, at its watchdog, on completion, or when a takeover or an alert cuts it. It also ends when the playlist or the orientation rendered changes, and at a new cartridge. |
+| A takeover or an alert due while the next item is still loading, or before a late first frame's natural end | It still cuts at its time (§5.9). The loading item is abandoned; a late item's marker is armed at the activation instead. |
 | The preview clock before its first command | Reads what a Surface would show now, and runs. |
 | No orientation from the host | The gate is skipped (§5.1), and each entry plays its landscape file, else its portrait one; backings and demo branding resolve in landscape, as Automatic reads a display that is not taller than it is wide (§6). A DemoStation's picture-in-picture skips the gate too. |
 
@@ -1173,8 +1202,9 @@ watchdog; schedule changeover; day scoping; Studio preview; empty orientation sl
 landscape file in a portrait slot; all entries failing without disarming; the first-frame
 timeout; late callbacks from replaced items; same-playlist boundaries and authored blanks; one
 schedule played in both orientations, with a takeover authored for one of them; a device rotating
-mid-show; a DemoStation's picture-in-picture as a demo starts and ends; and schedule rows on
-retired slots, where the scenario also lists the warnings the Loader must give.
+mid-show; a DemoStation's picture-in-picture as a demo starts and ends; schedule rows on
+retired slots, where the scenario also lists the warnings the Loader must give; and alerts —
+cutting a takeover, never scoped to a day, and behind the orientation gate.
 
 The reference engine in [`engine/`](engine/) passes every scenario:
 
@@ -1217,10 +1247,13 @@ node conformance/run.mjs --engine engine/dist/node.js
 - [ ] Resolves the one `playlist` schedule as latest-`timestamp`-≤-now, whatever the orientation
       it renders; treats a NULL `playlist_id` as show nothing.
 - [ ] Admits an entry only when a governing directive is ON.
-- [ ] Scopes directives to the containing day, and skips scoping outside all days.
-- [ ] Suppresses the standard set entirely while any takeover is ON, with no fallback.
-- [ ] Advances by position cursors, separately for standard and takeover.
-- [ ] Cuts immediately on the standard → takeover transition, and on no other directive change.
+- [ ] Scopes takeover and standard directives to the containing day, and skips scoping outside
+      all days; never scopes an alert directive.
+- [ ] Suppresses the takeover and standard sets entirely while any alert is ON, and the standard
+      set while any takeover is ON, with no fallback.
+- [ ] Advances by position cursors, separately for standard, takeover and alert.
+- [ ] Cuts immediately on a transition to the alert set or from standard to takeover, and on no
+      other directive change.
 - [ ] Skips an entry whose slot is empty for its orientation, and plays the slot's file as authored — never the other orientation's.
 - [ ] On a rotation, cuts, keeps both cursors, and continues after them with the new orientation's
       files.
@@ -1318,9 +1351,10 @@ directive        3 rows, all on entry 5 (position 3):
 | **slot** | `playlist` \| `demo_station`, the two kinds of schedule entry (§4.4). An item's `portrait_file_id` and `landscape_file_id` are its orientation slots (§5.7) |
 | **orientation rendered** | The orientation whose files play: the device's own, or the opposite one in a DemoStation's picture-in-picture (§5.1) |
 | **picture-in-picture** | Where a DemoStation's player plays during a demo: the same playlist, in the opposite orientation (§5.11) |
-| **directive** | A timestamped on/off state change for one playlist entry, of type standard or takeover |
+| **directive** | A timestamped on/off state change for one playlist entry, of type standard, takeover or alert |
 | **takeover** | A directive type that, while ON for any entry, replaces the standard rotation |
-| **working set** | The takeover set if non-empty, else the standard set |
+| **alert** | A directive type that, while ON for any entry, replaces both the takeover and the standard rotation; never scoped to a day |
+| **working set** | The alert set if non-empty, else the takeover set if non-empty, else the standard set |
 | **cursor** | The authored position of the last entry shown, per set |
 | **show clock** | Synthetic venue time used for every decision and for the render marker |
 | **monotonic clock** | The device's never-stepping clock, used only to detect show-clock jumps |
@@ -1354,7 +1388,8 @@ directive        3 rows, all on entry 5 (position 3):
 | Takeover with no playable media | Falls back to standard | Takeover owns the screen; entries with an empty slot for this orientation are excluded |
 | Orientation | Empty slot falls back to the other orientation | No fallback: an empty slot excludes the entry; the slot's file plays as authored |
 | Durations | Not specified | One render marker on synthetic time, armed at first frame from the render item's hint |
-| Interrupts | Not specified | Closed set; standard → takeover cuts immediately |
+| Interrupts | Not specified | Closed set; standard → takeover and any change to the alert set cut immediately |
+| Alerts | Not specified | `alert` directives outrank takeovers, are never day-scoped, and cut at their activation (§5.3 – §5.6, §5.9) |
 | Synthetic time | Optional; operator's wall clock projected onto Day 1 | Required; venue time of day on Day 1 |
 | Session boards | Optional | Required |
 | DemoStation entries | May carry a PIP playlist | Branding only; the picture-in-picture is the Surface's player, moved: the same playlist in the opposite orientation, its rotation continuing (§5.11) |

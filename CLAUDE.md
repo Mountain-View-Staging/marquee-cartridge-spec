@@ -11,7 +11,7 @@ unlike every sibling it is published to the world.
 README.md          the specification — CANONICAL
 engine/            the reference engine: the Loader and the on-screen rules, in TypeScript;
                    compiled ES modules committed in engine/dist
-conformance/       the conformance suite: fixture cartridges, 24 scenarios, the runner
+conformance/       the conformance suite: fixture cartridges, 27 scenarios, the runner
 example/           the explorer and the demo show: the engine on a preview clock
 player/            the reference player: the engine on a browser host, one hard-coded surface
 .github/workflows/ CI: the suite against the engine, dist/ freshness, unit tests, the leak scan
@@ -119,6 +119,6 @@ Pages serves from `main`, so a push is a publish.
 
 ```bash
 cd engine && npm ci && npm run build && npm test && cd ..
-node conformance/run.mjs --engine engine/dist/node.js     # 24/24
+node conformance/run.mjs --engine engine/dist/node.js     # 27/27
 python3 -m http.server 8000     # then check /example/ and /player/ actually run
 ```

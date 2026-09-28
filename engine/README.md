@@ -5,7 +5,7 @@ committed cartridge and the passage of time, and it says what is on screen, when
 changes, and why. It draws nothing. A **host** (a browser page, a kiosk shell, an
 authoring tool's preview) calls it from its display loop and draws what it returns.
 
-- **Conformance:** passes all 24 scenarios of the [conformance suite](../conformance/README.md).
+- **Conformance:** passes all 27 scenarios of the [conformance suite](../conformance/README.md).
 - **No runtime dependencies.** The compiled ES modules in `dist/` are committed, so a
   page or a program imports them directly; there is no build step for consumers.
 - **Two parts:** the **Loader** (cartridge bytes → an immutable, indexed Snapshot, or a
@@ -244,8 +244,8 @@ engine had to do something; these are the choices. The specification now lists t
 | Which `cut` an interruption records | One event per cause: a jump records `jump` only, and a new cartridge `cartridge.commit` only; what the schedule changes as a result (the playlist, the mode) is applied silently. A boundary that starts or ends a demo records `mode.change`, and a playlist change at the same boundary resets the cursors silently. A rotation and a boundary in the same tick record one cut each. A cut is recorded only when an entry is on screen, naming it. |
 | An authored blank | Re-evaluated every 2 s like a hold, without repeating the `blank` event. |
 | Rotation, new cartridge | Applied at the next tick; the `cut` carries that tick's show time. |
-| Which failures count toward `set.all_failed` | Load failures (before or after the first frame), missing first frames, and entries that are not image or video media. The streak ends when an item finishes its time: naturally, at its watchdog, when it completes, or when a takeover cuts it. It also ends when the playlist or the orientation rendered changes, and at a new cartridge. |
-| A takeover due while the next item is still loading, or before a late first frame's natural end | It still cuts at its time (§5.9: only a takeover preempts a standard item, and it does so at its activation). The loading item is abandoned; a late item's marker is armed at the takeover instead. |
+| Which failures count toward `set.all_failed` | Load failures (before or after the first frame), missing first frames, and entries that are not image or video media. The streak ends when an item finishes its time: naturally, at its watchdog, when it completes, or when a takeover or an alert cuts it. It also ends when the playlist or the orientation rendered changes, and at a new cartridge. |
+| A takeover or an alert due while the next item is still loading, or before a late first frame's natural end | It still cuts at its time (§5.9: only the activation of a higher set preempts an item, and it does so at its activation). The loading item is abandoned; a late item's marker is armed at the activation instead. |
 | The preview clock before its first command | Reads what a Surface would show now, and runs. |
 | Day 1 on a daylight-saving date | §8.2's "next valid instant", read literally: a skipped local time becomes the moment the clocks change, and a repeated one the earlier instant. So on the days around a show whose Day 1 springs forward, the show clock stands at that moment for the hour the clocks skip, and whatever is on screen waits. The specification keeps this reading and says so in §8.2; shifting by the length of the gap was rejected because it adds one backward jump a day. |
 | No orientation from the host | The gate is skipped (§5.1) and each entry plays its landscape file, else its portrait one; backings and demo branding resolve in landscape (`ORIENTATION_WHEN_MISSING`). A DemoStation's picture-in-picture skips the gate too. |
@@ -260,7 +260,7 @@ cd engine
 npm ci
 npm run build          # tsc: src/ → dist/ (commit dist/ with the source)
 npm test               # unit tests: the Loader's refusals and warnings, engine behaviour
-npm run conformance    # the 24 scenarios
+npm run conformance    # the 27 scenarios
 npm run bench          # performance against the targets below
 ```
 

@@ -357,7 +357,7 @@ export function buildSnapshot(kind, raw, warnings) {
         }
         let lists = directiveLists.get(d.entryId);
         if (!lists)
-            directiveLists.set(d.entryId, (lists = { standard: [], takeover: [] }));
+            directiveLists.set(d.entryId, (lists = { standard: [], takeover: [], alert: [] }));
         lists[d.type].push(d);
     }
     const directives = new Map();
@@ -366,6 +366,7 @@ export function buildSnapshot(kind, raw, warnings) {
         directives.set(entryId, Object.freeze({
             standard: Object.freeze(lists.standard.sort(byTime)),
             takeover: Object.freeze(lists.takeover.sort(byTime)),
+            alert: Object.freeze(lists.alert.sort(byTime)),
         }));
     }
     const backing = project.backingItemId;

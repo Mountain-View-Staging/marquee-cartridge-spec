@@ -69,7 +69,7 @@
   .entry .why { color: var(--muted); }
   .entry.out { opacity: .5; }
   .entry.standard { border-color: var(--ok); }
-  .entry.takeover { border-color: var(--alert); }
+  .entry.takeover, .entry.alert { border-color: var(--alert); }
   .entry.suppressed { border-style: dashed; }
   .entry.now { background: rgba(88, 166, 255, .16); }
   #trace { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow: auto; font: 12.5px var(--mono); }
@@ -331,7 +331,7 @@ async function fetchCartridge(name) {
     $("btn-play").setAttribute("aria-pressed", String(clock.playing));
     $("days").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.day) === dayIndex)));
 
-    const setLabel = { standard: "standard", takeover: `<span style="color:var(--alert)">takeover</span>`, empty: `<span style="color:var(--warn)">empty — the last frame stays</span>`, blank: `<span style="color:var(--alert)">authored blank</span>`, none: "nothing scheduled" }[v.workingSet];
+    const setLabel = { standard: "standard", takeover: `<span style="color:var(--alert)">takeover</span>`, alert: `<span style="color:var(--alert)">ALERT</span>`, empty: `<span style="color:var(--warn)">empty — the last frame stays</span>`, blank: `<span style="color:var(--alert)">authored blank</span>`, none: "nothing scheduled" }[v.workingSet];
     $("resolution").innerHTML = [
       ["day", v.day ? `${v.day.day} (directives scoped to it)` : "none: the whole timeline participates"],
       ["orientation", v.renderedOrientation !== v.orientation
@@ -341,10 +341,10 @@ async function fetchCartridge(name) {
         : v.demo ? `on (schedule entry ${v.demo.scheduleEntryId}): the rotation plays in the picture-in-picture` : "off: the rotation plays full screen"],
       ["schedule entry", v.scheduleEntry ? `${v.scheduleEntry.id}, from ${at(v.scheduleEntry.timestamp)}` : "none yet"],
       ["playlist", v.playlist ? escape(v.playlist.name) : v.workingSet === "blank" ? "NULL: show nothing" : "—"],
-      ["working set", `${setLabel}${v.suppressed.length ? ` · ${v.suppressed.length} standard suppressed` : ""}`],
-      ["cursors", `standard ${v.cursors.standard ?? "—"} · takeover ${v.cursors.takeover ?? "—"} (positions)`],
+      ["working set", `${setLabel}${v.suppressed.length ? ` · ${v.suppressed.length} suppressed` : ""}`],
+      ["cursors", `standard ${v.cursors.standard ?? "—"} · takeover ${v.cursors.takeover ?? "—"} · alert ${v.cursors.alert ?? "—"} (positions)`],
       ["render marker", v.marker === 0 ? "0: evaluate at the next tick" : `${at(v.marker)} (${v.markerReason})`],
-      ["next interrupt", v.interruptAt ? `takeover at ${at(v.interruptAt)}` : "none"],
+      ["next interrupt", v.interruptAt ? `activation at ${at(v.interruptAt)}` : "none"],
       ["next boundary", v.nextBoundary ? at(v.nextBoundary) : "none"],
     ].map(([k, val]) => `<tr><td>${k}</td><td>${val}</td></tr>`).join("");
 
@@ -356,7 +356,9 @@ async function fetchCartridge(name) {
       if (e.excluded) states.push(escape(e.excluded));
       else {
         states.push(`standard ${e.standard}`, `takeover ${e.takeover}`);
+        if (e.alert !== "none") states.push(`alert ${e.alert}`);
         if (e.takeoverOnAt) states.push(`takeover on at ${at(e.takeoverOnAt).slice(11)}`);
+        if (e.alertOnAt) states.push(`alert on at ${at(e.alertOnAt).slice(11)}`);
       }
       const cls = ["entry", e.excluded ? "out" : "", inRotation.has(e.entryId) ? v.workingSet : "", suppressed.has(e.entryId) ? "suppressed" : "", e.entryId === on ? "now" : ""].join(" ");
       return `<div class="${cls}"><span class="pos">${e.position}</span><span>${escape(e.name)}${e.mediaFileId ? ` <span class="why">· file ${e.mediaFileId}</span>` : ""}</span><span class="why">${states.join(" · ")}</span></div>`;

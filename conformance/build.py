@@ -135,7 +135,7 @@ CREATE TABLE playlist_entry (
 CREATE TABLE directive (
   id        INTEGER PRIMARY KEY,
   entry_id  INTEGER NOT NULL REFERENCES playlist_entry(id),
-  type      TEXT    NOT NULL,   -- 'standard' | 'takeover'
+  type      TEXT    NOT NULL,   -- 'standard' | 'takeover' | 'alert'
   timestamp INTEGER NOT NULL,
   on_screen INTEGER NOT NULL,
   timezone  TEXT,               -- authoring context only; never evaluated
@@ -337,6 +337,25 @@ CARTRIDGES = {
         schedule=[("playlist", "2026-09-15 00:00:00", 1),
                   ("landscape", "2026-09-15 08:00:15", None),
                   ("portrait", "2026-09-15 08:00:25", 2)]),
+    # MCS-25: the base show and entry 5, whose only directives are an alert from 11:45:00 to
+    # 11:45:25 — during entry 2's 11:30-12:30 takeover.
+    "alert": base(
+        items=[still(1), still(2), still(3), still(4), still(5)],
+        playlists={1: [1, 2, 3, 4, 5]},
+        directives=base()["directives"] + [(5, "alert", "2026-09-15 11:45:00", 1),
+                                           (5, "alert", "2026-09-15 11:45:25", 0)]),
+    # MCS-26: two days; entries 1 and 2 standard on each; entry 3 carries one alert, ON at
+    # timestamp 0 (the Unix epoch), and nothing else.
+    "alert-standing": base(
+        days=[day("2026-09-15"), day("2026-09-16")],
+        items=[still(1), still(2), still(3)],
+        playlists={1: [1, 2, 3]},
+        directives=std((1, 2)) + std((1, 2), "2026-09-16 08:00:00") + [(3, "alert", 0, 1)]),
+    # MCS-27: entries 1-3 standard; entry 4 is an alert ON at timestamp 0 whose item has a
+    # landscape file only.
+    "alert-landscape": base(
+        items=[still(1), still(2), still(3), still(4, portrait=False)],
+        directives=std((1, 2, 3)) + [(4, "alert", 0, 1)]),
 }
 
 # ── writer ─────────────────────────────────────────────────────────────────────
@@ -418,7 +437,8 @@ def build(name, c):
         if retired:
             x("PRAGMA ignore_check_constraints = OFF")
     for n, (entry, typ, when, on) in enumerate(c["directives"], 1):
-        x("INSERT INTO directive VALUES (?,?,?,?,?,?,?,?)", (n, entry, typ, ms(when), on, TZ, NOW, NOW))
+        stamp = when if isinstance(when, int) else ms(when)  # an int is Unix ms as it stands (MCS-26, 27)
+        x("INSERT INTO directive VALUES (?,?,?,?,?,?,?,?)", (n, entry, typ, stamp, on, TZ, NOW, NOW))
 
     db.commit()
     db.execute("PRAGMA foreign_keys = ON")

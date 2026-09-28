@@ -16,7 +16,11 @@ export type Orientation = "portrait" | "landscape";
  * mode's, which carries branding and never a rotation (§5.11).
  */
 export type Slot = "playlist" | "demo_station";
-export type DirectiveType = "standard" | "takeover";
+/**
+ * §4.5, §5.3 – §5.5 — `alert` outranks `takeover`, which outranks `standard`;
+ * an alert directive is never day-scoped (§5.4).
+ */
+export type DirectiveType = "standard" | "takeover" | "alert";
 export type ResourceType = "media_item" | "session_set";
 export type CartridgeKind = "project" | "surface";
 export type VariantKind = "original" | "optimized" | "webOptimized" | "wifiOptimized";
@@ -113,6 +117,7 @@ export interface Directive {
 export interface EntryDirectives {
     readonly standard: readonly Directive[];
     readonly takeover: readonly Directive[];
+    readonly alert: readonly Directive[];
 }
 /** §4.6 — the orientation-independent thing Studio schedules. */
 export interface MediaItem {

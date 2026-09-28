@@ -261,7 +261,7 @@ export const FORMAT_MAJOR = 25;
 export const KNOWN = {
   slot: new Set(["playlist", "demo_station"]),
   resourceType: new Set(["media_item", "session_set"]),
-  directiveType: new Set(["standard", "takeover"]),
+  directiveType: new Set(["standard", "takeover", "alert"]),
   variantKind: new Set(["original", "optimized", "webOptimized", "wifiOptimized"]),
   cartridgeKind: new Set(["project", "surface"]),
 } as const;

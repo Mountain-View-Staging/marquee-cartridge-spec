@@ -208,8 +208,8 @@ const rendered = () => (setting !== "automatic" ? setting : innerHeight > innerW
   function status() {
     if ($("overlay").hidden) return;
     const v = engine.inspect();
-    const rotation = v.workingSet === "takeover"
-      ? `<span class="alert">takeover</span> · ${v.rotation.length} ${v.suppressed.length ? `(${v.suppressed.length} standard suppressed)` : ""}`
+    const rotation = v.workingSet === "alert" || v.workingSet === "takeover"
+      ? `<span class="alert">${v.workingSet === "alert" ? "ALERT" : "takeover"}</span> · ${v.rotation.length} ${v.suppressed.length ? `(${v.suppressed.length} suppressed)` : ""}`
       : v.workingSet === "standard" ? `standard · ${v.rotation.length}`
       : v.workingSet === "blank" ? `<span class="warn">authored blank</span>`
       : `<span class="warn">${v.workingSet} — the last frame stays</span>`;
@@ -224,7 +224,7 @@ const rendered = () => (setting !== "automatic" ? setting : innerHeight > innerW
       ["schedule", v.scheduleEntry ? `entry ${v.scheduleEntry.id} from ${at(v.scheduleEntry.timestamp)} → ${v.playlist ? escape(v.playlist.name) : "<span class=warn>no playlist</span>"}` : "nothing yet"],
       ["rotation", rotation],
       ["on screen", lastRender ? escape(lastRender.message) : "—"],
-      ["next change", v.interruptAt ? `takeover at ${at(v.interruptAt)}` : v.nextBoundary ? `schedule at ${at(v.nextBoundary)}` : "none scheduled"],
+      ["next change", v.interruptAt ? `activation at ${at(v.interruptAt)}` : v.nextBoundary ? `schedule at ${at(v.nextBoundary)}` : "none scheduled"],
       ["media", `${synced.held} of ${synced.wanted} held and verified for the ${orientation} lane${failures}`],
       ["sound", sound],
     ];

@@ -17,8 +17,9 @@
  *     marker forced, or showNow ≥ marker → renderNext   §5.9: the only place content changes
  *
  *   renderNext:
- *     viability pass → working set → next entry after the cursor → RenderItem
- *     with a hint; an empty set holds (the last frame stays) and retries in 2 s
+ *     viability pass → working set (alert, else takeover, else standard) →
+ *     next entry after the cursor → RenderItem with a hint; an empty set holds
+ *     (the last frame stays) and retries in 2 s
  *
  * There is one schedule, whatever the orientation (§5.1). The orientation
  * rendered — the device's, or the opposite one in a DemoStation's
@@ -46,7 +47,7 @@ export const JUMP_TOLERANCE_MS = 250;
  */
 export const ORIENTATION_WHEN_MISSING = "landscape";
 // Working-set kinds, marker reasons and schedule states, as small integers.
-const NONE = 0, STANDARD = 1, TAKEOVER = 2, EMPTY = 3;
+const NONE = 0, STANDARD = 1, TAKEOVER = 2, EMPTY = 3, ALERT = 4;
 const FORCED = 0, NATURAL = 1, WATCHDOG = 2, INTERRUPT = 3, RETRY = 4, COMPLETED = 5, SKIPPED = 6;
 const UNRESOLVED = 0, NOTHING = 1, BLANK = 2, PLAYLIST = 3;
 const MARKER_REASONS = ["forced", "natural", "watchdog", "interrupt", "retry", "completed", "skipped"];
@@ -114,6 +115,7 @@ export class SurfaceEngine {
     // Rotation (§5.5, §5.6).
     standardCursor = new Cursor();
     takeoverCursor = new Cursor();
+    alertCursor = new Cursor();
     lastSet = NONE;
     /** Entries that failed since an item last finished its time: when it covers the working set, hold. */
     failed = new Set();
@@ -131,8 +133,10 @@ export class SurfaceEngine {
     currentLive = false;
     pendingItem = null;
     pendingMono = Number.NaN;
-    /** The takeover activation known when the pending item was chosen (standard items only). */
+    /** The activation known to cut the pending item when it was chosen: a takeover's or an alert's (§5.9). */
     pendingInterruptAt = Number.POSITIVE_INFINITY;
+    /** Which of the two that activation is, for the trace's words. */
+    pendingInterruptByAlert = false;
     issued = null;
     events = null;
     lastStateKind = null;
@@ -146,7 +150,10 @@ export class SurfaceEngine {
     // Buffers of the viability pass, reused.
     standardList = [];
     takeoverList = [];
-    interruptAt = Number.POSITIVE_INFINITY;
+    alertList = [];
+    /** The earliest future activations among the viable entries (§5.9), from the last pass. */
+    nextTakeoverOn = Number.POSITIVE_INFINITY;
+    nextAlertOn = Number.POSITIVE_INFINITY;
     chosenCode = "rotation.start";
     out = {
         showNow: 0,
@@ -235,8 +242,8 @@ export class SurfaceEngine {
             this.resolveSchedule(show);
         if (this.pendingItem !== null) {
             if (show >= this.pendingInterruptAt) {
-                // A takeover is due while the next item is still loading: that item never
-                // showed, and the takeover cuts what is on screen now (§5.9).
+                // A takeover or an alert is due while the next item is still loading: that
+                // item never showed, and the activation cuts what is on screen now (§5.9).
                 this.pendingItem = null;
                 this.forceMarker(INTERRUPT);
             }
@@ -270,18 +277,18 @@ export class SurfaceEngine {
         else {
             const end = show + Math.round(item.hint.seconds * 1000);
             if (this.pendingInterruptAt < end) {
-                // The first frame came late enough that a known takeover now falls
-                // before the item's end: the takeover still cuts at its time.
+                // The first frame came late enough that a known takeover or alert now
+                // falls before the item's end: it still cuts at its time.
                 this.armMarker(this.pendingInterruptAt, INTERRUPT);
             }
             else {
                 this.armMarker(end, item.kind === "media" && item.media.isVideo ? WATCHDOG : NATURAL);
             }
         }
-        (item.set === "takeover" ? this.takeoverCursor : this.standardCursor).set(item.position, item.entryId);
+        this.cursorOf(item.set).set(item.position, item.entryId);
         const dwell = item.hint.kind === "duration" ? item.hint.seconds : 0;
         const hint = this.markerReason === INTERRUPT
-            ? `until ${this.calendar.format(this.marker)}, when a takeover starts`
+            ? `until ${this.calendar.format(this.marker)}, when ${this.pendingInterruptByAlert ? "an alert" : "a takeover"} starts`
             : item.kind === "media" && item.media.isVideo
                 ? item.media.duration === null
                     ? "to the end of the clip"
@@ -386,6 +393,7 @@ export class SurfaceEngine {
         this.pendingItem = null;
         this.standardCursor.clear();
         this.takeoverCursor.clear();
+        this.alertCursor.clear();
         this.lastSet = NONE;
         this.clearFailures();
         this.activeEntry = null;
@@ -494,6 +502,7 @@ export class SurfaceEngine {
             this.activePlaylistId = playlistId;
             this.standardCursor.clear();
             this.takeoverCursor.clear();
+            this.alertCursor.clear();
             this.lastSet = NONE;
         }
         if (modeChanged) {
@@ -564,7 +573,7 @@ export class SurfaceEngine {
             this.emit({ showTime: show, kind: "skip", code: "media.watchdog", entryId: on.entryId, message: `entry ${on.entryId}: the video did not report its end within ${seconds(on.hint.kind === "duration" ? on.hint.seconds : 0)}` });
         }
         this.currentLive = false;
-        // An item that finished its time, or was cut by a takeover, ends a streak of failures.
+        // An item that finished its time, or was cut by a takeover or an alert, ends a streak of failures.
         if (reason === NATURAL || reason === WATCHDOG || reason === INTERRUPT || reason === COMPLETED)
             this.clearFailures();
         this.renderNext(show, mono, reason);
@@ -590,12 +599,18 @@ export class SurfaceEngine {
             return;
         }
         this.pass(show, plans);
-        const kind = this.takeoverList.length > 0 ? TAKEOVER : this.standardList.length > 0 ? STANDARD : EMPTY;
+        const kind = this.alertList.length > 0
+            ? ALERT
+            : this.takeoverList.length > 0 ? TAKEOVER : this.standardList.length > 0 ? STANDARD : EMPTY;
+        if (kind === ALERT && this.lastSet !== ALERT)
+            this.alertCursor.clear(); // an alert period begins
         if (kind === TAKEOVER && this.lastSet !== TAKEOVER)
             this.takeoverCursor.clear(); // a takeover period begins
         const on = this.currentItem;
-        if (reason === INTERRUPT && kind === TAKEOVER && on !== null && on.kind !== "blank") {
-            this.emit({ showTime: show, kind: "cut", code: "takeover.activate", entryId: on.entryId, message: `a takeover starts at ${this.calendar.format(show)}; entry ${on.entryId} ends now` });
+        if (reason === INTERRUPT && (kind === ALERT || kind === TAKEOVER) && on !== null && on.kind !== "blank") {
+            this.emit(kind === ALERT
+                ? { showTime: show, kind: "cut", code: "alert.activate", entryId: on.entryId, message: `an alert starts at ${this.calendar.format(show)}; entry ${on.entryId} ends now` }
+                : { showTime: show, kind: "cut", code: "takeover.activate", entryId: on.entryId, message: `a takeover starts at ${this.calendar.format(show)}; entry ${on.entryId} ends now` });
         }
         this.lastSet = kind;
         if (kind === EMPTY) {
@@ -606,15 +621,15 @@ export class SurfaceEngine {
                 this.hold("set.empty", show, `no entry of playlist ${this.activePlaylistId} is viable at ${this.calendar.format(show)}; the last frame stays`);
             return;
         }
-        const list = kind === TAKEOVER ? this.takeoverList : this.standardList;
-        const cursor = kind === TAKEOVER ? this.takeoverCursor : this.standardCursor;
+        const list = kind === ALERT ? this.alertList : kind === TAKEOVER ? this.takeoverList : this.standardList;
+        const cursor = kind === ALERT ? this.alertCursor : kind === TAKEOVER ? this.takeoverCursor : this.standardCursor;
         for (;;) {
             if (this.allFailed(list)) {
                 this.clearFailures();
                 if (this.holding("set.all_failed"))
                     this.rearm(show);
                 else
-                    this.hold("set.all_failed", show, `every entry of the ${kind === TAKEOVER ? "takeover" : "standard"} set failed in a row; trying again in ${seconds(this.emptyRetryMs / 1000)}`);
+                    this.hold("set.all_failed", show, `every entry of the ${setName(kind)} set failed in a row; trying again in ${seconds(this.emptyRetryMs / 1000)}`);
                 return;
             }
             const plan = list[this.choose(list, cursor)];
@@ -623,39 +638,67 @@ export class SurfaceEngine {
                 continue; // skipped; the skip moved the cursor
             this.pendingItem = item;
             this.pendingMono = mono;
-            this.pendingInterruptAt = kind === STANDARD ? this.interruptAt : Number.POSITIVE_INFINITY;
+            this.pendingInterruptAt = this.interruptFor(kind);
+            this.pendingInterruptByAlert = this.pendingInterruptAt === this.nextAlertOn;
             this.issued = item;
             return;
         }
     }
     /**
-     * §5.3 — the viability pass: day → orientation → directives, cheapest
-     * first. Fills the two sets in position order, and while standard would
-     * rule, the earliest future takeover activation (§5.9 interruptAt).
+     * §5.3 — the viability pass, for each entry: the orientation gate, then its
+     * alert directives over the whole timeline, then — scoped to the day — its
+     * takeover and standard directives. Fills the three sets in position order,
+     * and the earliest future activation of each higher set (§5.9 interrupts).
      */
     pass(show, plans) {
         const dayIndex = this.calendar.dayIndexAt(show);
         const dayStart = dayIndex >= 0 ? this.calendar.days[dayIndex].startTime : Number.NEGATIVE_INFINITY;
         const standard = this.standardList;
         const takeover = this.takeoverList;
+        const alert = this.alertList;
         standard.length = 0;
         takeover.length = 0;
-        let interrupt = Number.POSITIVE_INFINITY;
+        alert.length = 0;
+        let nextTakeover = Number.POSITIVE_INFINITY;
+        let nextAlert = Number.POSITIVE_INFINITY;
         for (let i = 0; i < plans.length; i++) {
             const plan = plans[i];
             if (!this.passesOrientation(plan))
                 continue; // directives never read
+            if (plan.alert.isOn(show, Number.NEGATIVE_INFINITY))
+                alert.push(plan); // never day-scoped (§5.4)
+            else {
+                const next = plan.alert.nextOn(show);
+                if (next < nextAlert)
+                    nextAlert = next;
+            }
             if (plan.takeover.isOn(show, dayStart))
                 takeover.push(plan);
             else {
                 const next = plan.takeover.nextOn(show);
-                if (next < interrupt)
-                    interrupt = next;
+                if (next < nextTakeover)
+                    nextTakeover = next;
             }
             if (plan.standard.isOn(show, dayStart))
                 standard.push(plan);
         }
-        this.interruptAt = interrupt;
+        this.nextTakeoverOn = nextTakeover;
+        this.nextAlertOn = nextAlert;
+    }
+    /**
+     * §5.9 — the activation that cuts an item of this set: under standard, the
+     * next takeover or alert; under a takeover, the next alert; nothing cuts an alert.
+     */
+    interruptFor(kind) {
+        if (kind === STANDARD)
+            return this.nextAlertOn < this.nextTakeoverOn ? this.nextAlertOn : this.nextTakeoverOn;
+        if (kind === TAKEOVER)
+            return this.nextAlertOn;
+        return Number.POSITIVE_INFINITY;
+    }
+    /** §5.6 — the cursor of an item's set. */
+    cursorOf(set) {
+        return set === "alert" ? this.alertCursor : set === "takeover" ? this.takeoverCursor : this.standardCursor;
     }
     /** §5.3 step 2 — an empty slot for the orientation rendered excludes a media entry. */
     passesOrientation(plan) {
@@ -708,7 +751,7 @@ export class SurfaceEngine {
     }
     /** The RenderItem for a chosen entry, or null when the entry is skipped on the spot. */
     build(plan, kind, cursor, show) {
-        const set = kind === TAKEOVER ? "takeover" : "standard";
+        const set = kind === ALERT ? "alert" : kind === TAKEOVER ? "takeover" : "standard";
         const project = this.snap.project;
         if (plan.board) {
             const sessionSet = plan.set;
@@ -786,12 +829,13 @@ export class SurfaceEngine {
         return Object.freeze(item);
     }
     /**
-     * §5.9 — a duration, unless a known interrupt comes first: while the
-     * standard set rules, the next takeover activation replaces the duration.
+     * §5.9 — a duration, unless a known interrupt comes first: the next
+     * activation of a higher set (interruptFor) replaces the duration.
      */
     hint(kind, seconds, show) {
-        if (kind === STANDARD && this.interruptAt < show + Math.round(seconds * 1000)) {
-            return Object.freeze({ kind: "time", at: this.interruptAt });
+        const interrupt = this.interruptFor(kind);
+        if (interrupt < show + Math.round(seconds * 1000)) {
+            return Object.freeze({ kind: "time", at: interrupt });
         }
         return Object.freeze({ kind: "duration", seconds });
     }
@@ -852,7 +896,7 @@ export class SurfaceEngine {
     /** A host-reported failure of an issued item: trace it, move the cursor past it, force the next content. */
     skip(item, code, show, why) {
         this.emit({ showTime: show, kind: "skip", code, entryId: item.entryId, message: `entry ${item.entryId} "${item.name}": ${why}` });
-        (item.set === "takeover" ? this.takeoverCursor : this.standardCursor).set(item.position, item.entryId);
+        this.cursorOf(item.set).set(item.position, item.entryId);
         this.failed.add(item.entryId);
         this.forceMarker(SKIPPED);
     }
@@ -877,7 +921,9 @@ export class SurfaceEngine {
         const entries = [];
         const standard = [];
         const takeover = [];
-        let interrupt = Number.POSITIVE_INFINITY;
+        const alert = [];
+        let interruptTakeover = Number.POSITIVE_INFINITY;
+        let interruptAlert = Number.POSITIVE_INFINITY;
         for (const plan of plans) {
             const passes = this.passesOrientation(plan);
             const orientation = this.rendered;
@@ -892,12 +938,18 @@ export class SurfaceEngine {
                             : `no ${orientation} file: the slot is empty`;
             const file = passes && !plan.board ? (this.playOrientation(plan) === "portrait" ? plan.portrait : plan.landscape) : null;
             const takeoverOn = passes ? plan.takeover.nextOn(show) : Number.POSITIVE_INFINITY;
+            const alertOn = passes ? plan.alert.nextOn(show) : Number.POSITIVE_INFINITY;
             const standardState = passes ? plan.standard.state(show, dayStart) : "none";
             const takeoverState = passes ? plan.takeover.state(show, dayStart) : "none";
+            const alertState = passes ? plan.alert.state(show, Number.NEGATIVE_INFINITY) : "none";
+            if (passes && alertState === "on")
+                alert.push(plan.id);
+            else if (passes && alertOn < interruptAlert)
+                interruptAlert = alertOn;
             if (passes && takeoverState === "on")
                 takeover.push(plan.id);
-            else if (passes && takeoverOn < interrupt)
-                interrupt = takeoverOn;
+            else if (passes && takeoverOn < interruptTakeover)
+                interruptTakeover = takeoverOn;
             if (passes && standardState === "on")
                 standard.push(plan.id);
             entries.push(Object.freeze({
@@ -909,18 +961,25 @@ export class SurfaceEngine {
                 mediaFileId: file?.id ?? null,
                 standard: standardState,
                 takeover: takeoverState,
+                alert: alertState,
                 takeoverOnAt: Number.isFinite(takeoverOn) ? takeoverOn : null,
+                alertOnAt: Number.isFinite(alertOn) ? alertOn : null,
             }));
         }
         const workingSet = this.activeState === BLANK
             ? "blank"
             : this.activeState !== PLAYLIST
                 ? "none"
-                : takeover.length > 0
-                    ? "takeover"
-                    : standard.length > 0
-                        ? "standard"
-                        : "empty";
+                : alert.length > 0
+                    ? "alert"
+                    : takeover.length > 0
+                        ? "takeover"
+                        : standard.length > 0
+                            ? "standard"
+                            : "empty";
+        const interrupt = workingSet === "standard"
+            ? Math.min(interruptTakeover, interruptAlert)
+            : workingSet === "takeover" ? interruptAlert : Number.POSITIVE_INFINITY;
         return Object.freeze({
             showNow: show,
             day,
@@ -932,12 +991,15 @@ export class SurfaceEngine {
             nextBoundary: Number.isFinite(this.nextBoundary) ? this.nextBoundary : null,
             entries,
             workingSet,
-            rotation: workingSet === "takeover" ? takeover : workingSet === "standard" ? standard : [],
-            suppressed: workingSet === "takeover" ? standard.filter((id) => !takeover.includes(id)) : [],
-            interruptAt: workingSet === "standard" && Number.isFinite(interrupt) ? interrupt : null,
+            rotation: workingSet === "alert" ? alert : workingSet === "takeover" ? takeover : workingSet === "standard" ? standard : [],
+            suppressed: workingSet === "alert"
+                ? plans.filter((p) => !alert.includes(p.id) && (takeover.includes(p.id) || standard.includes(p.id))).map((p) => p.id)
+                : workingSet === "takeover" ? standard.filter((id) => !takeover.includes(id)) : [],
+            interruptAt: Number.isFinite(interrupt) ? interrupt : null,
             cursors: {
                 standard: this.standardCursor.has ? this.standardCursor.position : null,
                 takeover: this.takeoverCursor.has ? this.takeoverCursor.position : null,
+                alert: this.alertCursor.has ? this.alertCursor.position : null,
             },
             marker: this.marker,
             markerReason: MARKER_REASONS[this.markerReason],
@@ -963,6 +1025,9 @@ function latestAt(timeline, show) {
     }
     return lo - 1;
 }
+function setName(kind) {
+    return kind === ALERT ? "alert" : kind === TAKEOVER ? "takeover" : "standard";
+}
 function describePlaylist(id) {
     return id === null ? "no playlist" : `playlist ${id}`;
 }
@@ -979,11 +1044,12 @@ function compilePlans(snapshot) {
             const directives = snapshot.directives.get(entry.id);
             const standard = directives && directives.standard.length > 0 ? new DirectiveSeries(directives.standard) : NO_DIRECTIVES;
             const takeover = directives && directives.takeover.length > 0 ? new DirectiveSeries(directives.takeover) : NO_DIRECTIVES;
+            const alert = directives && directives.alert.length > 0 ? new DirectiveSeries(directives.alert) : NO_DIRECTIVES;
             if (entry.resourceType === "session_set") {
                 const set = entry.sessionSetId !== null ? snapshot.sessionSets.get(entry.sessionSetId) ?? null : null;
                 plans.push(Object.freeze({
                     entry, id: entry.id, position: entry.position, board: true, item: null, set,
-                    portrait: null, landscape: null, standard, takeover,
+                    portrait: null, landscape: null, standard, takeover, alert,
                     name: set?.name ?? `session set ${entry.sessionSetId}`,
                 }));
             }
@@ -993,7 +1059,7 @@ function compilePlans(snapshot) {
                     entry, id: entry.id, position: entry.position, board: false, item, set: null,
                     portrait: item !== null ? fileOf(item.portraitFileId) : null,
                     landscape: item !== null ? fileOf(item.landscapeFileId) : null,
-                    standard, takeover,
+                    standard, takeover, alert,
                     name: item?.name ?? `media item ${entry.mediaItemId}`,
                 }));
             }

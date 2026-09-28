@@ -384,7 +384,7 @@ export function buildSnapshot(kind: CartridgeKind, raw: RawTables, warnings: Loa
     }
   }
 
-  const directiveLists = new Map<number, { standard: Directive[]; takeover: Directive[] }>();
+  const directiveLists = new Map<number, { standard: Directive[]; takeover: Directive[]; alert: Directive[] }>();
   for (const r of rows("directive")) {
     const id = num(r, "id");
     const type = str(r, "type");
@@ -404,7 +404,7 @@ export function buildSnapshot(kind: CartridgeKind, raw: RawTables, warnings: Loa
       continue;
     }
     let lists = directiveLists.get(d.entryId);
-    if (!lists) directiveLists.set(d.entryId, (lists = { standard: [], takeover: [] }));
+    if (!lists) directiveLists.set(d.entryId, (lists = { standard: [], takeover: [], alert: [] }));
     lists[d.type].push(d);
   }
   const directives = new Map<number, EntryDirectives>();
@@ -413,6 +413,7 @@ export function buildSnapshot(kind: CartridgeKind, raw: RawTables, warnings: Loa
     directives.set(entryId, Object.freeze({
       standard: Object.freeze(lists.standard.sort(byTime)),
       takeover: Object.freeze(lists.takeover.sort(byTime)),
+      alert: Object.freeze(lists.alert.sort(byTime)),
     }));
   }
 

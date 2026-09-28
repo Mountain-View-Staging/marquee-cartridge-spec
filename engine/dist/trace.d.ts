@@ -8,7 +8,7 @@
  */
 export type TraceKind = "render" | "cut" | "jump" | "hold" | "blank" | "skip" | "warning";
 export type RenderCode = "rotation.start" | "rotation.next" | "rotation.wrap";
-export type CutCode = "takeover.activate" | "schedule.change" | "orientation.change" | "mode.change" | "cartridge.commit";
+export type CutCode = "alert.activate" | "takeover.activate" | "schedule.change" | "orientation.change" | "mode.change" | "cartridge.commit";
 export type JumpCode = "jump.backward" | "jump.forward";
 export type HoldCode = "set.empty" | "set.all_failed";
 export type BlankCode = "schedule.blank";
@@ -16,7 +16,7 @@ export type SkipCode = "media.load_failed" | "media.no_first_frame" | "media.wat
 export type WarningCode = "orientation.missing";
 export type TraceCode = RenderCode | CutCode | JumpCode | HoldCode | BlankCode | SkipCode | WarningCode;
 /** Which rotation an item came from (§5.5). */
-export type RotationSet = "standard" | "takeover";
+export type RotationSet = "standard" | "takeover" | "alert";
 export interface TraceEvent {
     /** The show clock at the decision (Unix ms). */
     readonly showTime: number;

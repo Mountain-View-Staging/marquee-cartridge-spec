@@ -111,9 +111,10 @@ Codes are the stable contract; any human-readable text an engine attaches is fre
 
 | Kind | Code | Meaning |
 |---|---|---|
-| render | `rotation.start` | First entry of a set: no cursor yet, or a takeover period beginning |
+| render | `rotation.start` | First entry of a set: no cursor yet, or a takeover or alert period beginning |
 | render | `rotation.next` | The first entry after the cursor's position |
 | render | `rotation.wrap` | Nothing after the cursor, so the first entry again |
+| cut | `alert.activate` | A transition to the alert set, from standard or takeover (a `time` hint reached) |
 | cut | `takeover.activate` | The standard → takeover transition (a `time` hint reached) |
 | cut | `schedule.change` | A schedule boundary changed the active playlist |
 | cut | `orientation.change` | The device rotated: the rotation continues after its cursors in the new orientation |
@@ -187,6 +188,9 @@ applies the same host rules.
 | MCS-22 | A device rotating mid-show keeps its playlist and its cursors, and continues with the other orientation's files | `one-schedule` | Reference §6.2, §6.5, §6.7, §9.4 |
 | MCS-23 | A DemoStation's picture-in-picture plays the same playlist with the opposite orientation's files, and the rotation continues as the demo starts and ends | `demo-station` | Reference §6.5, §6.7, §7, §9.4 |
 | MCS-24 | A schedule row on a retired slot is malformed: skipped with a warning, and the one schedule plays on | `retired-slot` | Specification §4.4, §10.4 |
+| MCS-25 | An alert outranks a takeover: its activation cuts the takeover item, the alert set is the whole rotation, and when it turns off a takeover period begins again | `alert` | Reference §6.3, §6.4, §6.5, §6.7 |
+| MCS-26 | An alert is never day-scoped: one ON at timestamp 0 governs on Day 2 and suppresses Day 2's standard rotation | `alert-standing` | Reference §6.3, §6.4 |
+| MCS-27 | The orientation gate comes before the alert gate: an alert with a landscape file only never reaches a portrait device, and takes over when the device turns landscape | `alert-landscape` | Reference §6.3, §6.4, §9.4 |
 
 Expected traces were derived by hand from the specification and are reviewed before either
 engine exists. When an engine disagrees with a trace, decide which is wrong against the

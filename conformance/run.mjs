@@ -21,7 +21,7 @@ import { DatabaseSync } from "node:sqlite";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CODES = {
   render: ["rotation.start", "rotation.next", "rotation.wrap"],
-  cut: ["takeover.activate", "schedule.change", "orientation.change", "mode.change", "cartridge.commit"],
+  cut: ["alert.activate", "takeover.activate", "schedule.change", "orientation.change", "mode.change", "cartridge.commit"],
   jump: ["jump.backward", "jump.forward"],
   hold: ["set.empty", "set.all_failed"],
   blank: ["schedule.blank"],

@@ -1,0 +1,23 @@
+{
+  "id": "MCS-26",
+  "title": "An alert is never day-scoped: one ON at timestamp 0 governs on Day 2 and suppresses Day 2's standard rotation",
+  "rules": "Reference §6.3, §6.4",
+  "cartridge": "alert-standing",
+  "engine": {
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 30,
+    "start": "2026-09-16T09:00:00-07:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {}
+  },
+  "events": []
+}

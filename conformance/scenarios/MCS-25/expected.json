@@ -1,0 +1,75 @@
+{
+  "id": "MCS-25",
+  "trace": [
+    {
+      "t": "2026-09-15T11:44:36-07:00",
+      "kind": "render",
+      "code": "rotation.start",
+      "entry": 2,
+      "set": "takeover",
+      "file": 102
+    },
+    {
+      "t": "2026-09-15T11:44:46-07:00",
+      "kind": "render",
+      "code": "rotation.wrap",
+      "entry": 2,
+      "set": "takeover",
+      "file": 102
+    },
+    {
+      "t": "2026-09-15T11:44:56-07:00",
+      "kind": "render",
+      "code": "rotation.wrap",
+      "entry": 2,
+      "set": "takeover",
+      "file": 102
+    },
+    {
+      "t": "2026-09-15T11:45:00-07:00",
+      "kind": "cut",
+      "code": "alert.activate",
+      "entry": 2
+    },
+    {
+      "t": "2026-09-15T11:45:00-07:00",
+      "kind": "render",
+      "code": "rotation.start",
+      "entry": 5,
+      "set": "alert",
+      "file": 105
+    },
+    {
+      "t": "2026-09-15T11:45:10-07:00",
+      "kind": "render",
+      "code": "rotation.wrap",
+      "entry": 5,
+      "set": "alert",
+      "file": 105
+    },
+    {
+      "t": "2026-09-15T11:45:20-07:00",
+      "kind": "render",
+      "code": "rotation.wrap",
+      "entry": 5,
+      "set": "alert",
+      "file": 105
+    },
+    {
+      "t": "2026-09-15T11:45:30-07:00",
+      "kind": "render",
+      "code": "rotation.start",
+      "entry": 2,
+      "set": "takeover",
+      "file": 102
+    },
+    {
+      "t": "2026-09-15T11:45:40-07:00",
+      "kind": "render",
+      "code": "rotation.wrap",
+      "entry": 2,
+      "set": "takeover",
+      "file": 102
+    }
+  ]
+}
