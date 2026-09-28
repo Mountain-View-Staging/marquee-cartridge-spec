@@ -2,7 +2,8 @@
  * filesForLanes: which files a host needs for the lanes it renders (§7.7). A
  * lane is one orientation over the one schedule. Every file the manifest lists,
  * except those referenced only as an item's slot file for an orientation the
- * host does not render.
+ * host does not render, or only as demo branding on a host without the
+ * DemoStation mode.
  */
 import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
@@ -29,20 +30,31 @@ test("a file is judged by every slot that names it: a landscape file in a portra
   assert.deepEqual(ids(filesForLanes(s, { lanes: ["landscape"] })), [201, 202, 203]);
 });
 
-test("over every conformance fixture: the two lanes together are the manifest, each alone a subset, ids ascending", async () => {
+test("over every conformance fixture: the two lanes together are the manifest — with the DemoStation mode where a fixture has demo branding — each alone a subset, ids ascending", async () => {
   const names = readdirSync(CARTRIDGES).filter((f) => f.endsWith(".db")).map((f) => f.slice(0, -3)).sort();
   assert.ok(names.length >= 12);
   for (const name of names) {
     const s = await loadCartridge(fixture(name));
     const manifest = [...s.manifest.keys()].sort((a, b) => a - b);
-    const portrait = ids(filesForLanes(s, { lanes: ["portrait"] }));
-    const landscape = ids(filesForLanes(s, { lanes: ["landscape"] }));
-    for (const list of [portrait, landscape]) {
-      assert.deepEqual(list, [...list].sort((a, b) => a - b), `${name}: ascending`);
-      for (const id of list) assert.ok(s.manifest.has(id), `${name}: ${id} is in the manifest`);
+    const lanes = (demo) => ["portrait", "landscape"].map((lane) => ids(filesForLanes(s, { lanes: [lane], demo })));
+    for (const demo of [false, true]) {
+      for (const list of lanes(demo)) {
+        assert.deepEqual(list, [...list].sort((a, b) => a - b), `${name}: ascending`);
+        for (const id of list) assert.ok(s.manifest.has(id), `${name}: ${id} is in the manifest`);
+      }
     }
-    assert.deepEqual([...new Set([...portrait, ...landscape])].sort((a, b) => a - b), manifest, name);
-    // What a portrait host leaves out is exactly what only landscape slots name.
+    const union = (lists) => [...new Set(lists.flat())].sort((a, b) => a - b);
+    assert.deepEqual(union(lanes(true)), manifest, name);
+    // Without the mode, the two lanes leave out the files of demo branding and nothing else.
+    const branding = new Set(s.scheduleBySlot.demo_station.flatMap((e) => [e.backgroundItemId, e.overlayItemId]).filter((id) => id !== null));
+    const brandingFiles = new Set([...s.mediaItems.values()].filter((i) => branding.has(i.id)).flatMap((i) => [i.portraitFileId, i.landscapeFileId]));
+    const left = manifest.filter((id) => !union(lanes(false)).includes(id));
+    for (const id of left) assert.ok(brandingFiles.has(id), `${name}: ${id} is left out, and no demo branding names it`);
+    if (branding.size > 0) continue;
+    // No demo branding: `demo` changes nothing, and what a portrait host leaves out is exactly
+    // what only landscape slots name.
+    assert.deepEqual(lanes(true), lanes(false), name);
+    const [portrait, landscape] = lanes(false);
     const portraitSlots = new Set([...s.mediaItems.values()].map((i) => i.portraitFileId));
     assert.deepEqual(manifest.filter((id) => !portrait.includes(id)), manifest.filter((id) => !portraitSlots.has(id) && landscape.includes(id)), name);
   }
@@ -100,12 +112,63 @@ test("demo: while the demo_station slot has an entry with a background, the oppo
   assert.deepEqual(ids(filesForLanes(off, { lanes: ["portrait"], demo: true })), [101, 102, 103, 104]);
 });
 
-test("the demo-station fixture: a portrait DemoStation fetches both lanes; a plain portrait Surface one", async () => {
-  // Items 1, 2, 4 have both files; 3 is portrait-only; 8 and 9 are the demo's overlay and background.
+test("the demo-station fixture: a DemoStation fetches both lanes and the branding; a Surface without the mode neither the opposite lane nor the branding", async () => {
+  // Items 1, 2, 4 have both files; 3 is portrait-only; 8 and 9 are the demo's overlay and
+  // background, in no playlist.
   const s = await loadCartridge(fixture("demo-station"));
   assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"], demo: true })), [101, 102, 103, 104, 108, 109, 201, 202, 204, 208, 209]);
-  assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"] })), [101, 102, 103, 104, 108, 109]);
-  assert.deepEqual(ids(filesForLanes(s, { lanes: ["landscape"] })), [201, 202, 204, 208, 209]);
+  assert.deepEqual(ids(filesForLanes(s, { lanes: ["landscape"], demo: true })), [101, 102, 103, 104, 108, 109, 201, 202, 204, 208, 209]);
+  assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"] })), [101, 102, 103, 104]);
+  assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"], demo: false })), [101, 102, 103, 104]);
+  assert.deepEqual(ids(filesForLanes(s, { lanes: ["landscape"] })), [201, 202, 204]);
+  assert.deepEqual(ids(filesForLanes(s, { lanes: ["landscape", "portrait"] })), [101, 102, 103, 104, 201, 202, 204]);
+});
+
+test("an item used as demo branding and any other way too keeps its lanes on a Surface without the mode", async () => {
+  // Item 9, the demo's background (109 / 209), put to one more use each time; item 8, the
+  // overlay (108 / 208), stays branding only.
+  const room = (backing, logo, style) => `INSERT INTO session_set VALUES (1, 'Room', '["simple"]', 8, ${backing}, ${logo}, NULL, NULL, NULL, ${style === "NULL" ? "NULL" : "'acme/acme-2026/1'"}, ${style}, 0, 0)`;
+  const uses = {
+    "a playlist entry's item": "INSERT INTO playlist_entry VALUES (5, 1, 5, 'media_item', 9, NULL, NULL, NULL, NULL, NULL, 0, 0)",
+    "the project's backing": "UPDATE project SET backing_item_id = 9",
+    "the show wallpaper": "UPDATE project SET show_wallpaper_item_id = 9",
+    "the desktop wallpaper": "UPDATE project SET desktop_wallpaper_item_id = 9",
+    "a session set's backing": room(9, "NULL", "NULL"),
+    "a session set's logo": room("NULL", 9, "NULL"),
+  };
+  for (const [use, sql] of Object.entries(uses)) {
+    const s = await loadCartridge(variant("demo-station", sql));
+    assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"] })), [101, 102, 103, 104, 109], use);
+    assert.deepEqual(ids(filesForLanes(s, { lanes: ["landscape"] })), [201, 202, 204, 209], use);
+    assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"], demo: true })), [101, 102, 103, 104, 108, 109, 201, 202, 204, 208, 209], use);
+  }
+  // A brand file is wanted on every lane (§9), whatever else names it.
+  const brand = {
+    "a brand member": "UPDATE media_item SET brand_member = 'acme/acme-2026/1' WHERE id = 9",
+    "the project's style book": "UPDATE project SET brand_style = 'acme/acme-2026/1', brand_style_item_id = 9",
+    "a session set's style book": room("NULL", "NULL", 9),
+  };
+  for (const [use, sql] of Object.entries(brand)) {
+    const s = await loadCartridge(variant("demo-station", sql));
+    assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"] })), [101, 102, 103, 104, 109, 209], use);
+    assert.deepEqual(ids(filesForLanes(s, { lanes: ["landscape"] })), [109, 201, 202, 204, 209], use);
+  }
+});
+
+test("a file of demo branding that another item names is judged by that item's slot", async () => {
+  // The overlay (item 8) now holds 201 in its portrait slot — item 1's landscape file — and
+  // 102 in its landscape slot — item 2's portrait file.
+  const s = await loadCartridge(variant("demo-station", `
+    UPDATE media_item SET portrait_file_id = 201, landscape_file_id = 102 WHERE id = 8;
+    DELETE FROM media_manifest WHERE media_file_id IN (108, 208);
+    DELETE FROM media_file_variant WHERE media_file_id IN (108, 208);
+    DELETE FROM media_file WHERE id IN (108, 208)`));
+  assert.deepEqual(s.warnings, []);
+  // Without the mode the overlay's slots count for nothing: 201 serves the landscape lane
+  // through item 1, 102 the portrait lane through item 2.
+  assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"] })), [101, 102, 103, 104]);
+  assert.deepEqual(ids(filesForLanes(s, { lanes: ["landscape"] })), [201, 202, 204]);
+  assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"], demo: true })), [101, 102, 103, 104, 109, 201, 202, 204, 209]);
 });
 
 test("a project snapshot reads the same way", async () => {

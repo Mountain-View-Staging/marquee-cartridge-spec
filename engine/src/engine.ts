@@ -224,7 +224,11 @@ class Cursor {
 
 let engines = 0;
 
-/** Creates an engine for one committed Snapshot and one device. */
+/**
+ * Creates an engine for one committed Snapshot and one device. Options carrying
+ * a `slot` — an earlier draft's schedule per orientation — are refused with a
+ * TypeError, so a host written for that draft fails loudly.
+ */
 export function createEngine(options: EngineOptions): SurfaceEngine {
   return new SurfaceEngine(options);
 }
@@ -328,6 +332,9 @@ export class SurfaceEngine {
 
   constructor(options: EngineOptions) {
     const { snapshot, clock } = options;
+    if (Object.hasOwn(options, "slot")) {
+      throw new TypeError("createEngine takes no slot option: since 25.0.1 a surface has one schedule, whatever the device's orientation (§5.1), so remove it");
+    }
     if (!snapshot || snapshot.kind !== "surface") throw new TypeError("createEngine needs a surface Snapshot (loadCartridge)");
     if (!clock || typeof clock.now !== "function") throw new TypeError("createEngine needs a show clock (surfaceClock() or previewClock())");
     this.snap = snapshot;

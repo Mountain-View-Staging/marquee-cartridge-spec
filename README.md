@@ -976,6 +976,9 @@ lanes it renders:
 - **On a Surface that runs the DemoStation mode** (§5.11), also the opposite orientation's lane
   while the `demo_station` slot has any entry with a background — the picture-in-picture plays the
   same playlist in that orientation — and the demo branding in the orientation the Surface renders.
+  A Surface without the mode never draws the branding, so an item used only as demo branding — a
+  `demo_station` entry's background or overlay that no playlist entry, backing, logo or wallpaper
+  names — is in none of its lanes.
 - **Everything else the cartridge delivers**, whatever the lane: brand files (§9), and any file no
   item places in an orientation's slot.
 

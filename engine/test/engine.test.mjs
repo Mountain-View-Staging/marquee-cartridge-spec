@@ -10,6 +10,7 @@ import { test } from "node:test";
 import {
   Calendar,
   DirectiveSeries,
+  SurfaceEngine,
   boardPageAt,
   createEngine,
   loadCartridge,
@@ -89,6 +90,18 @@ test("a rotation never changes the schedule: the same entry governs, and the rot
 // the demo is on from 08:00:25 (background item 9, overlay item 8) and off from 08:00:55.
 
 const DEMO_ON = { scheduleEntryId: 2, background: { mediaItemId: 9, mediaFileId: 109, contentType: "image/png" }, overlay: { mediaItemId: 8, mediaFileId: 108, contentType: "image/png" } };
+
+test("a slot option, from a host written for per-orientation schedules, is refused by name", async () => {
+  const snapshot = await loadCartridge(fixture("base"));
+  const refused = (e) => e instanceof TypeError && /^createEngine takes no slot option: .*one schedule/.test(e.message);
+  for (const slot of ["portrait", "landscape", "playlist", "demo_station", null, undefined]) {
+    assert.throws(() => createEngine({ snapshot, slot, orientation: "portrait", clock: surfaceClock() }), refused, String(slot));
+  }
+  assert.throws(() => new SurfaceEngine({ snapshot, slot: "landscape", orientation: "landscape", clock: surfaceClock() }), refused);
+  // The same host without the option has an engine, which plays.
+  const engine = createEngine({ snapshot, orientation: "portrait", clock: surfaceClock() });
+  assert.equal(engine.tick(at("2026-09-15T08:00:00-07:00"), 0).renderItem?.media.mediaFileId, 101);
+});
 
 test("a DemoStation's demo: the output carries its branding in the device's orientation, and its items play in the picture-in-picture", async () => {
   let during;

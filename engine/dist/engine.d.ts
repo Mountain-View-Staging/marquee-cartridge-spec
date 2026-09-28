@@ -144,7 +144,11 @@ export interface Inspection {
     readonly currentSince: number | null;
     readonly pending: RenderItem | null;
 }
-/** Creates an engine for one committed Snapshot and one device. */
+/**
+ * Creates an engine for one committed Snapshot and one device. Options carrying
+ * a `slot` — an earlier draft's schedule per orientation — are refused with a
+ * TypeError, so a host written for that draft fails loudly.
+ */
 export declare function createEngine(options: EngineOptions): SurfaceEngine;
 export declare class SurfaceEngine {
     private snap;

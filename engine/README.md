@@ -145,14 +145,17 @@ if (renderItem) show(renderItem, renderItem.pip ? pipFrame : fullFrame);
 A lane is one orientation over the one schedule. `filesForLanes(snapshot, { lanes, demo })`
 returns the media file ids a host rendering `lanes` needs (§7.7): **every file the manifest
 lists, except those referenced only as an item's slot file for an orientation the host does not
-render.** An item's portrait file serves the portrait lane and its landscape file the landscape
-lane, however the item is used (a playlist entry, a backing, demo branding), since each resolves
-by orientation with no fallback. Brand files are wanted on every lane: every file of a brand
-member, or of an item the project or a session set names as its style book. A file no item
+render, or only as demo branding on a host without the DemoStation mode.** An item's portrait
+file serves the portrait lane and its landscape file the landscape lane, however the item is used
+(a playlist entry, a backing, demo branding), since each resolves by orientation with no
+fallback. An item used only as demo branding — a `demo_station` entry's background or overlay
+that no playlist entry, backing, logo or wallpaper names — is in a lane only with `demo: true`:
+a host without the mode never draws it. Brand files are wanted on every lane: every file of a
+brand member, or of an item the project or a session set names as its style book. A file no item
 references is wanted. With `demo: true` (a host that runs the DemoStation mode), while the
 `demo_station` slot has any entry with a background, the opposite of each lane is rendered too
-— the picture-in-picture plays the same playlist in it. The ids iterate ascending; a project
-snapshot reads the same way.
+— the picture-in-picture plays the same playlist in it. A file is judged by every slot that
+names it. The ids iterate ascending; a project snapshot reads the same way.
 
 ```js
 const wanted = filesForLanes(snapshot, { lanes: ["portrait"], demo: false });
@@ -202,7 +205,7 @@ node:sqlite before Node 24, which end the string at it.
 
 | Export | |
 |---|---|
-| `createEngine({ snapshot, orientation, clock, demoStation?, boardResolver? })` | One engine per device. It resolves the one schedule; `orientation` is the device's (§6), and `demoStation: true` runs the DemoStation mode (above). |
+| `createEngine({ snapshot, orientation, clock, demoStation?, boardResolver? })` | One engine per device. It resolves the one schedule; `orientation` is the device's (§6), and `demoStation: true` runs the DemoStation mode (above). Options carrying a `slot` — an earlier draft's schedule per orientation — throw a `TypeError` that says to remove it. |
 | `engine.tick(wallMs, monoMs) → { showNow, projected, renderItem, trace, demo }` | Evaluates the next content when the marker is forced (0) or `showNow ≥ marker`. A forced marker is a state of its own, not an instant compared with the show time, so a show time before 1970 (negative milliseconds, reachable from a preview clock) evaluates at the next tick like any other (§5.9). |
 | `engine.onFirstFrame(token)`, `onMediaCompleted(token)`, `onLoadFailed(token, reason)` | Each returns the trace events it caused. |
 | `engine.setOrientation(o)`, `engine.commit(snapshot)` | Applied at the next tick. A rotation keeps the schedule and the cursors. |
