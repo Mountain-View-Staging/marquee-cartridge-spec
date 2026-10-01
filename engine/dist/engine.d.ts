@@ -31,6 +31,7 @@
  * touches a database: the Snapshot is indexed once, when committed.
  */
 import { type BoardResolver } from "./board.js";
+import type { BoardVariant } from "./render.js";
 import type { ShowClock } from "./clock.js";
 import type { Orientation, ProjectDay, ResourceType, Snapshot, SurfaceScheduleEntry } from "./model.js";
 import type { DemoState, RenderItem } from "./render.js";
@@ -68,6 +69,11 @@ export interface EngineOptions {
     readonly demoStation?: boolean;
     /** Defaults to the minimal one-page resolver. */
     readonly boardResolver?: BoardResolver;
+    /**
+     * §5.15 — which of a template's layouts this device shows: its own setting,
+     * handed to the board resolver and recorded on the board. Defaults to `both`.
+     */
+    readonly boardVariant?: BoardVariant;
     readonly firstFrameTimeoutMs?: number;
     readonly emptyRetryMs?: number;
 }
@@ -161,6 +167,8 @@ export declare class SurfaceEngine {
     private readonly demoStation;
     private readonly clock;
     private readonly boardResolver;
+    private boardVariantValue;
+    private variantChanged;
     private readonly firstFrameTimeoutMs;
     private readonly emptyRetryMs;
     /** The device's orientation (§6). */
@@ -249,6 +257,15 @@ export declare class SurfaceEngine {
      * orientation's files. During a demo the picture-in-picture turns with it.
      */
     setOrientation(orientation: Orientation | null | undefined): readonly TraceEvent[];
+    /** §5.15 — the layouts this device shows. */
+    get boardVariant(): BoardVariant;
+    /**
+     * §5.15 — the device's board variant changed (the operator set it). At the
+     * next tick a session board on screen is cut (`variant.change`) and the
+     * rotation continues after its cursors; anything else on screen plays on,
+     * and the next board is chosen with the new variant.
+     */
+    setBoardVariant(variant: BoardVariant): readonly TraceEvent[];
     /** A new cartridge is committed: reset all state and cut at the next tick (§5.9). */
     commit(snapshot: Snapshot): readonly TraceEvent[];
     private output;
@@ -262,6 +279,8 @@ export declare class SurfaceEngine {
      * in the same tick is a cause of its own, recorded by the resolution.
      */
     private afterOrientationChange;
+    /** §5.15 — a board on screen is cut when the device's variant changes; nothing else is. */
+    private afterVariantChange;
     private jump;
     /**
      * §5.2 — the latest `playlist` entry whose timestamp ≤ showNow, and on a

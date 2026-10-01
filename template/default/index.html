@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marquee — default board</title>
+<!--
+  The default session board template (TEMPLATE.md in the cartridge specification; the "default template" every client carries).
+
+  HOW IT WORKS, in three lines:
+  1. The host gives this page a DATA DOCUMENT (engine/marquee-template.js receives it).
+  2. The shim loads the layout sources template.json names (layouts/now-next.html,
+     layouts/schedule.html) and renders the one matching document.board.renderMode into
+     <div id="marquee-root">. A sign chooses which layouts it shows; this template offers both.
+  3. Colours are CSS custom properties the shim sets from the document's roles
+     (--marquee-role-title, …); the canvas puts classes on <html> (marquee-portrait, …).
+
+  To adapt it: change styles.css first (sizes, spacing, the role a colour maps to), then the
+  layout files (what is shown, in what order; each has its own stylesheet beside it). The template language is nunjucks
+  (https://mozilla.github.io/nunjucks/templating.html): {{ value }} prints, {% if %} and
+  {% for %} branch and loop, | upper is a filter. The data paths are listed in TEMPLATE.md;
+  the builder's editor completes them.
+-->
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- The board is rendered here. Never put content inside; the shim replaces it. -->
+<div id="marquee-root"></div>
+
+<script src="engine/nunjucks.js"></script>
+<script src="engine/marquee-template.js"></script>
+</body>
+</html>

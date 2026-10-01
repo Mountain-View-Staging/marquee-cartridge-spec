@@ -1,0 +1,51 @@
+{#
+  Layout: now / next — the template source for board.renderMode "now-next" (nunjucks).
+  board.signage is the resolved board, in the kit's own words:
+    roomName · clock · date · headline { label, timeRange, title, detail } · blocks[] { label, primary, secondary, secondaryItalic }
+  slots holds the sessions behind it (now, next, …) with presenters, attributes, abstract.
+  The shim renders this into <div id="marquee-root"> on every update; its own styles are layouts/now-next.css.
+#}
+{% set s = board.signage %}
+<section class="board board--now-next">
+
+  <header class="board__header">
+    <h1 class="room">{{ s.roomName }}</h1>
+    {% if s.clock %}
+    <div class="clock">
+      <span class="clock__time">{{ s.clock }}</span>
+      <span class="clock__date">{{ s.date }}</span>
+    </div>
+    {% endif %}
+  </header>
+
+  <main class="headline">
+    {% if s.headline.label %}<p class="headline__label">{{ s.headline.label }}</p>{% endif %}
+    {% if s.headline.timeRange %}<p class="headline__time">{{ s.headline.timeRange }}</p>{% endif %}
+    <h2 class="headline__title">{{ s.headline.title }}</h2>
+    {% if s.headline.detail %}<p class="headline__detail">{{ s.headline.detail }}</p>{% endif %}
+
+    {# The speakers of the session on screen, when the feed names them. #}
+    {% for slot in slots %}{% if slot.isNow and slot.presenters.length %}
+    <ul class="speakers">
+      {% for p in slot.presenters %}
+      <li class="speaker">
+        <span class="speaker__name">{{ p.name }}</span>
+        {% if p.title or p.company %}<span class="speaker__role">{{ p.title }}{% if p.title and p.company %}, {% endif %}{{ p.company }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}{% endfor %}
+  </main>
+
+  {% for block in s.blocks %}
+  <section class="block">
+    <p class="block__label">{{ block.label }}</p>
+    <p class="block__primary">{{ block.primary }}</p>
+    {% if block.secondary %}<p class="block__secondary{% if block.secondaryItalic %} block__secondary--italic{% endif %}">{{ block.secondary }}</p>{% endif %}
+  </section>
+  {% endfor %}
+
+  {% if vars.sponsorName %}
+  <footer class="board__footer">{{ vars.sponsorName }}</footer>
+  {% endif %}
+</section>

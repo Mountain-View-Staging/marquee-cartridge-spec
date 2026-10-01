@@ -56,6 +56,8 @@ CREATE TABLE project (
   backing_item_id           INTEGER REFERENCES media_item(id),   -- default backing, §5.10
   brand_style               TEXT,     -- style address 'company/style/version', §9
   brand_style_item_id       INTEGER REFERENCES media_item(id),   -- the style book file, §9
+  template_item_id          INTEGER REFERENCES media_item(id),   -- the session board template, §5.15
+  template_settings         TEXT,     -- JSON { "vars": { name: string } }, §5.15
   created                   INTEGER NOT NULL,
   updated                   INTEGER NOT NULL
 );
@@ -184,15 +186,15 @@ CREATE TABLE session (
 CREATE TABLE session_set (
   id                INTEGER PRIMARY KEY,
   name              TEXT    NOT NULL,
-  render_modes      TEXT    NOT NULL DEFAULT '["simple"]',   -- JSON array
   duration          REAL    NOT NULL DEFAULT 8,              -- seconds per board page
   backing_item_id   INTEGER REFERENCES media_item(id),
   logo_item_id      INTEGER REFERENCES media_item(id),
-  schedule_template TEXT,               -- JSON diff vs the Surface baseline; NULL = baseline
   source_id         TEXT,
   source_name       TEXT,
   brand_style         TEXT,                               -- overrides the project's, §9
   brand_style_item_id INTEGER REFERENCES media_item(id),  -- overrides the project's, §9
+  template_item_id    INTEGER REFERENCES media_item(id),  -- overrides the project's, §5.15
+  template_settings   TEXT,                               -- for that override, §5.15
   created           INTEGER NOT NULL,
   updated           INTEGER NOT NULL
 );
@@ -243,6 +245,11 @@ def still(i, seconds=10, portrait=True, landscape=True, portrait_file=None):
 def video(i, seconds=12):
     return dict(id=i, kind="video", seconds=seconds, portrait=True, landscape=True, portrait_file=None)
 
+def package(i, delivered=True):
+    """A session board template (§5.15): one application/zip file, held in the portrait slot.
+    `delivered=False` leaves its file out of the manifest: the item is there, its file is not."""
+    return dict(id=i, kind="template", seconds=None, portrait=True, landscape=False, portrait_file=None, delivered=delivered)
+
 def base(**over):
     c = dict(
         days=[day("2026-09-15")],
@@ -254,6 +261,7 @@ def base(**over):
                    + [(2, "takeover", "2026-09-15 11:30:00", 1), (2, "takeover", "2026-09-15 12:30:00", 0)],
         session_sets=[],
         project_backing=None,
+        project_template=None,      # (item id, settings JSON or None), §5.15
     )
     c.update(over)
     return c
@@ -285,6 +293,24 @@ CARTRIDGES = {
                                   (3, "takeover", "2026-09-15 08:00:25", 0)]),
     # MCS-11
     "video": base(items=[video(1), video(2), still(3), video(4)], directives=std((1, 2, 3, 4))),
+    # MCS-28, 30: the board show with session board templates (§5.15). Item 50 is the Show's
+    # template (a package in the portrait slot, in no playlist), item 51 the set's own; each
+    # pointer carries its settings. Entries 1-3 standard.
+    "template": base(
+        items=[still(1), still(3), package(50), package(51)],
+        session_sets=[dict(id=1, duration=8, sessions=13, template=(51, '{"vars":{"sponsorName":"Set one"}}'))],
+        playlists={1: [1, ("board", 1), 3]},
+        directives=std((1, 2, 3)),
+        project_template=(50, '{"vars":{"sponsorName":"Show"}}')),
+    # MCS-29: the same show with both pointers dangling — items 98 and 99 exist, but their
+    # files are not in the manifest, so the cartridge carries no template for either — and
+    # both settings malformed (the Show's is not JSON, the set's has no vars object).
+    "template-dangling": base(
+        items=[still(1), still(3), package(98, delivered=False), package(99, delivered=False)],
+        session_sets=[dict(id=1, duration=8, sessions=13, template=(98, '{"vars":[1]}'))],
+        playlists={1: [1, ("board", 1), 3]},
+        directives=std((1, 2, 3)),
+        project_template=(99, 'not json')),
     # MCS-12
     "schedule-change": base(
         items=[still(1), still(2), still(3), still(4), still(11), still(12)],
@@ -387,24 +413,30 @@ def build(name, c):
                 continue
             if fid >= 200:
                 w, hgt = 1920, 1080
-            files[fid] = (it["kind"], w, hgt, it["seconds"])
+            files[fid] = (it["kind"], w, hgt, it["seconds"], it.get("delivered", True))
         x("INSERT INTO media_item VALUES (?,?,?,?,?,NULL,?,?)",
           (i, f"Item {i}", pf, lf, it["seconds"] if it["kind"] == "still" else None, NOW, NOW))
-    for fid, (kind, w, hgt, secs) in sorted(files.items()):
+    for fid, (kind, w, hgt, secs, delivered) in sorted(files.items()):
         is_video = kind == "video"
-        ctype, codec = ("video/mp4", "H.264") if is_video else ("image/png", "PNG")
-        ext = "mp4" if is_video else "png"
+        if kind == "template":  # §5.15: a package is never decoded as media — no dimensions, no codec
+            ctype, codec, ext, w, hgt = "application/zip", None, "zip", None, None
+        else:
+            ctype, codec = ("video/mp4", "H.264") if is_video else ("image/png", "PNG")
+            ext = "mp4" if is_video else "png"
         fname = f"file-{fid}.{ext}"
         x("INSERT INTO media_file VALUES (?,?,?,?,?,?,?,?,?,?)",
-          (fid, ctype, codec, w, hgt, "portrait" if hgt > w else "landscape", w / hgt,
+          (fid, ctype, codec, w, hgt, None if w is None else ("portrait" if hgt > w else "landscape"), None if w is None else w / hgt,
            float(secs) if is_video else None, NOW, NOW))
+        if not delivered:
+            continue
         x("INSERT INTO media_manifest VALUES (?,?,?,?,?)", (fid, fname, h(fname), 1024, ctype))
         x("INSERT INTO media_file_variant VALUES (?,?,'original',?,?,?,?,?,?,?,?,?)",
           (fid, fid, fname, ctype, codec, w, hgt, 1024, h(fname), NOW, NOW))
 
     for s in c["session_sets"]:
-        x("INSERT INTO session_set (id,name,render_modes,duration,created,updated) VALUES (?,?,'[\"simple\"]',?,?,?)",
-          (s["id"], f"Room {s['id']}", s["duration"], NOW, NOW))
+        t_item, t_settings = s.get("template") or (None, None)
+        x("INSERT INTO session_set (id,name,duration,template_item_id,template_settings,created,updated) VALUES (?,?,?,?,?,?,?)",
+          (s["id"], f"Room {s['id']}", s["duration"], t_item, t_settings, NOW, NOW))
         # As many Day 1 sessions as the set asks for (default three), so a production
         # resolver at five rows a page yields the page count the scenario shares.
         for k in range(1, s.get("sessions", 3) + 1):
@@ -414,8 +446,9 @@ def build(name, c):
               (k, s["id"], k, ms(f"2026-09-15 {8 + k:02d}:00:00"), ms(f"2026-09-15 {8 + k:02d}:45:00"),
                f"Room {s['id']}", NOW, NOW))
 
-    x("INSERT INTO project VALUES (1,'00000000-0000-4000-8000-000000000026','Show 26','SHOW26',?,NULL,NULL,?,NULL,NULL,?,?)",
-      (TZ, c["project_backing"], NOW, NOW))
+    p_item, p_settings = c["project_template"] or (None, None)
+    x("INSERT INTO project VALUES (1,'00000000-0000-4000-8000-000000000026','Show 26','SHOW26',?,NULL,NULL,?,NULL,NULL,?,?,?,?)",
+      (TZ, c["project_backing"], p_item, p_settings, NOW, NOW))
 
     for pid, entries in c["playlists"].items():
         x("INSERT INTO playlist VALUES (?,?,?,?)", (pid, f"Playlist {chr(64 + pid)}", NOW, NOW))

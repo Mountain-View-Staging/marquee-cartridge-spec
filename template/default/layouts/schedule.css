@@ -1,0 +1,30 @@
+/* Marquee — default board · the schedule layout's own styles (loaded with the page by the shim). */
+
+.rows { display: flex; flex-direction: column; flex: 1; }
+.row {
+  display: grid; grid-template-columns: 7em 1fr auto; align-items: baseline; gap: 2rem;
+  padding: 1.2rem 0;
+  border-top: 0.1rem solid var(--marquee-role-description);
+  font-size: var(--body-size);
+  color: var(--marquee-role-name);
+}
+.row:first-child { border-top: 0; }
+.row__time { font-weight: 600; color: var(--marquee-role-description); }
+.row__title { font-weight: 600; overflow-wrap: anywhere; }
+.row--now .row__title { color: var(--marquee-role-title); font-weight: 700; }
+.row--now .row__time { color: var(--marquee-role-accent); }
+.row__badge {
+  font-size: calc(var(--body-size) * 0.6); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 0.3em 0.8em; border-radius: 0.5em;
+  color: var(--marquee-text-on-dark); background: var(--marquee-role-accent);
+}
+.row__badge--next { color: var(--marquee-role-accent); background: transparent; border: 0.1rem solid var(--marquee-role-accent); }
+.rows__empty { font-size: var(--body-size); color: var(--marquee-role-description); }
+
+.pages { display: flex; gap: 1rem; }
+.page-dot { width: 1rem; height: 1rem; border-radius: 50%; background: var(--marquee-role-description); opacity: 0.5; }
+.page-dot--current { background: var(--marquee-role-accent); opacity: 1; }
+
+
+/* landscape */
+.marquee-landscape .row { grid-template-columns: 8em 1fr auto; }

@@ -91,6 +91,8 @@ export class SurfaceEngine {
     demoStation;
     clock;
     boardResolver;
+    boardVariantValue;
+    variantChanged = false;
     firstFrameTimeoutMs;
     emptyRetryMs;
     /** The device's orientation (§6). */
@@ -185,6 +187,7 @@ export class SurfaceEngine {
         this.rendered = this.orientationValue;
         this.clock = clock;
         this.boardResolver = options.boardResolver ?? minimalBoardResolver;
+        this.boardVariantValue = asBoardVariant(options.boardVariant);
         this.firstFrameTimeoutMs = options.firstFrameTimeoutMs ?? FIRST_FRAME_TIMEOUT_MS;
         this.emptyRetryMs = options.emptyRetryMs ?? EMPTY_RETRY_MS;
         this.tokenPrefix = `e${++engines}.`;
@@ -235,6 +238,8 @@ export class SurfaceEngine {
             this.afterCommit(show);
         if (this.orientationChanged)
             this.afterOrientationChange(show);
+        if (this.variantChanged)
+            this.afterVariantChange(show);
         // §8.3 — a move the monotonic clock cannot explain is a jump.
         if (this.lastShow === this.lastShow) {
             const moved = show - this.lastShow;
@@ -350,6 +355,25 @@ export class SurfaceEngine {
         this.orientationChanged = true;
         return NO_EVENTS;
     }
+    /** §5.15 — the layouts this device shows. */
+    get boardVariant() {
+        return this.boardVariantValue;
+    }
+    /**
+     * §5.15 — the device's board variant changed (the operator set it). At the
+     * next tick a session board on screen is cut (`variant.change`) and the
+     * rotation continues after its cursors; anything else on screen plays on,
+     * and the next board is chosen with the new variant.
+     */
+    setBoardVariant(variant) {
+        this.events = null;
+        const next = asBoardVariant(variant);
+        if (next === this.boardVariantValue)
+            return NO_EVENTS;
+        this.boardVariantValue = next;
+        this.variantChanged = true;
+        return NO_EVENTS;
+    }
     /** A new cartridge is committed: reset all state and cut at the next tick (§5.9). */
     commit(snapshot) {
         this.events = null;
@@ -446,6 +470,24 @@ export class SurfaceEngine {
         this.forceMarker(FORCED);
         if (this.orientationValue !== null)
             this.orientationWarned = false;
+    }
+    /** §5.15 — a board on screen is cut when the device's variant changes; nothing else is. */
+    afterVariantChange(show) {
+        this.variantChanged = false;
+        const on = this.currentItem;
+        if (on === null || on.kind !== "sessionBoard")
+            return;
+        this.emit({
+            showTime: show,
+            kind: "cut",
+            code: "variant.change",
+            entryId: on.entryId,
+            message: `the device's board variant is now ${this.boardVariantValue}; the board of entry ${on.entryId} ends now, and the rotation continues after its cursors`,
+        });
+        this.currentLive = false;
+        this.pendingItem = null;
+        this.clearFailures();
+        this.forceMarker(FORCED);
     }
     jump(code, show) {
         const from = this.calendar.format(this.lastShow);
@@ -770,6 +812,7 @@ export class SurfaceEngine {
                     entries: this.snap.sessionSetEntries.get(sessionSet.id) ?? NO_SET_ENTRIES,
                     sessions: this.snap.sessions,
                     snapshot: this.snap,
+                    variant: this.boardVariantValue,
                 });
             }
             catch (error) {
@@ -794,6 +837,10 @@ export class SurfaceEngine {
                     pageDuration: sessionSet.duration,
                     logoItemId: sessionSet.logoItemId,
                     styleItemId: sessionSet.brandStyleItemId ?? project.brandStyleItemId,
+                    // §5.15 — the set's template with the set's settings, else the project's with the project's.
+                    templateItemId: sessionSet.templateItemId ?? project.templateItemId,
+                    templateSettings: sessionSet.templateItemId !== null ? sessionSet.templateSettings : project.templateSettings,
+                    variant: this.boardVariantValue,
                 }),
                 backing: this.backing(sessionSet.backingItemId ?? project.backingItemId),
                 hint: this.hint(kind, sessionSet.duration * pageCount, show),
@@ -1017,6 +1064,13 @@ export class SurfaceEngine {
     }
 }
 // ── helpers ─────────────────────────────────────────────────────────────────────
+function asBoardVariant(value) {
+    if (value === undefined || value === null)
+        return "both";
+    if (value === "now-next" || value === "schedule" || value === "both")
+        return value;
+    throw new TypeError(`boardVariant must be "now-next", "schedule" or "both", not ${JSON.stringify(value)}`);
+}
 function asOrientation(value) {
     return value === "portrait" || value === "landscape" ? value : null;
 }

@@ -1,0 +1,25 @@
+{
+  "id": "MCS-29",
+  "title": "A dangling template pointer and malformed settings are warnings, not refusals: the next template applies and the board plays",
+  "rules": "Specification \u00a75.15, \u00a75.13",
+  "cartridge": "template-dangling",
+  "engine": {
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 46,
+    "start": "2026-09-15T08:00:00-07:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {
+      "1": 3
+    }
+  },
+  "events": []
+}

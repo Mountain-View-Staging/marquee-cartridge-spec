@@ -13,6 +13,7 @@
  */
 
 import type { Session, SessionSet, SessionSetEntry, Snapshot } from "./model.js";
+import type { BoardVariant } from "./render.js";
 
 export interface BoardContext {
   /** The show clock when the board was chosen. */
@@ -23,6 +24,8 @@ export interface BoardContext {
   readonly entries: readonly SessionSetEntry[];
   readonly sessions: ReadonlyMap<number, Session>;
   readonly snapshot: Snapshot;
+  /** §5.15 — the layouts the device shows (its setting): a resolver sizes the board for it. */
+  readonly variant: BoardVariant;
 }
 
 export interface BoardResolution {

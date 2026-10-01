@@ -300,3 +300,43 @@ test("an invalid venue timezone loads with a warning (the clock degrades to real
   const s = await loadCartridge(variant("base", "UPDATE cartridge_meta SET timezone = 'Mars/Olympus_Mons'"));
   assert.ok(s.warnings.some((w) => w.code === "timezone.invalid"));
 });
+
+test("§5.15 — template pointers and settings: read, and the dangling and malformed cases are warnings", async () => {
+  const good = await loadCartridge(fixture("template"));
+  assert.deepEqual(good.warnings, []);
+  assert.deepEqual(good.project.templateSettings, { vars: { sponsorName: "Show" } });
+  assert.deepEqual(good.sessionSets.get(1).templateSettings, { vars: { sponsorName: "Set one" } });
+  assert.ok(Object.isFrozen(good.project.templateSettings.vars));
+
+  // template-dangling.db: items 98 and 99 exist, but their files are not in the manifest; the
+  // Show's settings are not JSON, the set's have no vars object. Pointers read as null, so the
+  // next template applies (the Surface's built-in default here); settings read as null.
+  const bad = await loadCartridge(fixture("template-dangling"));
+  assert.deepEqual(bad.warnings.map((w) => [w.code, w.table, w.column, w.rowId]), [
+    ["value.malformed", "project", "template_settings", 1],
+    ["reference.dangling", "project", "template_item_id", 1],
+    ["value.malformed", "session_set", "template_settings", 1],
+    ["reference.dangling", "session_set", "template_item_id", 1],
+  ]);
+  assert.equal(bad.project.templateItemId, null);
+  assert.equal(bad.project.templateSettings, null);
+  assert.equal(bad.sessionSets.get(1).templateItemId, null);
+  assert.equal(bad.sessionSets.get(1).templateSettings, null);
+
+  // The Show's package left out of the manifest is the same warning (the item is there, its file is not).
+  const gone = await loadCartridge(variant("template", "DELETE FROM media_manifest WHERE media_file_id = 150"));
+  assert.deepEqual(gone.warnings.map((w) => [w.code, w.column]), [["reference.dangling", "template_item_id"]]);
+  assert.equal(gone.project.templateItemId, null);
+  // vars must be strings; an empty vars object is fine; a settings object with extra keys is fine.
+  const typed = await loadCartridge(variant("template", `UPDATE project SET template_settings = '{"vars":{"a":1}}'`));
+  assert.deepEqual(typed.warnings.map((w) => [w.code, w.column]), [["value.malformed", "template_settings"]]);
+  const spare = await loadCartridge(variant("template", `UPDATE project SET template_settings = '{"vars":{},"later":true}'`));
+  assert.deepEqual(spare.warnings, []);
+  assert.deepEqual(spare.project.templateSettings, { vars: {} });
+});
+
+test("§10.4 — the retired session_set columns are ignored silently when an older producer wrote them", async () => {
+  const s = await loadCartridge(variant("template", `ALTER TABLE session_set ADD COLUMN render_modes TEXT; ALTER TABLE session_set ADD COLUMN schedule_template TEXT; UPDATE session_set SET render_modes = '["simple"]'`));
+  assert.deepEqual(s.warnings, [], "retired, not unknown");
+  assert.equal("renderModes" in s.sessionSets.get(1), false);
+});

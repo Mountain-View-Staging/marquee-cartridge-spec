@@ -1,0 +1,49 @@
+{
+  "format": "1.2",
+  "id": "marquee-default",
+  "displayName": "Marquee — default board",
+  "version": 1,
+  "engine": "1.2",
+  "data": "1.1",
+  "layouts": {
+    "now-next": { "source": "layouts/now-next.html", "style": "layouts/now-next.css" },
+    "schedule": { "source": "layouts/schedule.html", "style": "layouts/schedule.css" }
+  },
+  "supports": { "orientations": ["portrait", "landscape"], "aspects": ["9x16", "16x9", "3x4", "4x3"] },
+  "textRegion": { "x": 0, "y": 0, "w": 1, "h": 1 },
+  "roles": {
+    "title":       { "label": "Title",       "default": "text.auto",      "contrast": "large" },
+    "name":        { "label": "Name",        "default": "text.auto",      "contrast": "large" },
+    "description": { "label": "Description", "default": "text.autoMuted", "contrast": "large" },
+    "clock":       { "label": "Clock",       "default": "text.auto",      "contrast": "large" },
+    "accent":      { "label": "Accent",      "default": "palette.primary" }
+  },
+  "vars": {
+    "sponsorName": { "label": "Sponsor line", "default": "" }
+  },
+  "modifiers": {
+    "align":   { "kind": "choice", "label": "Text alignment", "options": ["left", "center", "right"], "default": "left" },
+    "compact": { "kind": "toggle", "label": "Compact spacing", "default": false }
+  },
+  "brand": {
+    "displayName": "Example",
+    "cssFamily": "Inter",
+    "display": "Inter",
+    "tabularFigures": "tnum",
+    "palette": { "primary": "#3B82F6", "secondary": "#1E3A8A", "tertiary": "#F59E0B", "quaternary": "#64748B" },
+    "text": { "onLight": "#111827", "onDark": "#F9FAFB", "mutedOnLight": "#4B5563", "mutedOnDark": "#C7CCD4" }
+  },
+  "fonts": [
+    {
+      "cssFamily": "Inter",
+      "licence": "SIL Open Font License 1.1 (fonts/Inter-OFL-1.1.txt)",
+      "faces": [
+        { "file": "fonts/Inter-Regular.woff2",  "weight": 400, "style": "normal", "postScriptName": "Inter-Regular" },
+        { "file": "fonts/Inter-Italic.woff2",   "weight": 400, "style": "italic", "postScriptName": "Inter-Italic" },
+        { "file": "fonts/Inter-SemiBold.woff2", "weight": 600, "style": "normal", "postScriptName": "Inter-SemiBold" },
+        { "file": "fonts/Inter-Bold.woff2",     "weight": 700, "style": "normal", "postScriptName": "Inter-Bold" }
+      ]
+    }
+  ],
+  "files": {}
+}

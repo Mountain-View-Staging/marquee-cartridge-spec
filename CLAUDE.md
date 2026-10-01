@@ -11,9 +11,11 @@ unlike every sibling it is published to the world.
 README.md          the specification — CANONICAL
 engine/            the reference engine: the Loader and the on-screen rules, in TypeScript;
                    compiled ES modules committed in engine/dist
-conformance/       the conformance suite: fixture cartridges, 27 scenarios, the runner
+conformance/       the conformance suite: fixture cartridges, 30 scenarios, the runner
 example/           the explorer and the demo show: the engine on a preview clock
 player/            the reference player: the engine on a browser host, one hard-coded surface
+template/          session board templates (§5.15, TEMPLATE.md): the reference engine (the shim +
+                   vendored nunjucks) and the default template every reference client carries
 .github/workflows/ CI: the suite against the engine, dist/ freshness, unit tests, the leak scan
 LICENSE            Apache-2.0, © 2026 Mountain View Staging
 ```
@@ -113,12 +115,21 @@ video, a session board, backings, an authored blank, and a DemoStation's picture
 each. Every file carries its hash and size, and the Loader must load both cartridges with
 no warnings.
 
+## The template
+
+`TEMPLATE.md` is the public contract for session board templates (§5.15): the package, the
+manifest, the data document, what the shim sets on the page and what a host owes. `template/` is
+its reference implementation — the shim and the default package — published here so a third-party
+host can render a board. The authoring tool that produces templates is not public; its copy of the
+shim and the default template must stay byte-identical to `template/` (it checks). A change to the
+format is a change here first, with `TEMPLATE.md`.
+
 ## Verify before pushing
 
 Pages serves from `main`, so a push is a publish.
 
 ```bash
 cd engine && npm ci && npm run build && npm test && cd ..
-node conformance/run.mjs --engine engine/dist/node.js     # 27/27
+node conformance/run.mjs --engine engine/dist/node.js     # 30/30
 python3 -m http.server 8000     # then check /example/ and /player/ actually run
 ```

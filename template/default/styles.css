@@ -1,0 +1,88 @@
+/*
+  Marquee — default board · styles
+
+  Everything here scales with the canvas: lengths are in `rem`, and the root font size is
+  set from --marquee-scale (the long edge ÷ 3840, which the shim puts on <html>), so the
+  same template fills a 4K sign and a 1080p one. Colours are the ROLES the shim sets:
+    --marquee-role-title  --marquee-role-name  --marquee-role-description
+    --marquee-role-clock  --marquee-role-accent
+  and the brand's own values are there too (--marquee-palette-primary, --marquee-text-on-dark, …).
+  The background is transparent: the host composites this page over the backing.
+
+  Knobs an author will reach for first:
+*/
+:root {
+  --board-padding: 3rem;              /* the inset from the canvas edge (120px at 4K) */
+  --board-gap: 2.5rem;                /* the gap between the header, the headline and the blocks */
+  --title-size: 4.6rem;               /* the running session's title (184px at 4K portrait) */
+  --room-size: 3rem;
+  --clock-size: 2.4rem;
+  --body-size: 1.9rem;
+  --rows-per-page: 5;                 /* the schedule's rows (the engine sends this many) */
+  --font: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+html {
+  /* 1rem = 40px at 4K (a 3840 long edge), 20px at 1080p — one number scales the whole board. */
+  font-size: calc(40px * var(--marquee-scale, 1));
+  background: transparent;
+}
+
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+body {
+  font-family: var(--font);
+  font-feature-settings: "tnum" 1;    /* tabular figures: the clock does not jitter */
+  color: var(--marquee-role-title, var(--marquee-ink, #fff));
+  background: transparent;
+  -webkit-font-smoothing: antialiased;
+}
+
+#marquee-root { width: 100%; height: 100%; }
+
+/* ── the frame both layouts share ── */
+.board {
+  box-sizing: border-box;
+  width: 100%; height: 100%;
+  padding: var(--board-padding);
+  display: flex; flex-direction: column;
+  gap: var(--board-gap);
+}
+.board__header { display: flex; justify-content: space-between; align-items: flex-start; gap: 2rem; }
+.room {
+  flex: 1 1 auto; min-width: 0;
+  margin: 0;
+  font-size: var(--room-size); font-weight: 700; line-height: 1.1;
+  color: var(--marquee-role-title);
+  overflow-wrap: anywhere;
+}
+.clock { flex: none; display: flex; flex-direction: column; align-items: flex-end; white-space: nowrap; color: var(--marquee-role-clock); }
+.clock__time { font-size: var(--clock-size); font-weight: 600; line-height: 1.1; }
+.clock__date { font-size: calc(var(--clock-size) * 0.55); color: var(--marquee-role-description); }
+.board__footer {
+  margin-top: auto;
+  font-size: calc(var(--body-size) * 0.8);
+  color: var(--marquee-role-description);
+}
+
+/* Each layout's own rules are beside it: layouts/now-next.css, layouts/schedule.css (template.json names them). */
+
+/* ── modifiers (the shim sets these on <html>; Modifiers-Proposal.md) ──
+   Automatic: marquee-ink-light | marquee-ink-dark (the backing measurement), marquee-layout-now-next |
+   marquee-layout-schedule, marquee-projected. Declared in template.json: mod-align-left | center | right,
+   mod-compact. A template keys CSS on their presence; no JavaScript. */
+.mod-align-center .board { text-align: center; }
+.mod-align-center .board__header, .mod-align-center .clock { align-items: center; }
+.mod-align-center .speakers, .mod-align-center .speaker { align-items: center; }
+.mod-align-right .board { text-align: right; }
+.mod-align-right .board__header { flex-direction: row-reverse; }
+.mod-align-right .clock { align-items: flex-start; }
+.mod-align-right .speaker { align-items: flex-end; }
+.mod-compact .board { --board-gap: 1.2rem; --board-padding: 2rem; }
+.mod-compact .row { padding: 0.6rem 0; }
+.marquee-ink-light .block { border-top-color: var(--marquee-ink-muted); }
+.marquee-projected .clock__date::after { content: " · preview"; font-size: 0.7em; opacity: 0.7; }
+
+/* ── the destination (classes the shim sets on <html>) ── */
+.marquee-landscape { --title-size: 4rem; --room-size: 2.6rem; }
+.marquee-aspect-other .board { --board-padding: 2.5rem; }
+.marquee-size-small .board { --board-padding: 2rem; }

@@ -40,9 +40,9 @@ export const at = (iso) => Date.parse(iso);
  * a second, answers every render item with a first frame at once (unless the
  * entry is listed in `fail`), and returns the normalised trace.
  */
-export async function run(bytes, { start, seconds, orientation = "portrait", demoStation = false, fail = [], events = {}, clock, boardResolver } = {}) {
+export async function run(bytes, { start, seconds, orientation = "portrait", demoStation = false, fail = [], events = {}, clock, boardResolver, boardVariant } = {}) {
   const snapshot = bytes.kind ? bytes : await loadCartridge(bytes);
-  const engine = createEngine({ snapshot, orientation, demoStation, clock: clock ?? surfaceClock(), boardResolver });
+  const engine = createEngine({ snapshot, orientation, demoStation, clock: clock ?? surfaceClock(), boardResolver, boardVariant });
   const trace = [];
   const items = [];
   /** The tick output's `demo` at each second, after the tick. */

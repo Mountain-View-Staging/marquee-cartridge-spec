@@ -1,0 +1,38 @@
+{
+  "id": "MCS-28",
+  "trace": [
+    {
+      "t": "2026-09-15T08:00:00-07:00",
+      "kind": "render",
+      "code": "rotation.start",
+      "entry": 1,
+      "set": "standard",
+      "file": 101
+    },
+    {
+      "t": "2026-09-15T08:00:10-07:00",
+      "kind": "render",
+      "code": "rotation.next",
+      "entry": 2,
+      "set": "standard",
+      "board": 1
+    },
+    {
+      "t": "2026-09-15T08:00:34-07:00",
+      "kind": "render",
+      "code": "rotation.next",
+      "entry": 3,
+      "set": "standard",
+      "file": 103
+    },
+    {
+      "t": "2026-09-15T08:00:44-07:00",
+      "kind": "render",
+      "code": "rotation.wrap",
+      "entry": 1,
+      "set": "standard",
+      "file": 101
+    }
+  ],
+  "loadWarnings": []
+}

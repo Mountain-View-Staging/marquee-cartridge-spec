@@ -1,0 +1,38 @@
+{#
+  Layout: schedule — the template source for board.renderMode "schedule" (nunjucks).
+  board.schedule is THIS PAGE of the room's day:
+    roomName · rowCount (the whole day) · rows[] { id, title, time, status: "now" | "next" | "none" }
+  board.page / board.pageCount say which page this render is; the host sends one document per page.
+  Its own styles are layouts/schedule.css.
+#}
+{% set b = board.schedule %}
+<section class="board board--schedule">
+
+  <header class="board__header">
+    <h1 class="room">{{ b.roomName }}</h1>
+    <div class="clock">
+      <span class="clock__time">{{ clock.time }}</span>
+      <span class="clock__date">{{ clock.date }}</span>
+    </div>
+  </header>
+
+  <main class="rows">
+    {% for row in b.rows %}
+    <div class="row row--{{ row.status }}">
+      <span class="row__time">{{ row.time }}</span>
+      <span class="row__title">{{ row.title }}</span>
+      {% if row.status == "now" %}<span class="row__badge">Now</span>{% elif row.status == "next" %}<span class="row__badge row__badge--next">Next</span>{% endif %}
+    </div>
+    {% else %}
+    <p class="rows__empty">No sessions today</p>
+    {% endfor %}
+  </main>
+
+  {% if board.pageCount > 1 %}
+  <footer class="board__footer pages">
+    {% for i in range(0, board.pageCount) %}<span class="page-dot{% if i == board.page %} page-dot--current{% endif %}"></span>{% endfor %}
+  </footer>
+  {% elif vars.sponsorName %}
+  <footer class="board__footer">{{ vars.sponsorName }}</footer>
+  {% endif %}
+</section>

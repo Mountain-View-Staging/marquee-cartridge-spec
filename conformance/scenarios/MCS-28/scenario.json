@@ -1,0 +1,25 @@
+{
+  "id": "MCS-28",
+  "title": "A session board template rides the cartridge: the Show's pointer and a set's override load with no warning, and the board plays as before",
+  "rules": "Specification \u00a75.15, \u00a77.5, \u00a77.7",
+  "cartridge": "template",
+  "engine": {
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 46,
+    "start": "2026-09-15T08:00:00-07:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {
+      "1": 3
+    }
+  },
+  "events": []
+}

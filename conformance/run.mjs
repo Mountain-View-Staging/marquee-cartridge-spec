@@ -21,7 +21,7 @@ import { DatabaseSync } from "node:sqlite";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CODES = {
   render: ["rotation.start", "rotation.next", "rotation.wrap"],
-  cut: ["alert.activate", "takeover.activate", "schedule.change", "orientation.change", "mode.change", "cartridge.commit"],
+  cut: ["alert.activate", "takeover.activate", "schedule.change", "orientation.change", "variant.change", "mode.change", "cartridge.commit"],
   jump: ["jump.backward", "jump.forward"],
   hold: ["set.empty", "set.all_failed"],
   blank: ["schedule.blank"],
@@ -33,6 +33,7 @@ const WARNING_CODES = [
   "position.duplicate", "timezone.invalid", "days.empty", "locations.empty",
 ];
 const ORIENTATIONS = ["portrait", "landscape"];
+const VARIANTS = ["now-next", "schedule", "both"];
 const MAX_RETICKS = 64;
 
 const args = process.argv.slice(2);
@@ -53,9 +54,11 @@ function validate(dir) {
   if (!ORIENTATIONS.includes(s.engine?.orientation)) problems.push(`engine.orientation ${s.engine?.orientation} is neither portrait nor landscape`);
   if ("slot" in (s.engine ?? {})) problems.push("engine.slot is retired: an engine resolves the one schedule, whatever its orientation");
   if (s.engine?.demoStation !== undefined && typeof s.engine.demoStation !== "boolean") problems.push("engine.demoStation is not a boolean");
+  if (s.engine?.boardVariant !== undefined && !VARIANTS.includes(s.engine.boardVariant)) problems.push(`engine.boardVariant ${s.engine.boardVariant} is not now-next, schedule or both`);
   for (const ev of s.events ?? []) {
     if (ev.type === "setOrientation" && !ORIENTATIONS.includes(ev.orientation)) problems.push(`setOrientation at second ${ev.atSecond}: ${ev.orientation}`);
-    else if (ev.type !== "setOrientation" && ev.type !== "wallJump") problems.push(`unknown event type ${ev.type}`);
+    else if (ev.type === "setBoardVariant" && !VARIANTS.includes(ev.variant)) problems.push(`setBoardVariant at second ${ev.atSecond}: ${ev.variant}`);
+    else if (ev.type !== "setOrientation" && ev.type !== "setBoardVariant" && ev.type !== "wallJump") problems.push(`unknown event type ${ev.type}`);
   }
   if ("warnings" in e) problems.push("the Loader's warnings are listed as loadWarnings");
   for (const [i, w] of (e.loadWarnings ?? []).entries()) {
@@ -111,7 +114,7 @@ async function run(engineMod, dir) {
   const clock = s.clock.source === "preview" ? engineMod.previewClock() : engineMod.surfaceClock();
   const pages = s.host.boardPages ?? {};
   const engine = engineMod.createEngine({
-    snapshot, orientation: s.engine.orientation, demoStation: s.engine.demoStation === true, clock,
+    snapshot, orientation: s.engine.orientation, demoStation: s.engine.demoStation === true, boardVariant: s.engine.boardVariant, clock,
     boardResolver: (set) => ({ model: null, pageCount: pages[String(set.id)] ?? 1, anchorPage: 0 }),
   });
 
@@ -125,6 +128,7 @@ async function run(engineMod, dir) {
     for (const ev of s.events.filter((x) => x.atSecond === sec))
       if (ev.type === "wallJump") wallOffset += ev.deltaMs;
       else if (ev.type === "setOrientation") take(engine.setOrientation(ev.orientation));
+      else if (ev.type === "setBoardVariant") take(engine.setBoardVariant(ev.variant));
     for (const c of (s.clock.commands ?? []).filter((x) => x.atSecond === sec)) {
       if (c.set) clock.set(ms(c.set));
       if (c.action === "play") clock.play();

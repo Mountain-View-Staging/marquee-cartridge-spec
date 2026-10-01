@@ -1,0 +1,36 @@
+{
+  "id": "MCS-30",
+  "title": "The device's board variant changes: a board on screen is cut and the rotation continues; a still on screen plays on",
+  "rules": "Specification \u00a75.15, \u00a75.9",
+  "cartridge": "template",
+  "engine": {
+    "orientation": "portrait"
+  },
+  "clock": {
+    "source": "surface",
+    "deviceTimeZone": "America/Los_Angeles",
+    "tickMs": 1000,
+    "seconds": 40,
+    "start": "2026-09-15T08:00:00-07:00"
+  },
+  "host": {
+    "failEntries": [],
+    "noFirstFrameEntries": [],
+    "stuckEntries": [],
+    "boardPages": {
+      "1": 3
+    }
+  },
+  "events": [
+    {
+      "atSecond": 15,
+      "type": "setBoardVariant",
+      "variant": "schedule"
+    },
+    {
+      "atSecond": 30,
+      "type": "setBoardVariant",
+      "variant": "now-next"
+    }
+  ]
+}

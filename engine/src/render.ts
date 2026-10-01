@@ -8,6 +8,7 @@
  * frame: reports carrying an older token are ignored.
  */
 
+import type { TemplateSettings } from "./model.js";
 import type { DurationSource } from "./rules.js";
 import type { RenderCode, RotationSet } from "./trace.js";
 
@@ -67,7 +68,16 @@ export interface BoardContent {
   readonly logoItemId: number | null;
   /** §9.2 — the style book: the set's, else the project's; null for the Surface's built-in default. */
   readonly styleItemId: number | null;
+  /** §5.15 — the template: the set's, else the project's; null for the Surface's built-in default template. */
+  readonly templateItemId: number | null;
+  /** §5.15 — the settings beside the pointer that applied; null when none. */
+  readonly templateSettings: TemplateSettings | null;
+  /** §5.15 — the layouts the device shows, its own setting at the time the board was chosen. */
+  readonly variant: BoardVariant;
 }
+
+/** §5.15 — which of a template's layouts a sign shows: a device setting, like its orientation. */
+export type BoardVariant = "now-next" | "schedule" | "both";
 
 interface PlayableBase {
   readonly token: string;

@@ -40,6 +40,9 @@ export interface LaneSelection {
  *   every lane whatever else names it.
  * - Brand files are wanted on every lane (§9): each file of an item that is a
  *   brand member, or that the project or a session set names as its style book.
+ * - A session board template is wanted on every lane (§5.15): the file of an
+ *   item the project or a session set names as its template, whichever slot
+ *   holds it — a device of either orientation renders the board with it.
  * - A file no item references is wanted: nothing says which lane it serves.
  * - With `demo`, while the `demo_station` slot has an entry with a background,
  *   the opposite of each lane is rendered too: the picture-in-picture plays the
@@ -57,11 +60,14 @@ export function filesForLanes(snapshot: Snapshot | ProjectSnapshot, selection: L
     for (const lane of selection.lanes) rendered.add(lane === "portrait" ? "landscape" : "portrait");
   }
 
+  // Items wanted on every lane whatever else names them: style books and templates.
   const styleBooks = new Set<number>();
   if (snapshot.project.brandStyleItemId !== null) styleBooks.add(snapshot.project.brandStyleItemId);
+  if (snapshot.project.templateItemId !== null) styleBooks.add(snapshot.project.templateItemId);
   if (snapshot.kind === "surface") {
     for (const set of snapshot.sessionSets.values()) {
       if (set.brandStyleItemId !== null) styleBooks.add(set.brandStyleItemId);
+      if (set.templateItemId !== null) styleBooks.add(set.templateItemId);
     }
   }
   const brandingOnly = demo ? NO_ITEMS : demoBrandingOnly(snapshot);

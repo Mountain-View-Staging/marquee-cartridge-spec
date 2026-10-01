@@ -65,6 +65,8 @@ export function buildSnapshot(kind, raw, warnings) {
         backingItemId: numOrNull(p, "backing_item_id"),
         brandStyle: strOrNull(p, "brand_style"),
         brandStyleItemId: numOrNull(p, "brand_style_item_id"),
+        templateItemId: numOrNull(p, "template_item_id"),
+        templateSettings: templateSettings(p, "project", num(p, "id"), warn),
     });
     const days = rows("project_days").map((r) => Object.freeze({ id: num(r, "id"), day: str(r, "day"), startTime: num(r, "start_time"), endTime: num(r, "end_time") }));
     days.sort((a, b) => a.startTime - b.startTime || a.id - b.id);
@@ -143,9 +145,29 @@ export function buildSnapshot(kind, raw, warnings) {
     const variants = new Map();
     for (const [fileId, list] of variantLists)
         variants.set(fileId, Object.freeze(list.sort((a, b) => a.id - b.id)));
+    // §5.15 — a template pointer names an item whose file the cartridge carries; else it is
+    // null and the next step of the resolution applies (the project's, then the Surface's default).
+    const templateFile = (itemId) => {
+        const item = mediaItems.get(itemId);
+        if (!item)
+            return null;
+        const fileId = item.portraitFileId ?? item.landscapeFileId;
+        return fileId !== null && manifest.has(fileId) ? fileId : null;
+    };
+    const checkTemplate = (table, rowId, itemId, what) => {
+        if (itemId === null)
+            return true;
+        if (templateFile(itemId) !== null)
+            return true;
+        warn({ code: "reference.dangling", table, column: "template_item_id", rowId, message: `${what} names media item ${itemId} as its session board template, which the cartridge does not carry (or carries with no file); the next template applies` });
+        return false;
+    };
+    const projectOut = checkTemplate("project", project.id, project.templateItemId, "the project")
+        ? project
+        : Object.freeze({ ...project, templateItemId: null });
     const base = {
         meta,
-        project,
+        project: projectOut,
         days: Object.freeze(days),
         mediaItems: mediaItems,
         mediaFiles: mediaFiles,
@@ -239,15 +261,15 @@ export function buildSnapshot(kind, raw, warnings) {
         sessionSets.set(id, Object.freeze({
             id,
             name: str(r, "name"),
-            renderModes: renderModes(r, id, warn),
             duration,
             backingItemId: numOrNull(r, "backing_item_id"),
             logoItemId: numOrNull(r, "logo_item_id"),
-            scheduleTemplate: jsonValue(r, "session_set", "schedule_template", id, warn),
             sourceId: strOrNull(r, "source_id"),
             sourceName: strOrNull(r, "source_name"),
             brandStyle: strOrNull(r, "brand_style"),
             brandStyleItemId: numOrNull(r, "brand_style_item_id"),
+            templateItemId: numOrNull(r, "template_item_id"),
+            templateSettings: templateSettings(r, "session_set", id, warn),
         }));
     }
     const setEntryLists = new Map();
@@ -373,6 +395,10 @@ export function buildSnapshot(kind, raw, warnings) {
     if (backing !== null && !mediaItems.has(backing)) {
         warn({ code: "reference.dangling", table: "project", column: "backing_item_id", rowId: project.id, message: `the project's backing names media item ${backing}, which the cartridge does not carry; no backing` });
     }
+    for (const [id, set] of sessionSets) {
+        if (!checkTemplate("session_set", id, set.templateItemId, `session set ${id}`))
+            sessionSets.set(id, Object.freeze({ ...set, templateItemId: null }));
+    }
     const snapshot = {
         kind: "surface",
         ...base,
@@ -432,24 +458,28 @@ function jsonArray(r, table, column, rowId, warn) {
     warn({ code: "value.malformed", table, column, rowId, message: `${table} ${rowId}: ${column} is not a JSON array; ignored` });
     return EMPTY;
 }
-function jsonValue(r, table, column, rowId, warn) {
-    const text = strOrNull(r, column);
+/**
+ * §5.15 — `template_settings`: a JSON object whose `vars` is an object of strings. Anything
+ * else is malformed and ignored (null), with a warning; absent is null without one.
+ */
+function templateSettings(r, table, rowId, warn) {
+    const text = strOrNull(r, "template_settings");
     if (text === null)
         return null;
-    return parseJson(text, table, column, rowId, warn).value;
-}
-function renderModes(r, rowId, warn) {
-    const parsed = parseJson(str(r, "render_modes"), "session_set", "render_modes", rowId, warn);
-    if (parsed.ok && Array.isArray(parsed.value) && parsed.value.every((m) => typeof m === "string")) {
-        return parsed.value;
+    const parsed = parseJson(text, table, "template_settings", rowId, warn);
+    if (!parsed.ok)
+        return null;
+    const value = parsed.value;
+    const vars = value !== null && typeof value === "object" && !Array.isArray(value) ? value.vars : undefined;
+    const ok = vars !== undefined && vars !== null && typeof vars === "object" && !Array.isArray(vars)
+        && Object.values(vars).every((v) => typeof v === "string");
+    if (!ok) {
+        warn({ code: "value.malformed", table, column: "template_settings", rowId, message: `${table} ${rowId}: template_settings is not { "vars": { name: string } }; ignored` });
+        return null;
     }
-    if (parsed.ok) {
-        warn({ code: "value.malformed", table: "session_set", column: "render_modes", rowId, message: `session set ${rowId}: render_modes is not a JSON array of names; using ["simple"]` });
-    }
-    return DEFAULT_RENDER_MODES;
+    return deepFreeze({ vars: { ...vars } });
 }
 const EMPTY = Object.freeze([]);
-const DEFAULT_RENDER_MODES = Object.freeze(["simple"]);
 function deepFreeze(value) {
     if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
         Object.freeze(value);

@@ -127,7 +127,7 @@ test("the demo-station fixture: a DemoStation fetches both lanes and the brandin
 test("an item used as demo branding and any other way too keeps its lanes on a Surface without the mode", async () => {
   // Item 9, the demo's background (109 / 209), put to one more use each time; item 8, the
   // overlay (108 / 208), stays branding only.
-  const room = (backing, logo, style) => `INSERT INTO session_set VALUES (1, 'Room', '["simple"]', 8, ${backing}, ${logo}, NULL, NULL, NULL, ${style === "NULL" ? "NULL" : "'acme/acme-2026/1'"}, ${style}, 0, 0)`;
+  const room = (backing, logo, style) => `INSERT INTO session_set VALUES (1, 'Room', 8, ${backing}, ${logo}, NULL, NULL, ${style === "NULL" ? "NULL" : "'acme/acme-2026/1'"}, ${style}, NULL, NULL, 0, 0)`;
   const uses = {
     "a playlist entry's item": "INSERT INTO playlist_entry VALUES (5, 1, 5, 'media_item', 9, NULL, NULL, NULL, NULL, NULL, 0, 0)",
     "the project's backing": "UPDATE project SET backing_item_id = 9",
@@ -181,4 +181,17 @@ test("a project snapshot reads the same way", async () => {
   assert.equal(project.kind, "project");
   assert.deepEqual(ids(filesForLanes(project, { lanes: ["portrait"], demo: true })), [101, 102, 103, 104]);
   assert.deepEqual(ids(filesForLanes(project, { lanes: ["landscape"] })), [201, 202, 203, 204]);
+});
+
+test("a session board template is wanted on every lane (§5.15): the project's and a set's, whichever slot holds the package", async () => {
+  // template.db: items 50 (the Show's template) and 51 (set 1's) hold a package in the portrait
+  // slot only — files 150 and 151 — and are in no playlist. The board show otherwise: items 1, 3.
+  const s = await loadCartridge(fixture("template"));
+  assert.equal(s.project.templateItemId, 50);
+  assert.equal(s.sessionSets.get(1).templateItemId, 51);
+  assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"] })), [101, 103, 150, 151]);
+  assert.deepEqual(ids(filesForLanes(s, { lanes: ["landscape"] })), [150, 151, 201, 203], "a landscape device gets the packages too");
+  assert.deepEqual(ids(filesForLanes(s, { lanes: [] })), [150, 151], "whatever the lanes, as a brand file is");
+  // A package is never playable, so it never widens a lane as content would.
+  assert.equal(s.mediaFiles.get(150).contentType, "application/zip");
 });

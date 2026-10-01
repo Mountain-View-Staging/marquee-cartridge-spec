@@ -653,3 +653,46 @@ test("the device timezone never decides the show clock", () => {
   process.env.TZ = before;
   assert.deepEqual(answers, Array(3).fill(at("2026-09-15T09:00:00-07:00")));
 });
+
+test("§5.15 — the board carries its template, the settings beside the pointer that applied, and the device's variant", async () => {
+  const pages = () => ({ model: null, pageCount: 3, anchorPage: 0 });
+  const { items } = await run(fixture("template"), { start: "2026-09-15T08:00:00-07:00", seconds: 12, boardResolver: pages });
+  const board = items.find((i) => i.kind === "sessionBoard").board;
+  assert.equal(board.templateItemId, 51, "the set's own template wins over the Show's");
+  assert.deepEqual(board.templateSettings, { vars: { sponsorName: "Set one" } }, "with the set's settings");
+  assert.equal(board.variant, "both", "the device's default");
+  // Without a set override: the Show's template with the Show's settings.
+  const { items: items2 } = await run(variant("template", "UPDATE session_set SET template_item_id = NULL, template_settings = '{\"vars\":{\"x\":\"ignored\"}}'"),
+                                      { start: "2026-09-15T08:00:00-07:00", seconds: 12, boardResolver: pages, boardVariant: "schedule" });
+  const board2 = items2.find((i) => i.kind === "sessionBoard").board;
+  assert.equal(board2.templateItemId, 50);
+  assert.deepEqual(board2.templateSettings, { vars: { sponsorName: "Show" } }, "a set without its own template cannot restyle the Show's");
+  assert.equal(board2.variant, "schedule");
+  // The resolver sees the variant.
+  let seen = null;
+  await run(fixture("template"), { start: "2026-09-15T08:00:00-07:00", seconds: 12, boardVariant: "now-next", boardResolver: (set, ctx) => { seen = ctx.variant; return pages(); } });
+  assert.equal(seen, "now-next");
+  const snapshot = await loadCartridge(fixture("template"));
+  assert.throws(() => createEngine({ snapshot, orientation: "portrait", clock: surfaceClock(), boardVariant: "all" }), /boardVariant must be/);
+});
+
+test("§5.15 — a variant change cuts a board on screen (variant.change) and the rotation continues; a still on screen plays on", async () => {
+  const { trace, engine } = await run(fixture("template"), {
+    start: "2026-09-15T08:00:00-07:00",
+    seconds: 40,
+    boardResolver: () => ({ model: null, pageCount: 3, anchorPage: 0 }),
+    events: {
+      15: (e) => { assert.deepEqual(e.setBoardVariant("schedule"), []); assert.deepEqual(e.setBoardVariant("schedule"), [], "the same value again is nothing"); },
+      30: (e) => e.setBoardVariant("now-next"),
+    },
+  });
+  assert.equal(engine.boardVariant, "now-next");
+  assert.deepEqual(brief(trace), [
+    { t: t("2026-09-15T08:00:00-07:00"), kind: "render", code: "rotation.start", entry: 1, set: "standard", file: 101 },
+    { t: t("2026-09-15T08:00:10-07:00"), kind: "render", code: "rotation.next", entry: 2, set: "standard", board: 1 },
+    { t: t("2026-09-15T08:00:15-07:00"), kind: "cut", code: "variant.change", entry: 2 },
+    { t: t("2026-09-15T08:00:15-07:00"), kind: "render", code: "rotation.next", entry: 3, set: "standard", file: 103 },
+    { t: t("2026-09-15T08:00:25-07:00"), kind: "render", code: "rotation.wrap", entry: 1, set: "standard", file: 101 },
+    { t: t("2026-09-15T08:00:35-07:00"), kind: "render", code: "rotation.next", entry: 2, set: "standard", board: 1 },
+  ]);
+});

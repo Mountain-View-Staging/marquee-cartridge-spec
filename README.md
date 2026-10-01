@@ -20,7 +20,9 @@ so a cartridge published this year opens in a Surface written next year.
 > [`example/`](example/) run on it. Where this document leaves a choice to an implementation,
 > the engine's README lists the choice it makes. The reference player loads its show once:
 > it keeps no cartridge or media between page loads and does not re-pull (§8.4, §8.5), which
-> a deployed Surface must. This document is authoritative wherever they differ.
+> a deployed Surface must; and it draws session boards with the engine's minimal one-page
+> board, not with a session board template (§5.15) — the engine resolves the template, the
+> player does not render one yet. This document is authoritative wherever they differ.
 
 ### Relationship to the internal platform specification
 
@@ -223,6 +225,8 @@ CREATE TABLE project (
   backing_item_id           INTEGER REFERENCES media_item(id),   -- default backing, §5.10
   brand_style               TEXT,     -- style address 'company/style/version', §9
   brand_style_item_id       INTEGER REFERENCES media_item(id),   -- the style book file, §9
+  template_item_id          INTEGER REFERENCES media_item(id),   -- the session board template, §5.15
+  template_settings         TEXT,     -- JSON { "vars": { name: string } }, §5.15
   created                   INTEGER NOT NULL,
   updated                   INTEGER NOT NULL
 );
@@ -406,15 +410,15 @@ CREATE TABLE session (
 CREATE TABLE session_set (
   id                INTEGER PRIMARY KEY,
   name              TEXT    NOT NULL,
-  render_modes      TEXT    NOT NULL DEFAULT '["simple"]',   -- JSON array
   duration          REAL    NOT NULL DEFAULT 8,              -- seconds per board page
   backing_item_id   INTEGER REFERENCES media_item(id),
   logo_item_id      INTEGER REFERENCES media_item(id),
-  schedule_template TEXT,               -- JSON diff vs the Surface baseline; NULL = baseline
   source_id         TEXT,
   source_name       TEXT,
   brand_style         TEXT,                               -- overrides the project's, §9
   brand_style_item_id INTEGER REFERENCES media_item(id),  -- overrides the project's, §9
+  template_item_id    INTEGER REFERENCES media_item(id),  -- overrides the project's, §5.15
+  template_settings   TEXT,                               -- for that override, §5.15
   created           INTEGER NOT NULL,
   updated           INTEGER NOT NULL
 );
@@ -435,9 +439,13 @@ CREATE TABLE session_set_entry (
 
 A playlist entry with `resource_type = 'session_set'` puts a **session board** on screen: the
 room's sessions as text, composited over a backing (§5.10). `logo_item_id` is part of the board's
-content, placed by the board's layout. Session boards are
-**required** on every Surface. The cartridge carries content and branding pointers, not a
-layout: board design is a product decision per Surface platform.
+content, placed by the board's layout. Session boards are **required** on every Surface. The
+cartridge carries the content and the pointers; **the layout is a session board template** (§5.15):
+a package the Show, or one set, names, else the Surface's built-in default template. Which of a
+template's layouts a sign shows is the device's own setting, never carried here.
+
+`render_modes` and `schedule_template`, which earlier drafts of v25.0.1 carried on this table, are
+retired (§10.4): a Loader ignores them silently.
 
 ### 4.8 `media_file_variant` — the renditions offered
 
@@ -808,7 +816,8 @@ implement demo mode ignores the slot entirely.
 
 `media_file.content_type` and `media_file_variant.content_type` are MIME types. Studio imports
 `image/png`, `image/jpeg`, `image/webp`, `image/heic`, `video/mp4`, `video/quicktime`, and
-`video/x-m4v`, and produces renditions in the types of §4.8.
+`video/x-m4v`, and produces renditions in the types of §4.8. A session board template is one
+`application/zip` file (§5.15), never decoded as media.
 
 - **Treat any `image/*` you can decode as an image and any `video/*` you can decode as a video.**
   Do not hard-code an allow-list.
@@ -822,8 +831,8 @@ implement demo mode ignores the slot entirely.
   entry, skip it, re-arm.
 - **Downscale oversize assets; never skip them.** Keep a hard texture ceiling (the reference
   client uses 3840 px on the long edge) and say so at notice level when you scale.
-- **Skip an entry whose item is not decodable image or video media** (a typeface, a style book) —
-  loudly, as `media.not_playable`. Being a brand member never makes an item unplayable: a brand
+- **Skip an entry whose item is not decodable image or video media** (a typeface, a style book, a
+  template package) — loudly, as `media.not_playable`. Being a brand member never makes an item unplayable: a brand
   logo image in a playlist is legitimate content.
 - **Never let the render path wait on a database or the network.** Snapshot the cartridge into
   memory, with its indexes, when it is committed.
@@ -847,6 +856,60 @@ had to choose. A conforming client makes the same choices, because the conforman
 | A takeover or an alert due while the next item is still loading, or before a late first frame's natural end | It still cuts at its time (§5.9). The loading item is abandoned; a late item's marker is armed at the activation instead. |
 | The preview clock before its first command | Reads what a Surface would show now, and runs. |
 | No orientation from the host | The gate is skipped (§5.1), and each entry plays its landscape file, else its portrait one; backings and demo branding resolve in landscape, as Automatic reads a display that is not taller than it is wide (§6). A DemoStation's picture-in-picture skips the gate too. |
+
+### 5.15 Session board templates
+
+A **session board template** is a package — a zip of `template.json`, a page, its layouts,
+stylesheets, fonts and a small engine — that a Surface renders a board with in a web view, from
+one **data document** per render that the Surface's engine produces. The package format, the
+document and the host's duties are specified in [`TEMPLATE.md`](TEMPLATE.md); this section says how
+a template reaches a Surface and which one a board uses.
+
+**Columns** (`project` and `session_set`, §4.3, §4.7):
+
+| Column | Meaning |
+|---|---|
+| `template_item_id` | The `media_item` holding the package: one `media_file` of type `application/zip`, in either slot. |
+| `template_settings` | JSON `{ "vars": { name: string } }` — the Show's values for the variables the template declares, passed through to the data document as they are. Anything else is malformed and ignored, with a `value.malformed` warning. |
+
+**Resolution**, the backing's shape (§5.10):
+
+```
+template = session_set.template_item_id ?? project.template_item_id ?? the Surface's built-in default template
+```
+
+The settings follow the pointer that applied: a set with its own template uses its own
+`template_settings`; a set without one uses the Show's template with the Show's settings. A set
+cannot restyle the Show's template — one pointer, one settings object, no merging.
+
+**A dangling pointer is a warning, not a refusal.** A pointer to an item the cartridge does not
+carry, or carries with no file in the manifest, gives `reference.dangling` on that column and reads
+as null, so the next step of the resolution applies. A Surface whose package fails to extract or to
+load at render time does the same: skip to the next template, say so, and never render nothing.
+
+**The package is media, taken as named.** It is delivered through the manifest like any file,
+verified like any file (§7.2), never decoded as media and never renditioned (§7.5), and **wanted on
+every lane** (§7.7): a device of either orientation renders the board with it. `application/zip` is
+never playable (§5.13): a package found in a playlist is skipped loudly.
+
+**The board variant is the device's.** A template advertises the layouts it offers (`now-next`,
+`schedule`, or both; `TEMPLATE.md`). Which of them a sign shows — now / next, the schedule, or
+**both** — is a setting of the device, beside its orientation (§6), never authored into a cartridge.
+`both` is one board: the now / next page first, then the schedule's pages, so the board has
+1 + the schedule's page count pages and lasts `duration × pages` (§5.8) like any board. A variant the
+template does not offer falls to the one it does, with `template.variant_unavailable` noted; `both`
+on a one-layout template is that layout. A template's style switches (its *modifiers*,
+`TEMPLATE.md`) are the device's settings too, read off the package it is rendering.
+
+**When the variant changes** (the operator sets it): a session board on screen is cut
+(`variant.change`, §5.9's closed set extended) and the rotation continues after its cursors;
+anything else on screen plays on, and the next board is chosen with the new variant.
+
+**The default template.** Every Surface carries one, so a Show that names none still has a board
+(INV-16's spirit: nothing authored is ever shown as nothing). The reference template is published
+with this specification (`TEMPLATE.md`).
+
+---
 
 ## 6. Provisioning
 
@@ -926,12 +989,12 @@ Keep partials outside the directory your renderer resolves media from.
 `media_file.width` / `height` and the rendition's own dimensions are intrinsic pixels. Assets
 larger than your renderer can texture are legitimate: downscale them (§5.13).
 
-### 7.5 Brand assets
+### 7.5 Brand assets and template packages
 
-Typefaces and the style book are delivered through the manifest like media, but they are **not
-decoded as media** and never choose among renditions. Take them exactly as the manifest names
-them. Their use is specified in §9. A brand member that **is** an image or a video (a logo, say)
-is ordinary media: it has renditions and can play.
+Typefaces, the style book and session board template packages are delivered through the manifest
+like media, but they are **not decoded as media** and never choose among renditions. Take them
+exactly as the manifest names them. Their use is specified in §9 and §5.15. A brand member that
+**is** an image or a video (a logo, say) is ordinary media: it has renditions and can play.
 
 ### 7.6 Choosing a rendition
 
@@ -979,8 +1042,9 @@ lanes it renders:
   A Surface without the mode never draws the branding, so an item used only as demo branding — a
   `demo_station` entry's background or overlay that no playlist entry, backing, logo or wallpaper
   names — is in none of its lanes.
-- **Everything else the cartridge delivers**, whatever the lane: brand files (§9), and any file no
-  item places in an orientation's slot.
+- **Everything else the cartridge delivers**, whatever the lane: brand files (§9), the session
+  board template packages the Show or a set names (§5.15, whichever slot holds one), and any file
+  no item places in an orientation's slot.
 
 After an orientation change, fetch the new lane's files. Until a file is held, an entry that needs
 it is skipped when its turn comes, like any missing file (§5.13), and plays once the file arrives.
@@ -1163,6 +1227,11 @@ cartridge. From here, cartridges are read by Surfaces older and newer than they 
 New columns are added **nullable, or `NOT NULL` with a `DEFAULT`**. Tables and columns are never
 removed, renamed, reordered, or retyped. Enumerated values are never repurposed.
 
+*The baseline was revised once, in 2026-10, before any Surface outside the reference clients read
+the format: `session_set.render_modes` and `session_set.schedule_template` were removed (the layout
+became the template's, §5.15) and the four template columns were added. The DDL in §4 is the revised
+baseline; the removed columns are retired (§10.4).*
+
 ### 10.2 Consumers must tolerate absence
 
 Decode every column added **after** the baseline as optional-with-default. Probe
@@ -1178,8 +1247,9 @@ facts and lead to opposite investigations.
 ### 10.4 Ignore what you do not understand
 
 Unknown tables, columns, and values of `resource_type`, `slot`, `type`, and `kind` are skipped,
-not treated as errors. A column retired from the baseline (§4.4) is ignored as well, and silently:
-it is not unknown. Nor is a retired value — `portrait` or `landscape` in
+not treated as errors. A column retired from the baseline (`surface_location.orientation`, §4.4;
+`session_set.render_modes` and `schedule_template`, §4.7) is ignored as well, and silently: it is
+not unknown. Nor is a retired value — `portrait` or `landscape` in
 `surface_schedule_entry.slot` (§4.4) — but a row that carries one cannot be read: it is malformed,
 skipped with a warning (§4).
 
@@ -1225,6 +1295,18 @@ node conformance/run.mjs --engine engine/dist/node.js
 - [ ] Validates the SQLite magic before replacing a committed cartridge.
 - [ ] Refuses a cartridge older than the committed one by `(published_revision, generated_at)`,
       and logs the refusal.
+
+**Session boards (§5.15)**
+
+- [ ] Renders a board from the template the resolution names — the set's, else the Show's — and
+      from the built-in default when neither resolves or the package fails to load.
+- [ ] Takes a template package as the manifest names it; never decodes it as media; fetches it on
+      every lane.
+- [ ] Shows the layouts the device's board variant asks for, `both` as now / next then the schedule's
+      pages, and falls to what the template offers with `template.variant_unavailable`.
+- [ ] Passes `template_settings.vars` through to the data document untouched; takes modifiers from
+      the device's settings (`TEMPLATE.md`).
+- [ ] Cuts a board on screen with `variant.change` when the variant changes, and nothing else.
 
 **Compatibility**
 
@@ -1350,6 +1432,8 @@ directive        3 rows, all on entry 5 (position 3):
 | **show code / `projectCode`** | The Show's public identifier and media keyspace root |
 | **surface code** | Names the surface cartridge; `PROJECT` is reserved |
 | **location** | One physical installation of a surface config, by `location_id`; carries no orientation (§6) |
+| **session board template** | The package a Surface renders a board with (§5.15, `TEMPLATE.md`); the Show's, a set's, or the Surface's built-in default |
+| **board variant** | Which of a template's layouts a sign shows: now / next, the schedule, or both — the device's setting (§5.15) |
 | **lane** | One orientation over the one schedule: the files a device rendering it plays. A Surface renders its own orientation's lane, a DemoStation's picture-in-picture the opposite one (§5.1, §7.7) |
 | **slot** | `playlist` \| `demo_station`, the two kinds of schedule entry (§4.4). An item's `portrait_file_id` and `landscape_file_id` are its orientation slots (§5.7) |
 | **orientation rendered** | The orientation whose files play: the device's own, or the opposite one in a DemoStation's picture-in-picture (§5.1) |
@@ -1395,6 +1479,7 @@ directive        3 rows, all on entry 5 (position 3):
 | Alerts | Not specified | `alert` directives outrank takeovers, are never day-scoped, and cut at their activation (§5.3 – §5.6, §5.9) |
 | Synthetic time | Optional; operator's wall clock projected onto Day 1 | Required; venue time of day on Day 1 |
 | Session boards | Optional | Required |
+| Session board layout | Built in per platform; `session_set.render_modes` chose the modes | A session board template (§5.15) — the Show's, a set's, or the built-in default — rendered from a data document; which layouts a sign shows is the device's board variant; `render_modes` and `schedule_template` removed (2026-10) |
 | DemoStation entries | May carry a PIP playlist | Branding only; the picture-in-picture is the Surface's player, moved: the same playlist in the opposite orientation, its rotation continuing (§5.11) |
 | Brand members | Never playable | Playable when image or video; only non-media items are skipped |
 | Composition | Backing and overlay on playlists and media items | Project default backing (`project.backing_item_id`, new), session board override; playlist and item backing/overlay removed |

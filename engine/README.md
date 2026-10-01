@@ -5,7 +5,7 @@ committed cartridge and the passage of time, and it says what is on screen, when
 changes, and why. It draws nothing. A **host** (a browser page, a kiosk shell, an
 authoring tool's preview) calls it from its display loop and draws what it returns.
 
-- **Conformance:** passes all 27 scenarios of the [conformance suite](../conformance/README.md).
+- **Conformance:** passes all 30 scenarios of the [conformance suite](../conformance/README.md).
 - **No runtime dependencies.** The compiled ES modules in `dist/` are committed, so a
   page or a program imports them directly; there is no build step for consumers.
 - **Two parts:** the **Loader** (cartridge bytes → an immutable, indexed Snapshot, or a
@@ -205,7 +205,7 @@ node:sqlite before Node 24, which end the string at it.
 
 | Export | |
 |---|---|
-| `createEngine({ snapshot, orientation, clock, demoStation?, boardResolver? })` | One engine per device. It resolves the one schedule; `orientation` is the device's (§6), and `demoStation: true` runs the DemoStation mode (above). Options carrying a `slot` — an earlier draft's schedule per orientation — throw a `TypeError` that says to remove it. |
+| `createEngine({ snapshot, orientation, clock, demoStation?, boardResolver?, boardVariant? })` | One engine per device. It resolves the one schedule; `orientation` is the device's (§6), and `demoStation: true` runs the DemoStation mode (above). `boardVariant` (§5.15) is the device's board setting — `now-next`, `schedule` or `both` (the default) — handed to the board resolver and recorded on every board; `setBoardVariant(v)` changes it, cutting a board on screen (`variant.change`) at the next tick. Options carrying a `slot` — an earlier draft's schedule per orientation — throw a `TypeError` that says to remove it. |
 | `engine.tick(wallMs, monoMs) → { showNow, projected, renderItem, trace, demo }` | Evaluates the next content when the marker is forced (0) or `showNow ≥ marker`. A forced marker is a state of its own, not an instant compared with the show time, so a show time before 1970 (negative milliseconds, reachable from a preview clock) evaluates at the next tick like any other (§5.9). |
 | `engine.onFirstFrame(token)`, `onMediaCompleted(token)`, `onLoadFailed(token, reason)` | Each returns the trace events it caused. |
 | `engine.setOrientation(o)`, `engine.commit(snapshot)` | Applied at the next tick. A rotation keeps the schedule and the cursors. |
@@ -229,7 +229,7 @@ the first frame; a `hold` on entering the hold, not on each retry.
 ### Session boards
 
 A board's look is each platform's decision, so the engine asks an injected
-`boardResolver(set, { showNow, timezone, entries, sessions, snapshot })` for
+`boardResolver(set, { showNow, timezone, entries, sessions, snapshot, variant })` for
 `{ model, pageCount, anchorPage }` once per render item. The board lasts
 `session_set.duration × pageCount`. The resolver shipped here is minimal: one page, the
 set's sessions in start order, each marked past, now, next or later.
@@ -253,6 +253,7 @@ engine had to do something; these are the choices. The specification now lists t
 | Day 1 on a daylight-saving date | §8.2's "next valid instant", read literally: a skipped local time becomes the moment the clocks change, and a repeated one the earlier instant. So on the days around a show whose Day 1 springs forward, the show clock stands at that moment for the hour the clocks skip, and whatever is on screen waits. The specification keeps this reading and says so in §8.2; shifting by the length of the gap was rejected because it adds one backward jump a day. |
 | No orientation from the host | The gate is skipped (§5.1) and each entry plays its landscape file, else its portrait one; backings and demo branding resolve in landscape (`ORIENTATION_WHEN_MISSING`). A DemoStation's picture-in-picture skips the gate too. |
 | Day 1 clamp | A projection that lands outside Day 1 becomes Day 1's start, as §8.2 now states. The alternative reading, its end for a late time, differed only for a Day 1 that is not a whole day, which Studio does not produce. |
+| A board variant change (§5.15) | Cuts a session board on screen (`variant.change`) and continues the rotation after its cursors, as an orientation change does; it does not re-issue the same entry. A still or a video on screen plays on. The template a board renders with, its settings and the variant are on `BoardContent` (`templateItemId`, `templateSettings`, `variant`); the engine resolves them and renders nothing. |
 
 ## Build and test
 
@@ -263,7 +264,7 @@ cd engine
 npm ci
 npm run build          # tsc: src/ → dist/ (commit dist/ with the source)
 npm test               # unit tests: the Loader's refusals and warnings, engine behaviour
-npm run conformance    # the 27 scenarios
+npm run conformance    # the 30 scenarios
 npm run bench          # performance against the targets below
 ```
 

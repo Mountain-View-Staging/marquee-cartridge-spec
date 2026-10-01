@@ -17,7 +17,7 @@
 import { type LoadOptions } from "./loader.js";
 import type { ProjectSnapshot, Snapshot } from "./model.js";
 export type * from "./model.js";
-export type { Backing, BlankRenderItem, BoardContent, BoardRenderItem, DemoState, Hint, MediaContent, MediaRenderItem, PlayableRenderItem, RenderItem } from "./render.js";
+export type { Backing, BlankRenderItem, BoardContent, BoardRenderItem, BoardVariant, DemoState, Hint, MediaContent, MediaRenderItem, PlayableRenderItem, RenderItem } from "./render.js";
 export type * from "./trace.js";
 export { CartridgeError, type CartridgeErrorCode } from "./errors.js";
 export { isSqlite, loadCartridgeWith, readCartridge, type DatabaseAdapter, type LoadOptions, type Opener } from "./loader.js";

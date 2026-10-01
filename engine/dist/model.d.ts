@@ -48,6 +48,19 @@ export interface Project {
     readonly backingItemId: number | null;
     readonly brandStyle: string | null;
     readonly brandStyleItemId: number | null;
+    /** §5.15 — the Show's session board template: the media item holding the package. */
+    readonly templateItemId: number | null;
+    /** §5.15 — the Show's values for that template's variables. */
+    readonly templateSettings: TemplateSettings | null;
+}
+/**
+ * §5.15 — the operator's settings for a session board template: the values of
+ * the variables the template declares, passed through to the template's data
+ * document as they are. Which layout a sign shows, and the template's style
+ * switches, are the device's own settings, never carried here.
+ */
+export interface TemplateSettings {
+    readonly vars: Readonly<Record<string, string>>;
 }
 /** §4.3 — a whole venue-local calendar day. */
 export interface ProjectDay {
@@ -175,16 +188,18 @@ export interface Session {
 export interface SessionSet {
     readonly id: number;
     readonly name: string;
-    readonly renderModes: readonly string[];
     /** Seconds per board page. */
     readonly duration: number;
     readonly backingItemId: number | null;
     readonly logoItemId: number | null;
-    readonly scheduleTemplate: unknown;
     readonly sourceId: string | null;
     readonly sourceName: string | null;
     readonly brandStyle: string | null;
     readonly brandStyleItemId: number | null;
+    /** §5.15 — this set's own template, overriding the Show's. */
+    readonly templateItemId: number | null;
+    /** §5.15 — the settings for that override. */
+    readonly templateSettings: TemplateSettings | null;
 }
 /** §4.7 — sorted by (startTime, id) within a set. */
 export interface SessionSetEntry {

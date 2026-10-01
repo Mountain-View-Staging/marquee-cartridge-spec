@@ -44,6 +44,7 @@ IDs are systematic so a trace reads on its own:
 | Videos | 12 s (`intrinsic_duration`), no trim |
 | Schedule entry id | its row, in order: 1 is the first |
 | Demo branding | `demo-station` only: item 9 is the background and item 8 the overlay; neither is in a playlist |
+| Session board templates | `template` and `template-dangling` only: item 50 is the Show's template and 51 set 1's, each one `application/zip` file (150, 151) in the portrait slot, in no playlist; in `template-dangling` the items are 99 and 98 and their files are not in the manifest |
 
 The **base** show: one schedule, playlist A from Day 1 00:00 (a surface has one schedule, whatever
 the orientation: specification §5.1); playlist A = entries 1–4, all standard ON at 08:00; entry 2
@@ -55,14 +56,14 @@ has a takeover from 11:30 to 12:30. Other cartridges are variations, named for w
 |---|---|
 | `id`, `title`, `rules` | Identity and the rules under test |
 | `cartridge` | Which `cartridges/<name>.db` to load |
-| `engine` | `orientation`: the orientation the device renders. `demoStation: true`: the host runs the DemoStation mode, so the engine resolves the `demo_station` slot (specification §5.11) |
+| `engine` | `orientation`: the orientation the device renders. `demoStation: true`: the host runs the DemoStation mode, so the engine resolves the `demo_station` slot (specification §5.11). `boardVariant`: the device's board setting, `now-next`, `schedule` or `both` (specification §5.15; `both` when absent) |
 | `clock.source` | `surface` (real/synthetic show clock) or `preview` (Studio transport) |
 | `clock.start` | Wall-clock start, ISO 8601 with offset |
 | `clock.tickMs`, `clock.seconds` | Tick every `tickMs`; run ticks `0 … seconds − 1` |
 | `clock.deviceTimeZone` | The process timezone while running. Engines must not depend on it. |
 | `clock.commands` | Preview only: `{ atSecond, set?, action? }` with `action` `play` or `pause` |
 | `host` | How the simulated host answers render items (below) |
-| `events` | `{ atSecond, type: "wallJump", deltaMs }` — a wall-clock correction; `{ atSecond, type: "setOrientation", orientation }` — the device rotates |
+| `events` | `{ atSecond, type: "wallJump", deltaMs }` — a wall-clock correction; `{ atSecond, type: "setOrientation", orientation }` — the device rotates; `{ atSecond, type: "setBoardVariant", variant }` — the operator sets the device's board variant |
 
 ## The simulated host
 
@@ -191,6 +192,9 @@ applies the same host rules.
 | MCS-25 | An alert outranks a takeover: its activation cuts the takeover item, the alert set is the whole rotation, and when it turns off a takeover period begins again | `alert` | Reference §6.3, §6.4, §6.5, §6.7 |
 | MCS-26 | An alert is never day-scoped: one ON at timestamp 0 governs on Day 2 and suppresses Day 2's standard rotation | `alert-standing` | Reference §6.3, §6.4 |
 | MCS-27 | The orientation gate comes before the alert gate: an alert with a landscape file only never reaches a portrait device, and takes over when the device turns landscape | `alert-landscape` | Reference §6.3, §6.4, §9.4 |
+| MCS-28 | A session board template rides the cartridge: the Show's pointer and a set's override load with no warning, and the board plays as before | `template` | Specification §5.15, §7.5, §7.7 |
+| MCS-29 | A dangling template pointer and malformed settings are warnings, not refusals: the next template applies and the board plays | `template-dangling` | Specification §5.15, §5.13 |
+| MCS-30 | The device's board variant changes: a board on screen is cut and the rotation continues; a still on screen plays on | `template` | Specification §5.15, §5.9 |
 
 Expected traces were derived by hand from the specification and are reviewed before either
 engine exists. When an engine disagrees with a trace, decide which is wrong against the
