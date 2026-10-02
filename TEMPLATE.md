@@ -1,7 +1,8 @@
 # Session Board Templates — the package, the data document and the host
 
 **Status:** the contract behind specification §5.15, published 2026-10-01 with the format's first
-baseline revision; manifest 1.3 and data 1.2 (the project-only **clock** layout) the same day. The reference template and engine are in [`template/`](template/):
+baseline revision; manifest 1.3 and data 1.2 (the project-only **clock** layout) the same day; data 1.3 and
+engine 1.4 (the device's **12- or 24-hour clock**, `clock.hourCycle`) on 2026-10-02. The reference template and engine are in [`template/`](template/):
 `template/default/` is the package every reference client carries, and `template/engine/` the shim
 it embeds (with a vendored, unmodified copy of [nunjucks](https://mozilla.github.io/nunjucks/) 3.2.4,
 BSD-2-Clause).
@@ -46,8 +47,8 @@ nothing but the package; a host serves the package from an origin of its own (§
   "displayName": "Example — now / next and schedule",
   "version": 3,
   "basedOn": { "id": "example-board", "version": 2 },
-  "engine": "1.3",
-  "data": "1.2",
+  "engine": "1.4",
+  "data": "1.3",
   "layouts": {
     "now-next": { "source": "layouts/now-next.html", "style": "layouts/now-next.css" },
     "schedule": { "source": "layouts/schedule.html", "style": "layouts/schedule.css" },
@@ -109,13 +110,13 @@ the one whose name is the document's `board.renderMode`. A layout's `style`, whe
 into the page before the first render. Nothing else in the page is touched.
 
 The shim's filters: `time` and `date` (an instant in the venue zone, as the Surface's own board
-writes them), `role` (a role's resolved colour). The template language is nunjucks as documented
+writes them — `time` with the document's `clock.hourCycle`, data 1.3), `role` (a role's resolved colour). The template language is nunjucks as documented
 publicly; the include tag is never used with a path (every source is a file the manifest names).
 
 The `clock` layout renders from the same context as a board: `clock.time` and `clock.date` are the
 show clock in the venue zone, `board.header` the Show's name, and there are no slots.
 
-## 4. The data document — format `1.2`
+## 4. The data document — format `1.3`
 
 One JSON object per **render**. The Surface's engine produces it from its resolution of the
 session set (specification §4.7, §5.8): the engine decides what a render needs and delivers that
@@ -124,9 +125,9 @@ rows; the template pages nothing and filters nothing.
 
 ```json
 {
-  "format": "1.2",
+  "format": "1.3",
   "clock":  { "showNow": 1789570800000, "zone": "America/Los_Angeles", "projected": false,
-              "time": "8:45 a.m.", "date": "Tuesday, September 15" },
+              "hourCycle": "h12", "time": "8:45 a.m.", "date": "Tuesday, September 15" },
   "board":  { "renderMode": "schedule", "header": "Main hall", "resolvedAt": 1789570800000,
               "pageCount": 3, "page": 0,
               "nowNext": null, "signage": null,
@@ -146,7 +147,7 @@ rows; the template pages nothing and filters nothing.
 
 | Key | Meaning |
 |---|---|
-| `clock` | The engine's show clock (specification §8), in the venue zone — never the device's clock. `projected` is true when the clock is not live (a preview). |
+| `clock` | The engine's show clock (specification §8), in the venue zone — never the device's clock. `projected` is true when the clock is not live (a preview). `hourCycle` (data 1.3) is the device's setting for how a time is written, and **every time in the document is already written with it**: `h12` "8:45 a.m." (no leading zero, lowercase with periods), `h23` "08:45" (two-digit hours and minutes, no suffix; European deployments). A document without it is `h12`. |
 | `board` | The resolved board for THIS render: `renderMode` names the layout (`now-next`, `schedule` or `clock`); `page` / `pageCount` which page this is; `nowNext` + `signage` for a now / next render, `schedule` with this page's `rows` for a schedule render; the other is null. A **clock** render (data 1.2) is one page: `{ renderMode: "clock", header: <the Show's name>, page: 0, pageCount: 1, resolvedAt, nowNext: null, signage: null, schedule: null }`, with `slots: []`. |
 | `slots` | The sessions this render shows, normalised: `presenters` as `{ name, company, title }`, times as strings in the venue zone, `isNow` / `isNext`. |
 | `vars` | Every declared variable with the Show's value, else its default (specification §5.15). |
@@ -202,7 +203,8 @@ A Surface rendering a template:
    layout, on a cartridge commit, and on a change of orientation or of the device's board variant.
    For the variant `both` the first page is `now-next` and the rest `schedule`
    (specification §5.15). A document's `modifiers` are the device's settings for this template;
-   its `vars` the Show's `template_settings`.
+   its `vars` the Show's `template_settings`; its `clock.hourCycle` the device's time format (12-
+   or 24-hour), which the host writes every time with — never the show's.
 5. On `rendered`, **presents the page**: a native host captures it into its text layer, a browser
    host reveals it. The engine's first-frame rule applies to the first `rendered` after issue; a
    later page that never renders keeps the previous page up.

@@ -24,15 +24,17 @@
  * ./template.json (a host serves the package folder). Fonts are written as @font-face
  * from the manifest's faces (§5.7); colours and the canvas as CSS custom properties and
  * classes on <html> (§5.4, §5.6). The shim never pages, never filters, never reads a
- * clock: it renders what it is given.
+ * clock: it renders what it is given. Engine 1.4 / data 1.3 (2026-10-02): the document's
+ * `clock.hourCycle` ("h12" | "h23", the device's clock) — every time in it is already written
+ * with it, and the `time` filter follows it too; absent, the 12-hour clock.
  *
  * Runs as a classic script in a page; its pure parts are exported for Node tests.
  */
 (function (global) {
   "use strict";
 
-  var ENGINE_FORMAT = "1.3";
-  var DATA_FORMAT = "1.2";
+  var ENGINE_FORMAT = "1.4";
+  var DATA_FORMAT = "1.3";
   var MOUNT_ID = "marquee-root";
   var MANIFEST_ID = "marquee-manifest";
   var FONT_STYLE_ID = "marquee-fonts";
@@ -202,9 +204,11 @@
     return { hour: Number(parts.hour) % 24, minute: Number(parts.minute) };
   }
 
-  /** "8:30 a.m." — the kit's timeString. */
-  function timeString(ms, zone) {
+  /** "8:30 a.m." — the kit's timeString; with the device's 24-hour clock (data 1.3,
+   *  `clock.hourCycle` "h23") "08:30". */
+  function timeString(ms, zone, hourCycle) {
     var p = partsIn(ms, zone);
+    if (hourCycle === "h23") return String(p.hour).padStart(2, "0") + ":" + String(p.minute).padStart(2, "0");
     var h12 = p.hour % 12 === 0 ? 12 : p.hour % 12;
     return h12 + ":" + String(p.minute).padStart(2, "0") + " " + (p.hour < 12 ? "a.m." : "p.m.");
   }
@@ -271,8 +275,8 @@
     if (!nunjucks) throw new Error("nunjucks is not loaded — engine/nunjucks.js must come before engine/marquee-template.js");
     var env = new nunjucks.Environment(null, { autoescape: true, throwOnUndefined: false, trimBlocks: true, lstripBlocks: true });
     env.addFilter("time", function (ms) {
-      var zone = state.document && state.document.clock && state.document.clock.zone;
-      return typeof ms === "number" && zone ? timeString(ms, zone) : "";
+      var clock = (state.document && state.document.clock) || {};
+      return typeof ms === "number" && clock.zone ? timeString(ms, clock.zone, clock.hourCycle) : "";
     });
     env.addFilter("date", function (ms) {
       var zone = state.document && state.document.clock && state.document.clock.zone;
