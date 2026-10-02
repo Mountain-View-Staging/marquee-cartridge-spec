@@ -17,5 +17,5 @@
 }
 .marquee-ink-light .clock-face { --clock-shadow: rgba(255, 255, 255, 0.55); }  /* dark text over a light wallpaper */
 
-.clock-face__time { margin: 0; font-size: 7.2rem; font-weight: 600; line-height: 1.1; }
+.clock-face__time { margin: 0; font-size: 7.2rem; font-weight: 600; line-height: 1.1; font-feature-settings: "tnum" 1; }  /* steady as it ticks */
 .clock-face__date { margin: 0; font-size: 2.7rem; font-weight: 400; line-height: 1.1; }
