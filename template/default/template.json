@@ -1,13 +1,15 @@
 {
-  "format": "1.2",
+  "format": "1.3",
   "id": "marquee-default",
-  "displayName": "Marquee — default board",
-  "version": 1,
-  "engine": "1.2",
-  "data": "1.1",
+  "displayName": "Marquee — default board and clock",
+  "version": 2,
+  "engine": "1.3",
+  "data": "1.2",
   "layouts": {
     "now-next": { "source": "layouts/now-next.html", "style": "layouts/now-next.css" },
-    "schedule": { "source": "layouts/schedule.html", "style": "layouts/schedule.css" }
+    "schedule": { "source": "layouts/schedule.html", "style": "layouts/schedule.css" },
+    "clock":    { "source": "layouts/clock.html",    "style": "layouts/clock.css",
+                  "textRegion": { "x": 0.12, "y": 0.68, "w": 0.76, "h": 0.24 } }
   },
   "supports": { "orientations": ["portrait", "landscape"], "aspects": ["9x16", "16x9", "3x4", "4x3"] },
   "textRegion": { "x": 0, "y": 0, "w": 1, "h": 1 },

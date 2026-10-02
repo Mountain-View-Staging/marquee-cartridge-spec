@@ -31,8 +31,8 @@
 (function (global) {
   "use strict";
 
-  var ENGINE_FORMAT = "1.2";
-  var DATA_FORMAT = "1.1";
+  var ENGINE_FORMAT = "1.3";
+  var DATA_FORMAT = "1.2";
   var MOUNT_ID = "marquee-root";
   var MANIFEST_ID = "marquee-manifest";
   var FONT_STYLE_ID = "marquee-fonts";

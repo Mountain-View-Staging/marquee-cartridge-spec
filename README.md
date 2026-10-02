@@ -73,7 +73,8 @@ A Surface is configured with a **three-level address**:
 | `locationId` | `LOBBY3-A` | Which physical installation — chosen at provisioning (§6) |
 
 A Surface with no surface code uses `project.db` alone and shows the Show's wallpaper and
-date/time. A Surface with a surface code pulls **both** files: `project.db` is the project
+date/time — the date and time drawn by the Show's session board template's `clock` layout, else the
+Surface's default template's (§5.15). A Surface with a surface code pulls **both** files: `project.db` is the project
 descriptor, and the surface cartridge carries the schedule and everything it plays.
 
 The surface code `PROJECT` is reserved.
@@ -117,7 +118,9 @@ cartridge_meta      project        project_days
 media_item          media_file     media_file_variant     media_manifest
 ```
 
-It carries the Show's identity, timezone, days, wallpapers, and the media those need.
+It carries the Show's identity, timezone, days, wallpapers, the Show's session board template
+(`project.template_item_id` and `template_settings`, §5.15 — for the project-only clock), and the
+media those need: the wallpapers' files and the template's package.
 
 ### 3.2 `<SURFACECODE>.db` — the surface cartridge
 
@@ -909,6 +912,20 @@ anything else on screen plays on, and the next board is chosen with the new vari
 (INV-16's spirit: nothing authored is ever shown as nothing). The reference template is published
 with this specification (`TEMPLATE.md`).
 
+**The project-only clock.** A Surface with no surface code (§3) shows the Show's wallpaper with the
+date and time over it, drawn by a template's `clock` layout (`TEMPLATE.md` §2, §7):
+
+```
+clock = the Show's template, when it offers a clock layout ?? the Surface's default template
+```
+
+So `project.db` carries `project.template_item_id`, `project.template_settings` and the package the
+pointer names, exactly as a surface cartridge does (a dangling pointer is the same warning, and reads
+as null). The clock is pushed on the venue minute in the venue zone; its ink is measured from the
+wallpaper where the clock layout's `textRegion` says its text falls (no wallpaper is black), and it
+is drawn only once that reading and the wallpaper are both in. The variant and the board's cuts do
+not apply: a clock has one layout and one page.
+
 ---
 
 ## 6. Provisioning
@@ -1307,6 +1324,8 @@ node conformance/run.mjs --engine engine/dist/node.js
 - [ ] Passes `template_settings.vars` through to the data document untouched; takes modifiers from
       the device's settings (`TEMPLATE.md`).
 - [ ] Cuts a board on screen with `variant.change` when the variant changes, and nothing else.
+- [ ] With no surface code, draws the date and time with the Show's template's `clock` layout, else
+      the default template's, over the wallpaper, in the ink its measurement of the wallpaper chooses.
 
 **Compatibility**
 
@@ -1480,6 +1499,7 @@ directive        3 rows, all on entry 5 (position 3):
 | Synthetic time | Optional; operator's wall clock projected onto Day 1 | Required; venue time of day on Day 1 |
 | Session boards | Optional | Required |
 | Session board layout | Built in per platform; `session_set.render_modes` chose the modes | A session board template (§5.15) — the Show's, a set's, or the built-in default — rendered from a data document; which layouts a sign shows is the device's board variant; `render_modes` and `schedule_template` removed (2026-10) |
+| Project-only clock | Drawn by each platform | The `clock` layout of the Show's template (carried in `project.db`), else the default template's (§5.15, 2026-10) |
 | DemoStation entries | May carry a PIP playlist | Branding only; the picture-in-picture is the Surface's player, moved: the same playlist in the opposite orientation, its rotation continuing (§5.11) |
 | Brand members | Never playable | Playable when image or video; only non-media items are skipped |
 | Composition | Backing and overlay on playlists and media items | Project default backing (`project.backing_item_id`, new), session board override; playlist and item backing/overlay removed |

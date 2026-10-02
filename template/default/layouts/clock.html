@@ -1,0 +1,11 @@
+{#
+  Layout: clock — the template source for board.renderMode "clock" (nunjucks; data 1.2).
+  A project-only device's date and time, over the Show's wallpaper (spec §5.15): no session
+  set, no slots. board.header is the Show's name; clock.time and clock.date are the show clock
+  in the venue zone, re-sent by the host on every venue minute. The ink is the host's
+  measurement of the wallpaper where layouts.clock.textRegion says this text falls.
+#}
+<section class="clock-face" aria-label="{{ board.header }}">
+  <p class="clock-face__time">{{ clock.time }}</p>
+  <p class="clock-face__date">{{ clock.date }}</p>
+</section>

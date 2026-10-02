@@ -1,0 +1,21 @@
+/* Marquee — default board · the clock layout's own styles (loaded with the page by the shim).
+
+   The time over the date, centred, standing 8% of the height above the bottom edge — the
+   project-only clock the Surfaces drew before templates (SB-07). Sizes follow the long edge
+   (1rem = 1/96 of it), so the clock is the same physical size whichever way a panel is
+   mounted. The shadow is opposite the ink: it lifts the text off the wallpaper either way. */
+
+.clock-face {
+  box-sizing: border-box;
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding-bottom: 8vh;
+  display: flex; flex-direction: column; align-items: center; gap: 1.2vh;
+  color: var(--marquee-role-clock);
+  text-align: center; white-space: nowrap;
+  --clock-shadow: rgba(0, 0, 0, 0.55);
+  text-shadow: 0 0.29rem 0.58rem var(--clock-shadow);
+}
+.marquee-ink-light .clock-face { --clock-shadow: rgba(255, 255, 255, 0.55); }  /* dark text over a light wallpaper */
+
+.clock-face__time { margin: 0; font-size: 7.2rem; font-weight: 600; line-height: 1.1; }
+.clock-face__date { margin: 0; font-size: 2.7rem; font-weight: 400; line-height: 1.1; }

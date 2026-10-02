@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { CartridgeError, buildSnapshot, loadCartridge, nodeSqliteOpener, readCartridge } from "../dist/node.js";
+import { CartridgeError, buildSnapshot, filesForLanes, loadCartridge, nodeSqliteOpener, readCartridge } from "../dist/node.js";
 import { fixture, variant } from "./helpers.mjs";
 
 async function refusal(bytes, options) {
@@ -228,6 +228,24 @@ test("a project cartridge loads as a project snapshot", async () => {
   assert.equal(s.meta.surfaceId, null);
   assert.equal(s.days.length, 1);
   assert.deepEqual(s.warnings, []);
+});
+
+test("§5.15 — project.db carries the Show's template for the project-only clock: the pointer, its settings, its package on every lane", async () => {
+  // template.db made a project cartridge: item 50 (the Show's package) stays, with its file.
+  const bytes = variant("template", `
+    UPDATE cartridge_meta SET cartridge_kind = 'project', surface_id = NULL;
+    DROP TABLE surface_schedule_entry; DROP TABLE surface_location; DROP TABLE surface_config;
+    DROP TABLE directive; DROP TABLE playlist_entry; DROP TABLE playlist;
+    DROP TABLE session_set_entry; DROP TABLE session_set; DROP TABLE session`);
+  const s = await loadCartridge(bytes, { kind: "project" });
+  assert.equal(s.kind, "project");
+  assert.deepEqual(s.warnings.filter((w) => w.column === "template_item_id"), [], "the pointer resolves");
+  assert.equal(s.project.templateItemId, 50);
+  assert.deepEqual(s.project.templateSettings, { vars: { sponsorName: "Show" } });
+  const fileId = s.mediaItems.get(50).portraitFileId ?? s.mediaItems.get(50).landscapeFileId;
+  for (const lane of ["portrait", "landscape"]) {
+    assert.ok(filesForLanes(s, { lanes: [lane] }).has(fileId), `the package is in the ${lane} lane`);
+  }
 });
 
 test("a NUL byte in a text column is a malformed row: skipped with a warning naming the column", async () => {
