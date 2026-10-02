@@ -110,7 +110,7 @@ into the page before the first render. Nothing else in the page is touched.
 
 The shim's filters: `time` and `date` (an instant in the venue zone, as the Surface's own board
 writes them), `role` (a role's resolved colour). The template language is nunjucks as documented
-publicly; `{% include %}` of a path is never used (every source is a file the manifest names).
+publicly; the include tag is never used with a path (every source is a file the manifest names).
 
 The `clock` layout renders from the same context as a board: `clock.time` and `clock.date` are the
 show clock in the venue zone, `board.header` the Show's name, and there are no slots.
