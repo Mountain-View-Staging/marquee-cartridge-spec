@@ -64,8 +64,6 @@ export interface BoardContent {
     /** Seconds per page. Page i shows from the first frame + i × pageDuration, from the anchor, wrapping. */
     readonly pageDuration: number;
     readonly logoItemId: number | null;
-    /** §9.2 — the style book: the set's, else the project's; null for the Surface's built-in default. */
-    readonly styleItemId: number | null;
     /** §5.15 — the template: the set's, else the project's; null for the Surface's built-in default template. */
     readonly templateItemId: number | null;
     /** §5.15 — the settings beside the pointer that applied; null when none. */

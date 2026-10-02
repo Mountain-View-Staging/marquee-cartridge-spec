@@ -305,18 +305,12 @@ test("a working set of nothing but non-media holds instead of spinning", async (
   ]);
 });
 
-test("a brand member that is an image plays like any other item", async () => {
-  const bytes = variant("base", "UPDATE media_item SET brand_member = 'acme/acme-2026/3' WHERE id = 1");
-  const { trace } = await run(bytes, { start: "2026-09-15T08:00:00-07:00", seconds: 1 });
-  assert.deepEqual(brief(trace), [{ t: t("2026-09-15T08:00:00-07:00"), kind: "render", code: "rotation.start", entry: 1, set: "standard", file: 101 }]);
-});
-
 test("backings: a session set's own, else the project's; resolved by orientation with no fallback", async () => {
   const cartridge = (sql = "") => variant("board", `
-    INSERT INTO media_item (id, name, portrait_file_id, landscape_file_id, display_duration, brand_member, created, updated)
-    VALUES (21, 'Project backing', 101, 201, NULL, NULL, 0, 0),
-           (22, 'Landscape-only backing', NULL, 203, NULL, NULL, 0, 0),
-           (23, 'Room backing', 103, 203, NULL, NULL, 0, 0);
+    INSERT INTO media_item (id, name, portrait_file_id, landscape_file_id, display_duration, created, updated)
+    VALUES (21, 'Project backing', 101, 201, NULL, 0, 0),
+           (22, 'Landscape-only backing', NULL, 203, NULL, 0, 0),
+           (23, 'Room backing', 103, 203, NULL, 0, 0);
     UPDATE project SET backing_item_id = 21; ${sql}`);
   // Entry 1 (a still) renders at 08:00:00, the board (entry 2) at 08:00:10.
   const items = async (bytes) => (await run(bytes, { start: "2026-09-15T08:00:00-07:00", seconds: 11 })).items;

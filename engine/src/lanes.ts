@@ -36,10 +36,8 @@ export interface LaneSelection {
  * - An item used only as demo branding — named as a `demo_station` entry's
  *   background or overlay, and by no playlist entry, backing, logo or wallpaper —
  *   is in no lane without `demo`: only the DemoStation mode draws it (§5.11). An
- *   item used any other way too keeps its lanes, and a brand file is wanted on
+ *   item used any other way too keeps its lanes, and a template is wanted on
  *   every lane whatever else names it.
- * - Brand files are wanted on every lane (§9): each file of an item that is a
- *   brand member, or that the project or a session set names as its style book.
  * - A session board template is wanted on every lane (§5.15): the file of an
  *   item the project or a session set names as its template, whichever slot
  *   holds it — a device of either orientation renders the board with it.
@@ -60,30 +58,28 @@ export function filesForLanes(snapshot: Snapshot | ProjectSnapshot, selection: L
     for (const lane of selection.lanes) rendered.add(lane === "portrait" ? "landscape" : "portrait");
   }
 
-  // Items wanted on every lane whatever else names them: style books and templates.
-  const styleBooks = new Set<number>();
-  if (snapshot.project.brandStyleItemId !== null) styleBooks.add(snapshot.project.brandStyleItemId);
-  if (snapshot.project.templateItemId !== null) styleBooks.add(snapshot.project.templateItemId);
+  // Items wanted on every lane whatever else names them: the templates.
+  const templates = new Set<number>();
+  if (snapshot.project.templateItemId !== null) templates.add(snapshot.project.templateItemId);
   if (snapshot.kind === "surface") {
     for (const set of snapshot.sessionSets.values()) {
-      if (set.brandStyleItemId !== null) styleBooks.add(set.brandStyleItemId);
-      if (set.templateItemId !== null) styleBooks.add(set.templateItemId);
+      if (set.templateItemId !== null) templates.add(set.templateItemId);
     }
   }
   const brandingOnly = demo ? NO_ITEMS : demoBrandingOnly(snapshot);
 
   const referenced = new Set<number>();
   const wanted = new Set<number>();
-  const slot = (fileId: number | null, lane: Orientation, brand: boolean, drawn: boolean): void => {
+  const slot = (fileId: number | null, lane: Orientation, everyLane: boolean, drawn: boolean): void => {
     if (fileId === null) return;
     referenced.add(fileId);
-    if (brand || (drawn && rendered.has(lane))) wanted.add(fileId);
+    if (everyLane || (drawn && rendered.has(lane))) wanted.add(fileId);
   };
   for (const item of snapshot.mediaItems.values()) {
-    const brand = item.brandMember !== null || styleBooks.has(item.id);
+    const everyLane = templates.has(item.id);
     const drawn = !brandingOnly.has(item.id);
-    slot(item.portraitFileId, "portrait", brand, drawn);
-    slot(item.landscapeFileId, "landscape", brand, drawn);
+    slot(item.portraitFileId, "portrait", everyLane, drawn);
+    slot(item.landscapeFileId, "landscape", everyLane, drawn);
   }
 
   const out = new Set<number>();
@@ -99,8 +95,8 @@ const NO_ITEMS: ReadonlySet<number> = new Set();
  * The items a surface cartridge names only as demo branding (§5.11): a
  * `demo_station` entry's background or overlay, used no other way — not a
  * playlist entry's item, not the project's backing or a wallpaper, not a
- * session set's backing or logo. (A brand file, a style book's included, is
- * wanted on every lane before this is asked.)
+ * session set's backing or logo. (A template is wanted on every lane before
+ * this is asked.)
  */
 function demoBrandingOnly(snapshot: Snapshot | ProjectSnapshot): ReadonlySet<number> {
   if (snapshot.kind !== "surface") return NO_ITEMS;

@@ -108,8 +108,6 @@ DDL = {
   show_wallpaper_item_id    INTEGER REFERENCES media_item(id),
   desktop_wallpaper_item_id INTEGER REFERENCES media_item(id),
   backing_item_id           INTEGER REFERENCES media_item(id),
-  brand_style               TEXT,
-  brand_style_item_id       INTEGER REFERENCES media_item(id),
   template_item_id          INTEGER REFERENCES media_item(id),
   template_settings         TEXT,
   created                   INTEGER NOT NULL,
@@ -197,7 +195,6 @@ DDL = {
   portrait_file_id  INTEGER REFERENCES media_file(id),
   landscape_file_id INTEGER REFERENCES media_file(id),
   display_duration  REAL,
-  brand_member      TEXT,
   created           INTEGER NOT NULL,
   updated           INTEGER NOT NULL,
   CHECK (portrait_file_id IS NOT NULL OR landscape_file_id IS NOT NULL)
@@ -234,8 +231,6 @@ DDL = {
   logo_item_id      INTEGER REFERENCES media_item(id),
   source_id         TEXT,
   source_name       TEXT,
-  brand_style         TEXT,
-  brand_style_item_id INTEGER REFERENCES media_item(id),
   template_item_id    INTEGER REFERENCES media_item(id),
   template_settings   TEXT,
   created           INTEGER NOT NULL,
@@ -544,7 +539,7 @@ def build():
         for i in item_ids:
             name, kind_, _rgb, _p, _l, dwell = ITEMS[i]
             p, l = slots[i]
-            db.execute("INSERT INTO media_item VALUES (?,?,?,?,?,NULL,?,?)",
+            db.execute("INSERT INTO media_item VALUES (?,?,?,?,?,?,?)",
                        (i, name, p, l, dwell, GENERATED_AT, GENERATED_AT))
 
     def finish(db, path):
@@ -562,7 +557,7 @@ def build():
     path = os.path.join(OUT, "project.db")
     db = sqlite3.connect(path)
     seed(db, "project", [101])
-    db.execute("INSERT INTO project VALUES (1, ?, 'Demo Show', ?, ?, 101, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?)",
+    db.execute("INSERT INTO project VALUES (1, ?, 'Demo Show', ?, ?, 101, NULL, NULL, NULL, NULL, ?, ?)",
                (str(uuid.uuid5(NAMES, SHOW)), SHOW, TZ, GENERATED_AT, GENERATED_AT))
     finish(db, path)
 
@@ -571,7 +566,7 @@ def build():
     db = sqlite3.connect(path)
     seed(db, "surface", list(slots))
     # Wallpapers are NULL here (they live in project.db); the default backing is not.
-    db.execute("INSERT INTO project VALUES (1, ?, 'Demo Show', ?, ?, NULL, NULL, 120, NULL, NULL, NULL, NULL, ?, ?)",
+    db.execute("INSERT INTO project VALUES (1, ?, 'Demo Show', ?, ?, NULL, NULL, 120, NULL, NULL, ?, ?)",
                (str(uuid.uuid5(NAMES, SHOW)), SHOW, TZ, GENERATED_AT, GENERATED_AT))
     db.execute("INSERT INTO surface_config VALUES (1, 'Demo', ?, 1, ?, ?, ?)",
                (SURFACE, GENERATED_AT, GENERATED_AT, GENERATED_AT))

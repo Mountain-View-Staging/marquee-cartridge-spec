@@ -136,9 +136,8 @@ A surface cartridge also carries `project` and `project_days`, so a Surface can 
 without opening `project.db`. Its `project` row has `show_wallpaper_item_id` and
 `desktop_wallpaper_item_id` **forced to NULL**: wallpapers live only in `project.db`, and a
 pointer to media the surface cartridge does not carry would fail `foreign_key_check`.
-Conversely, `project.db` carries `brand_style` but has `brand_style_item_id` and
-`backing_item_id` **forced to NULL**: the style book and the backing ride in each surface
-cartridge (§9, §5.10).
+Conversely, `project.db` has `backing_item_id` **forced to NULL**: the backing rides in each
+surface cartridge (§5.10).
 
 **Never present in either artifact** (authoring-only): `tag`, `tag_assignment`, `integration`,
 `media_optimization`, `grdb_migrations`.
@@ -161,8 +160,8 @@ erDiagram
     session_set }o--o| media_item : "backing / logo"
     media_item }o--o| media_file : "portrait_file_id"
     media_item }o--o| media_file : "landscape_file_id"
-    project }o--o| media_item : "default backing / style book"
-    session_set }o--o| media_item : "style book"
+    project }o--o| media_item : "default backing / template"
+    session_set }o--o| media_item : "template"
     media_file ||--|| media_manifest : "one deliverable per file"
     media_file ||--|{ media_file_variant : "renditions offered"
 ```
@@ -226,8 +225,6 @@ CREATE TABLE project (
   show_wallpaper_item_id    INTEGER REFERENCES media_item(id),
   desktop_wallpaper_item_id INTEGER REFERENCES media_item(id),
   backing_item_id           INTEGER REFERENCES media_item(id),   -- default backing, §5.10
-  brand_style               TEXT,     -- style address 'company/style/version', §9
-  brand_style_item_id       INTEGER REFERENCES media_item(id),   -- the style book file, §9
   template_item_id          INTEGER REFERENCES media_item(id),   -- the session board template, §5.15
   template_settings         TEXT,     -- JSON { "vars": { name: string } }, §5.15
   created                   INTEGER NOT NULL,
@@ -366,7 +363,6 @@ CREATE TABLE media_item (
   portrait_file_id  INTEGER REFERENCES media_file(id),
   landscape_file_id INTEGER REFERENCES media_file(id),
   display_duration  REAL,                                 -- seconds, stills
-  brand_member      TEXT,                                 -- style address, §9; NULL = not brand
   created           INTEGER NOT NULL,
   updated           INTEGER NOT NULL,
   CHECK (portrait_file_id IS NOT NULL OR landscape_file_id IS NOT NULL)
@@ -418,8 +414,6 @@ CREATE TABLE session_set (
   logo_item_id      INTEGER REFERENCES media_item(id),
   source_id         TEXT,
   source_name       TEXT,
-  brand_style         TEXT,                               -- overrides the project's, §9
-  brand_style_item_id INTEGER REFERENCES media_item(id),  -- overrides the project's, §9
   template_item_id    INTEGER REFERENCES media_item(id),  -- overrides the project's, §5.15
   template_settings   TEXT,                               -- for that override, §5.15
   created           INTEGER NOT NULL,
@@ -834,9 +828,8 @@ implement demo mode ignores the slot entirely.
   entry, skip it, re-arm.
 - **Downscale oversize assets; never skip them.** Keep a hard texture ceiling (the reference
   client uses 3840 px on the long edge) and say so at notice level when you scale.
-- **Skip an entry whose item is not decodable image or video media** (a typeface, a style book, a
-  template package) — loudly, as `media.not_playable`. Being a brand member never makes an item unplayable: a brand
-  logo image in a playlist is legitimate content.
+- **Skip an entry whose item is not decodable image or video media** (a template package, say) —
+  loudly, as `media.not_playable`.
 - **Never let the render path wait on a database or the network.** Snapshot the cartridge into
   memory, with its indexes, when it is committed.
 
@@ -1006,12 +999,11 @@ Keep partials outside the directory your renderer resolves media from.
 `media_file.width` / `height` and the rendition's own dimensions are intrinsic pixels. Assets
 larger than your renderer can texture are legitimate: downscale them (§5.13).
 
-### 7.5 Brand assets and template packages
+### 7.5 Template packages
 
-Typefaces, the style book and session board template packages are delivered through the manifest
-like media, but they are **not decoded as media** and never choose among renditions. Take them
-exactly as the manifest names them. Their use is specified in §9 and §5.15. A brand member that
-**is** an image or a video (a logo, say) is ordinary media: it has renditions and can play.
+Session board template packages are delivered through the manifest like media, but they are
+**not decoded as media** and never choose among renditions. Take them exactly as the manifest
+names them. Their use is specified in §5.15.
 
 ### 7.6 Choosing a rendition
 
@@ -1059,7 +1051,7 @@ lanes it renders:
   A Surface without the mode never draws the branding, so an item used only as demo branding — a
   `demo_station` entry's background or overlay that no playlist entry, backing, logo or wallpaper
   names — is in none of its lanes.
-- **Everything else the cartridge delivers**, whatever the lane: brand files (§9), the session
+- **Everything else the cartridge delivers**, whatever the lane: the session
   board template packages the Show or a set names (§5.15, whichever slot holds one), and any file
   no item places in an orientation's slot.
 
@@ -1184,51 +1176,17 @@ before the swap — a zero-byte file is a valid empty database, so "it opens" is
 
 ---
 
-## 9. Brand delivery
+## 9. Branding
 
-A Show — or one session set — can be branded with a **style book**: a published, versioned set of
-typefaces and a style manifest (`style.json`). Surfaces use it to set type and colour on anything
-they draw themselves, such as session boards. The contents of `style.json` are defined by the
-Marquee branding specification (not public); this section covers how a style book reaches a Surface.
+A cartridge carries no brand of its own. A Show's typefaces, palette and text colours are the
+session board template's: they travel inside the package (§5.15, and the template format's
+`brand` and `fonts/`), and the template draws with them. Anything else on screen is media the
+Show authored.
 
-### 9.1 Columns
-
-| Column | Meaning |
-|---|---|
-| `brand_style` (`project`, `session_set`) | **Provenance:** the style's portal address, `company/style/version`, e.g. `acme/acme-2026/3`. The version is pinned: a published version is immutable, so a republish can never silently restyle a signed-off Show. Not a reference; never resolved to a file. |
-| `brand_style_item_id` (`project`, `session_set`) | **Resolution:** the `media_item` holding that address's `style.json`. |
-| `media_item.brand_member` | The style address a media item belongs to. Every typeface and the style book itself carry it. |
-
-### 9.2 Resolution
-
-For anything a Surface draws in a session set's context:
-
-```
-style book = session_set.brand_style_item_id ?? project.brand_style_item_id ?? the Surface's built-in default
-```
-
-Everywhere else, the project's style book, then the built-in default.
-
-### 9.3 Delivery
-
-- **Brand files travel as ordinary media.** A Surface's media cache is a flat namespace pruned to
-  the manifest, so a brand folder could not survive it. Studio imports each file as a
-  `media_item` / `media_file` and rewrites the paths inside `style.json` to the deliverable names
-  the files were given. A Surface resolves faces through the manifest it already holds.
-- **Each surface cartridge carries every member of every style address it references** —
-  selected by `brand_member`, since nothing else in the cartridge references a typeface.
-- **Every platform's faces ship** (for example `.ttf` and `.woff2`). A cartridge is not addressed
-  to one platform; a Surface uses the formats it needs and ignores the rest.
-- `project.db` carries `brand_style` only; the style book rides in the surface cartridges (§3.2).
-
-### 9.4 Rules for a Surface
-
-- Fetch and verify brand files like any file (§7.2). Never decode typefaces or the style book as
-  media and never choose renditions for them (§7.5).
-- `brand_member` does not affect viability. A typeface or style book found in a playlist is skipped
-  loudly as not playable (§5.13); a brand image or video plays like any other item.
-- If a referenced style book fails to load, fall back to the next step of §9.2 and say so; never
-  render nothing.
+Earlier drafts of v25.0.1 delivered a **style book** here — `project.brand_style`,
+`brand_style_item_id`, the same pair on `session_set`, and `media_item.brand_member`, with every
+typeface as a media item. Those columns are retired (§10.4): a cartridge that still carries them
+loads, and they are never read.
 
 ---
 
@@ -1265,10 +1223,10 @@ facts and lead to opposite investigations.
 
 Unknown tables, columns, and values of `resource_type`, `slot`, `type`, and `kind` are skipped,
 not treated as errors. A column retired from the baseline (`surface_location.orientation`, §4.4;
-`session_set.render_modes` and `schedule_template`, §4.7) is ignored as well, and silently: it is
-not unknown. Nor is a retired value — `portrait` or `landscape` in
-`surface_schedule_entry.slot` (§4.4) — but a row that carries one cannot be read: it is malformed,
-skipped with a warning (§4).
+`session_set.render_modes` and `schedule_template`, §4.7; the style book's `brand_style`,
+`brand_style_item_id` and `brand_member`, §9) is ignored as well, and silently: it is not unknown.
+Nor is a retired value — `portrait` or `landscape` in `surface_schedule_entry.slot` (§4.4) — but a
+row that carries one cannot be read: it is malformed, skipped with a warning (§4).
 
 ### 10.5 A new table must be safe to ignore
 
@@ -1388,8 +1346,7 @@ node conformance/run.mjs --engine engine/dist/node.js
 - [ ] Chooses renditions on `codec`, verifies each against its own hash and size, and renders and
       prunes from the same decision.
 - [ ] A browser Surface takes and ranks `webOptimized` first.
-- [ ] Takes typefaces and the style book exactly as the manifest names them; plays brand images and
-      videos like any media.
+- [ ] Takes template packages exactly as the manifest names them, on every lane.
 
 ---
 
@@ -1501,6 +1458,5 @@ directive        3 rows, all on entry 5 (position 3):
 | Session board layout | Built in per platform; `session_set.render_modes` chose the modes | A session board template (§5.15) — the Show's, a set's, or the built-in default — rendered from a data document; which layouts a sign shows is the device's board variant; `render_modes` and `schedule_template` removed (2026-10) |
 | Project-only clock | Drawn by each platform | The `clock` layout of the Show's template (carried in `project.db`), else the default template's (§5.15, 2026-10) |
 | DemoStation entries | May carry a PIP playlist | Branding only; the picture-in-picture is the Surface's player, moved: the same playlist in the opposite orientation, its rotation continuing (§5.11) |
-| Brand members | Never playable | Playable when image or video; only non-media items are skipped |
 | Composition | Backing and overlay on playlists and media items | Project default backing (`project.backing_item_id`, new), session board override; playlist and item backing/overlay removed |
-| Branding | v5/v6 columns, undocumented | Brand delivery specified (§9) |
+| Branding | v5/v6 columns, undocumented | The session board template's (§9, §5.15); the style book columns of earlier v25 drafts retired (2026-10) |

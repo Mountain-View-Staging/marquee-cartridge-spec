@@ -13,7 +13,7 @@ export declare const WATCHDOG_GRACE_SECONDS = 10;
 export declare function isVideoType(contentType: string): boolean;
 /** §5.12 — any `image/*` is an image; no allow-list. */
 export declare function isImageType(contentType: string): boolean;
-/** §5.13 — only image and video media play; a typeface or a style book does not. */
+/** §5.13 — only image and video media play; a template package does not. */
 export declare function isPlayableType(contentType: string): boolean;
 /** §5.7 — the file in the slot for this orientation. No fallback: an empty slot is an exclusion. */
 export declare function fileIdFor(item: MediaItem, orientation: Orientation): number | null;

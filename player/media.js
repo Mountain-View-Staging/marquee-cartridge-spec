@@ -88,8 +88,8 @@ export class MediaStore {
    * Fetch and verify every image and video the cartridge names — or, given
    * `files` (a set of media file ids, e.g. `filesForLanes`), only those: a
    * Surface may fetch by lane (§7.7). What is already held is not fetched
-   * again. Brand files (typefaces, style books) are not media, and this player
-   * draws no styled text, so it leaves them alone.
+   * again. A template package is not media, and this player draws no session
+   * boards, so it leaves it alone.
    */
   async sync(snapshot, { files, onProgress, concurrency = 4 } = {}) {
     const wanted = [];

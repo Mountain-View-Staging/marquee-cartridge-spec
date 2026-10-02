@@ -8,8 +8,11 @@
  *
  * A column an earlier draft of v25.0.1 carried and the format has since
  * dropped is listed in its table's `retired`: a cartridge that still carries
- * it loads, and the column is ignored without a warning (§10.4). There is one,
- * `surface_location.orientation` — a device's orientation is its own (§6).
+ * it loads, and the column is ignored without a warning (§10.4):
+ * `surface_location.orientation` — a device's orientation is its own (§6);
+ * `session_set.render_modes` and `schedule_template` — the layouts are the
+ * device's (§5.15); and the style book's `brand_style`, `brand_style_item_id`
+ * and `brand_member` — branding is the template's (§9).
  *
  * A value an earlier draft wrote and the format has retired is listed in
  * `RETIRED` below. Unlike a retired column it cannot be ignored — the row means
@@ -106,13 +109,11 @@ export const BASELINE: readonly TableSpec[] = [
     ["show_wallpaper_item_id", "int?"],
     ["desktop_wallpaper_item_id", "int?"],
     ["backing_item_id", "int?"],
-    ["brand_style", "text?"],
-    ["brand_style_item_id", "int?"],
     ["template_item_id", "int?"],
     ["template_settings", "text?"],
     ["created", "-"],
     ["updated", "-"],
-  ], "structure_invalid"),
+  ], "structure_invalid", ["brand_style", "brand_style_item_id"]),
   table("project_days", "id", BOTH, [
     ["id", "int"],
     ["day", "text"],
@@ -185,10 +186,9 @@ export const BASELINE: readonly TableSpec[] = [
     ["portrait_file_id", "int?"],
     ["landscape_file_id", "int?"],
     ["display_duration", "real?"],
-    ["brand_member", "text?"],
     ["created", "-"],
     ["updated", "-"],
-  ]),
+  ], "skip", ["brand_member"]),
   table("media_file", "id", BOTH, [
     ["id", "int"],
     ["content_type", "text"],
@@ -221,13 +221,11 @@ export const BASELINE: readonly TableSpec[] = [
     ["logo_item_id", "int?"],
     ["source_id", "text?"],
     ["source_name", "text?"],
-    ["brand_style", "text?"],
-    ["brand_style_item_id", "int?"],
     ["template_item_id", "int?"],
     ["template_settings", "text?"],
     ["created", "-"],
     ["updated", "-"],
-  ], "skip", ["render_modes", "schedule_template"]),
+  ], "skip", ["render_modes", "schedule_template", "brand_style", "brand_style_item_id"]),
   table("session_set_entry", "id", SURFACE, [
     ["id", "int"],
     ["session_set_id", "int"],

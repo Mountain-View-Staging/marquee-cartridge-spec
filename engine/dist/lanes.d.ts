@@ -33,10 +33,8 @@ export interface LaneSelection {
  * - An item used only as demo branding — named as a `demo_station` entry's
  *   background or overlay, and by no playlist entry, backing, logo or wallpaper —
  *   is in no lane without `demo`: only the DemoStation mode draws it (§5.11). An
- *   item used any other way too keeps its lanes, and a brand file is wanted on
+ *   item used any other way too keeps its lanes, and a template is wanted on
  *   every lane whatever else names it.
- * - Brand files are wanted on every lane (§9): each file of an item that is a
- *   brand member, or that the project or a session set names as its style book.
  * - A session board template is wanted on every lane (§5.15): the file of an
  *   item the project or a session set names as its template, whichever slot
  *   holds it — a device of either orientation renders the board with it.

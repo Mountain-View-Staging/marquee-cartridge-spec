@@ -121,7 +121,7 @@ test("buildSnapshot ignores a retired column a tool still supplies", async () =>
   const s = await loadCartridge(fixture("base"));
   const rows = {
     cartridge_meta: [{ cartridge_kind: "surface", format_version: "25.0.1", project_code: "SHOW26", surface_id: "LOBBY3", published_revision: 1, timezone: "America/Los_Angeles", generated_at: 0 }],
-    project: [{ id: 1, cloud_uid: "u", name: "Show 26", project_code: "SHOW26", timezone: "America/Los_Angeles", show_wallpaper_item_id: null, desktop_wallpaper_item_id: null, backing_item_id: null, brand_style: null, brand_style_item_id: null }],
+    project: [{ id: 1, cloud_uid: "u", name: "Show 26", project_code: "SHOW26", timezone: "America/Los_Angeles", show_wallpaper_item_id: null, desktop_wallpaper_item_id: null, backing_item_id: null }],
     project_days: s.days.map((d) => ({ id: d.id, day: d.day, start_time: d.startTime, end_time: d.endTime })),
     surface_config: [{ id: 1, name: "Lobby 3", surface_id: "LOBBY3", published_revision: 1, published_at: 0 }],
     surface_location: [{ id: 1, config_id: 1, location_id: "LOBBY3-A", orientation: "landscape", label: null }],
@@ -176,7 +176,7 @@ test("demo_station rows load into their own slot, and a tool's rows build the sa
   // buildSnapshot, as an authoring tool calls it: a retired slot is malformed there too.
   const rows = {
     cartridge_meta: [{ cartridge_kind: "surface", format_version: "25.0.1", project_code: "SHOW26", surface_id: "LOBBY3", published_revision: 1, timezone: "America/Los_Angeles", generated_at: 0 }],
-    project: [{ id: 1, cloud_uid: "u", name: "Show 26", project_code: "SHOW26", timezone: "America/Los_Angeles", show_wallpaper_item_id: null, desktop_wallpaper_item_id: null, backing_item_id: null, brand_style: null, brand_style_item_id: null }],
+    project: [{ id: 1, cloud_uid: "u", name: "Show 26", project_code: "SHOW26", timezone: "America/Los_Angeles", show_wallpaper_item_id: null, desktop_wallpaper_item_id: null, backing_item_id: null }],
     surface_config: [{ id: 1, name: "Lobby 3", surface_id: "LOBBY3", published_revision: 1, published_at: 0 }],
     surface_location: [{ id: 1, config_id: 1, location_id: "LOBBY3-A", label: null }],
     surface_schedule_entry: [
@@ -207,9 +207,9 @@ test("a missing baseline table or column is refused", async () => {
   const table = await refusal(variant("base", "DROP TABLE session_set_entry"));
   assert.equal(table.code, "table_missing");
   assert.equal(table.table, "session_set_entry");
-  const column = await refusal(variant("base", "ALTER TABLE media_item DROP COLUMN brand_member"));
+  const column = await refusal(variant("base", "ALTER TABLE media_item DROP COLUMN display_duration"));
   assert.equal(column.code, "column_missing");
-  assert.match(column.message, /brand_member/);
+  assert.match(column.message, /display_duration/);
 });
 
 test("a surface cartridge has exactly one surface_config", async () => {
@@ -357,4 +357,15 @@ test("§10.4 — the retired session_set columns are ignored silently when an ol
   const s = await loadCartridge(variant("template", `ALTER TABLE session_set ADD COLUMN render_modes TEXT; ALTER TABLE session_set ADD COLUMN schedule_template TEXT; UPDATE session_set SET render_modes = '["simple"]'`));
   assert.deepEqual(s.warnings, [], "retired, not unknown");
   assert.equal("renderModes" in s.sessionSets.get(1), false);
+});
+
+test("§9, §10.4 — the retired style book columns are ignored silently when an older producer wrote them", async () => {
+  const s = await loadCartridge(variant("template", `
+    ALTER TABLE project ADD COLUMN brand_style TEXT; ALTER TABLE project ADD COLUMN brand_style_item_id INTEGER;
+    ALTER TABLE session_set ADD COLUMN brand_style TEXT; ALTER TABLE session_set ADD COLUMN brand_style_item_id INTEGER;
+    ALTER TABLE media_item ADD COLUMN brand_member TEXT;
+    UPDATE project SET brand_style = 'acme/acme-2026/3', brand_style_item_id = 1; UPDATE media_item SET brand_member = 'acme/acme-2026/3' WHERE id = 1`));
+  assert.deepEqual(s.warnings, [], "retired, not unknown");
+  assert.equal("brandStyleItemId" in s.project, false);
+  assert.equal("brandMember" in s.mediaItems.get(1), false);
 });

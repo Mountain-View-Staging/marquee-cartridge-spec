@@ -22,7 +22,7 @@ export function isImageType(contentType: string): boolean {
   return /^image\//i.test(contentType);
 }
 
-/** §5.13 — only image and video media play; a typeface or a style book does not. */
+/** §5.13 — only image and video media play; a template package does not. */
 export function isPlayableType(contentType: string): boolean {
   return isImageType(contentType) || isVideoType(contentType);
 }

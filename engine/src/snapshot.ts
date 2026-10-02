@@ -102,8 +102,6 @@ export function buildSnapshot(kind: CartridgeKind, raw: RawTables, warnings: Loa
     showWallpaperItemId: numOrNull(p, "show_wallpaper_item_id"),
     desktopWallpaperItemId: numOrNull(p, "desktop_wallpaper_item_id"),
     backingItemId: numOrNull(p, "backing_item_id"),
-    brandStyle: strOrNull(p, "brand_style"),
-    brandStyleItemId: numOrNull(p, "brand_style_item_id"),
     templateItemId: numOrNull(p, "template_item_id"),
     templateSettings: templateSettings(p, "project", num(p, "id"), warn),
   });
@@ -138,7 +136,6 @@ export function buildSnapshot(kind: CartridgeKind, raw: RawTables, warnings: Loa
       portraitFileId: numOrNull(r, "portrait_file_id"),
       landscapeFileId: numOrNull(r, "landscape_file_id"),
       displayDuration: numOrNull(r, "display_duration"),
-      brandMember: strOrNull(r, "brand_member"),
     });
     for (const [column, fileId] of [["portrait_file_id", item.portraitFileId], ["landscape_file_id", item.landscapeFileId]] as const) {
       if (fileId !== null && !mediaFiles.has(fileId)) {
@@ -313,8 +310,6 @@ export function buildSnapshot(kind: CartridgeKind, raw: RawTables, warnings: Loa
       logoItemId: numOrNull(r, "logo_item_id"),
       sourceId: strOrNull(r, "source_id"),
       sourceName: strOrNull(r, "source_name"),
-      brandStyle: strOrNull(r, "brand_style"),
-      brandStyleItemId: numOrNull(r, "brand_style_item_id"),
       templateItemId: numOrNull(r, "template_item_id"),
       templateSettings: templateSettings(r, "session_set", id, warn),
     }));

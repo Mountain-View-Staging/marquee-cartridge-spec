@@ -150,9 +150,9 @@ file serves the portrait lane and its landscape file the landscape lane, however
 (a playlist entry, a backing, demo branding), since each resolves by orientation with no
 fallback. An item used only as demo branding — a `demo_station` entry's background or overlay
 that no playlist entry, backing, logo or wallpaper names — is in a lane only with `demo: true`:
-a host without the mode never draws it. Brand files are wanted on every lane: every file of a
-brand member, or of an item the project or a session set names as its style book. A file no item
-references is wanted. With `demo: true` (a host that runs the DemoStation mode), while the
+a host without the mode never draws it. A session board template is wanted on every lane: the
+file of an item the project or a session set names as its template. A file no item references is
+wanted. With `demo: true` (a host that runs the DemoStation mode), while the
 `demo_station` slot has any entry with a background, the opposite of each lane is rendered too
 — the picture-in-picture plays the same playlist in it. A file is judged by every slot that
 names it. The ids iterate ascending; a project snapshot reads the same way.

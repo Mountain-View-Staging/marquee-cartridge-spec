@@ -54,8 +54,6 @@ CREATE TABLE project (
   show_wallpaper_item_id    INTEGER REFERENCES media_item(id),
   desktop_wallpaper_item_id INTEGER REFERENCES media_item(id),
   backing_item_id           INTEGER REFERENCES media_item(id),   -- default backing, §5.10
-  brand_style               TEXT,     -- style address 'company/style/version', §9
-  brand_style_item_id       INTEGER REFERENCES media_item(id),   -- the style book file, §9
   template_item_id          INTEGER REFERENCES media_item(id),   -- the session board template, §5.15
   template_settings         TEXT,     -- JSON { "vars": { name: string } }, §5.15
   created                   INTEGER NOT NULL,
@@ -151,7 +149,6 @@ CREATE TABLE media_item (
   portrait_file_id  INTEGER REFERENCES media_file(id),
   landscape_file_id INTEGER REFERENCES media_file(id),
   display_duration  REAL,                                 -- seconds, stills
-  brand_member      TEXT,                                 -- style address, §9; NULL = not brand
   created           INTEGER NOT NULL,
   updated           INTEGER NOT NULL,
   CHECK (portrait_file_id IS NOT NULL OR landscape_file_id IS NOT NULL)
@@ -191,8 +188,6 @@ CREATE TABLE session_set (
   logo_item_id      INTEGER REFERENCES media_item(id),
   source_id         TEXT,
   source_name       TEXT,
-  brand_style         TEXT,                               -- overrides the project's, §9
-  brand_style_item_id INTEGER REFERENCES media_item(id),  -- overrides the project's, §9
   template_item_id    INTEGER REFERENCES media_item(id),  -- overrides the project's, §5.15
   template_settings   TEXT,                               -- for that override, §5.15
   created           INTEGER NOT NULL,
@@ -414,7 +409,7 @@ def build(name, c):
             if fid >= 200:
                 w, hgt = 1920, 1080
             files[fid] = (it["kind"], w, hgt, it["seconds"], it.get("delivered", True))
-        x("INSERT INTO media_item VALUES (?,?,?,?,?,NULL,?,?)",
+        x("INSERT INTO media_item VALUES (?,?,?,?,?,?,?)",
           (i, f"Item {i}", pf, lf, it["seconds"] if it["kind"] == "still" else None, NOW, NOW))
     for fid, (kind, w, hgt, secs, delivered) in sorted(files.items()):
         is_video = kind == "video"
@@ -447,7 +442,7 @@ def build(name, c):
                f"Room {s['id']}", NOW, NOW))
 
     p_item, p_settings = c["project_template"] or (None, None)
-    x("INSERT INTO project VALUES (1,'00000000-0000-4000-8000-000000000026','Show 26','SHOW26',?,NULL,NULL,?,NULL,NULL,?,?,?,?)",
+    x("INSERT INTO project VALUES (1,'00000000-0000-4000-8000-000000000026','Show 26','SHOW26',?,NULL,NULL,?,?,?,?,?)",
       (TZ, c["project_backing"], p_item, p_settings, NOW, NOW))
 
     for pid, entries in c["playlists"].items():

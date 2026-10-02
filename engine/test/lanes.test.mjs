@@ -63,7 +63,7 @@ test("over every conformance fixture: the two lanes together are the manifest �
 /**
  * A config shaped like a real one, as a portrait device sees it: most items
  * carry a landscape file no portrait device shows, and the cartridge also
- * delivers backings, brand files and a file no item names.
+ * delivers backings and a file no item names.
  */
 function portraitOnlyShow() {
   const file = (id, orientation) => `
@@ -75,27 +75,24 @@ function portraitOnlyShow() {
     DELETE FROM media_manifest WHERE media_file_id = 103;
     DELETE FROM media_file_variant WHERE media_file_id = 103;
     DELETE FROM media_file WHERE id = 103;
-    ${[150, 250, 260, 261, 262, 270, 280, 999].map((id) => file(id, id < 200 ? "portrait" : "landscape")).join("")}
-    INSERT INTO media_item VALUES (50, 'Project backing', 150, 250, NULL, NULL, 0, 0);
-    INSERT INTO media_item VALUES (60, 'A typeface', NULL, 260, NULL, 'acme/acme-2026/1', 0, 0);
-    INSERT INTO media_item VALUES (61, 'Style book (project)', NULL, 261, NULL, NULL, 0, 0);
-    INSERT INTO media_item VALUES (62, 'Style book (board)', NULL, 262, NULL, NULL, 0, 0);
-    INSERT INTO media_item VALUES (70, 'Board backing', NULL, 270, NULL, NULL, 0, 0);
-    INSERT INTO media_item VALUES (80, 'Landscape art', NULL, 280, NULL, NULL, 0, 0);
-    INSERT INTO media_item VALUES (81, 'The same art, placed in a portrait slot', 280, NULL, NULL, NULL, 0, 0);
-    UPDATE project SET backing_item_id = 50, brand_style_item_id = 61;
-    UPDATE session_set SET backing_item_id = 70, brand_style_item_id = 62 WHERE id = 1;`);
+    ${[150, 250, 270, 280, 999].map((id) => file(id, id < 200 ? "portrait" : "landscape")).join("")}
+    INSERT INTO media_item VALUES (50, 'Project backing', 150, 250, NULL, 0, 0);
+    INSERT INTO media_item VALUES (70, 'Board backing', NULL, 270, NULL, 0, 0);
+    INSERT INTO media_item VALUES (80, 'Landscape art', NULL, 280, NULL, 0, 0);
+    INSERT INTO media_item VALUES (81, 'The same art, placed in a portrait slot', 280, NULL, NULL, 0, 0);
+    UPDATE project SET backing_item_id = 50;
+    UPDATE session_set SET backing_item_id = 70 WHERE id = 1;`);
 }
 
-test("a portrait device: the landscape slot files stay behind; brand files, portrait backings and unnamed files come", async () => {
+test("a portrait device: the landscape slot files stay behind; portrait backings and unnamed files come", async () => {
   const s = await loadCartridge(portraitOnlyShow());
   assert.deepEqual(s.warnings, []);
-  assert.deepEqual([...s.manifest.keys()].sort((a, b) => a - b), [101, 150, 201, 203, 250, 260, 261, 262, 270, 280, 999]);
+  assert.deepEqual([...s.manifest.keys()].sort((a, b) => a - b), [101, 150, 201, 203, 250, 270, 280, 999]);
   // 201 and 203 are the rotation's landscape files, 250 the backing's, 270 the board backing's.
-  assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"] })), [101, 150, 260, 261, 262, 280, 999]);
-  assert.deepEqual(ids(filesForLanes(s, { lanes: ["landscape"] })), [201, 203, 250, 260, 261, 262, 270, 280, 999]);
+  assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"] })), [101, 150, 280, 999]);
+  assert.deepEqual(ids(filesForLanes(s, { lanes: ["landscape"] })), [201, 203, 250, 270, 280, 999]);
   // No DemoStation lane: `demo` changes nothing.
-  assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"], demo: true })), [101, 150, 260, 261, 262, 280, 999]);
+  assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"], demo: true })), [101, 150, 280, 999]);
 });
 
 test("demo: while the demo_station slot has an entry with a background, the opposite lane comes too — the picture-in-picture plays the same playlist in it", async () => {
@@ -127,14 +124,14 @@ test("the demo-station fixture: a DemoStation fetches both lanes and the brandin
 test("an item used as demo branding and any other way too keeps its lanes on a Surface without the mode", async () => {
   // Item 9, the demo's background (109 / 209), put to one more use each time; item 8, the
   // overlay (108 / 208), stays branding only.
-  const room = (backing, logo, style) => `INSERT INTO session_set VALUES (1, 'Room', 8, ${backing}, ${logo}, NULL, NULL, ${style === "NULL" ? "NULL" : "'acme/acme-2026/1'"}, ${style}, NULL, NULL, 0, 0)`;
+  const room = (backing, logo, template = "NULL") => `INSERT INTO session_set VALUES (1, 'Room', 8, ${backing}, ${logo}, NULL, NULL, ${template}, NULL, 0, 0)`;
   const uses = {
     "a playlist entry's item": "INSERT INTO playlist_entry VALUES (5, 1, 5, 'media_item', 9, NULL, NULL, NULL, NULL, NULL, 0, 0)",
     "the project's backing": "UPDATE project SET backing_item_id = 9",
     "the show wallpaper": "UPDATE project SET show_wallpaper_item_id = 9",
     "the desktop wallpaper": "UPDATE project SET desktop_wallpaper_item_id = 9",
-    "a session set's backing": room(9, "NULL", "NULL"),
-    "a session set's logo": room("NULL", 9, "NULL"),
+    "a session set's backing": room(9, "NULL"),
+    "a session set's logo": room("NULL", 9),
   };
   for (const [use, sql] of Object.entries(uses)) {
     const s = await loadCartridge(variant("demo-station", sql));
@@ -142,13 +139,12 @@ test("an item used as demo branding and any other way too keeps its lanes on a S
     assert.deepEqual(ids(filesForLanes(s, { lanes: ["landscape"] })), [201, 202, 204, 209], use);
     assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"], demo: true })), [101, 102, 103, 104, 108, 109, 201, 202, 204, 208, 209], use);
   }
-  // A brand file is wanted on every lane (§9), whatever else names it.
-  const brand = {
-    "a brand member": "UPDATE media_item SET brand_member = 'acme/acme-2026/1' WHERE id = 9",
-    "the project's style book": "UPDATE project SET brand_style = 'acme/acme-2026/1', brand_style_item_id = 9",
-    "a session set's style book": room("NULL", "NULL", 9),
+  // A template is wanted on every lane (§5.15), whatever else names it.
+  const template = {
+    "the project's template": "UPDATE project SET template_item_id = 9",
+    "a session set's template": room("NULL", "NULL", 9),
   };
-  for (const [use, sql] of Object.entries(brand)) {
+  for (const [use, sql] of Object.entries(template)) {
     const s = await loadCartridge(variant("demo-station", sql));
     assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"] })), [101, 102, 103, 104, 109, 209], use);
     assert.deepEqual(ids(filesForLanes(s, { lanes: ["landscape"] })), [109, 201, 202, 204, 209], use);
@@ -191,7 +187,7 @@ test("a session board template is wanted on every lane (§5.15): the project's a
   assert.equal(s.sessionSets.get(1).templateItemId, 51);
   assert.deepEqual(ids(filesForLanes(s, { lanes: ["portrait"] })), [101, 103, 150, 151]);
   assert.deepEqual(ids(filesForLanes(s, { lanes: ["landscape"] })), [150, 151, 201, 203], "a landscape device gets the packages too");
-  assert.deepEqual(ids(filesForLanes(s, { lanes: [] })), [150, 151], "whatever the lanes, as a brand file is");
+  assert.deepEqual(ids(filesForLanes(s, { lanes: [] })), [150, 151], "whatever the lanes");
   // A package is never playable, so it never widens a lane as content would.
   assert.equal(s.mediaFiles.get(150).contentType, "application/zip");
 });

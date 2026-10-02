@@ -836,7 +836,6 @@ export class SurfaceEngine {
                     anchorPage,
                     pageDuration: sessionSet.duration,
                     logoItemId: sessionSet.logoItemId,
-                    styleItemId: sessionSet.brandStyleItemId ?? project.brandStyleItemId,
                     // §5.15 — the set's template with the set's settings, else the project's with the project's.
                     templateItemId: sessionSet.templateItemId ?? project.templateItemId,
                     templateSettings: sessionSet.templateItemId !== null ? sessionSet.templateSettings : project.templateSettings,

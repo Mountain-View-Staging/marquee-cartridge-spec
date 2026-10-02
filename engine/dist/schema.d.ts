@@ -8,8 +8,11 @@
  *
  * A column an earlier draft of v25.0.1 carried and the format has since
  * dropped is listed in its table's `retired`: a cartridge that still carries
- * it loads, and the column is ignored without a warning (§10.4). There is one,
- * `surface_location.orientation` — a device's orientation is its own (§6).
+ * it loads, and the column is ignored without a warning (§10.4):
+ * `surface_location.orientation` — a device's orientation is its own (§6);
+ * `session_set.render_modes` and `schedule_template` — the layouts are the
+ * device's (§5.15); and the style book's `brand_style`, `brand_style_item_id`
+ * and `brand_member` — branding is the template's (§9).
  *
  * A value an earlier draft wrote and the format has retired is listed in
  * `RETIRED` below. Unlike a retired column it cannot be ignored — the row means

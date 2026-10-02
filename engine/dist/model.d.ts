@@ -46,8 +46,6 @@ export interface Project {
     readonly desktopWallpaperItemId: number | null;
     /** The default backing (§5.10). */
     readonly backingItemId: number | null;
-    readonly brandStyle: string | null;
-    readonly brandStyleItemId: number | null;
     /** §5.15 — the Show's session board template: the media item holding the package. */
     readonly templateItemId: number | null;
     /** §5.15 — the Show's values for that template's variables. */
@@ -139,7 +137,6 @@ export interface MediaItem {
     readonly portraitFileId: number | null;
     readonly landscapeFileId: number | null;
     readonly displayDuration: number | null;
-    readonly brandMember: string | null;
 }
 /** §4.6 — the imported asset. */
 export interface MediaFile {
@@ -194,8 +191,6 @@ export interface SessionSet {
     readonly logoItemId: number | null;
     readonly sourceId: string | null;
     readonly sourceName: string | null;
-    readonly brandStyle: string | null;
-    readonly brandStyleItemId: number | null;
     /** §5.15 — this set's own template, overriding the Show's. */
     readonly templateItemId: number | null;
     /** §5.15 — the settings for that override. */
